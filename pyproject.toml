@@ -1,5 +1,5 @@
 [project]
-name = "hpc_connect"
+name = "hpc-connect"
 dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
