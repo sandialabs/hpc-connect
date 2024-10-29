@@ -101,12 +101,9 @@ Custom launchers and schedulers must be registered in your `pyproject.toml` file
 name = "your_project_name"
 version = "0.1.0"
 
-[project.entry_points]
-hpc_connect.scheduler = [
-    "my_scheduler = myodule:MyScheduler",
-]
+[project.entry_points."hpc_connect.scheduler"]
+my_scheduler = "myodule:MyScheduler"
 
-hpc_connect.launcher = [
-    "my_launcher = my_module:MyLauncher",
-]
+[project.entry_points."hpc_connect.launcher"]
+my_launcher = "my_module:MyLauncher"
 ```
