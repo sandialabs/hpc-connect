@@ -1,0 +1,17 @@
+junit.xml
+.coverage
+coverage.xml
+html.cov
+*.pyc
+_test-cache
+__pycache__
+.mypy_cache
+src/*.egg-info/
+src/hpc_connect/_version.py
+
+docs/build
+
+.pre-commit.log
+.DS_Store
+
+*.orig

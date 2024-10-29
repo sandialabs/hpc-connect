@@ -1,0 +1,72 @@
+[project]
+name = "hpc_connect"
+dynamic = ["version"]
+readme = "README.md"
+description = "hpc_connect: lightweight HPC submission and launching interfaces"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+hpc-launch = "hpc_connect.__main__:launch"
+
+[project.optional-dependencies]
+dev = ["ruff", "mypy", "pytest"]
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "src/_nvtest/_version.py"
+version_scheme = "python-simplified-semver"
+local_scheme = "no-local-version"
+
+[[tool.mypy.overrides]]
+module = "pkg_resources.*"
+ignore_missing_imports = true
+
+# check-wheel-contents is executed by the build-and-inspect-python-package action.
+[tool.check-wheel-contents]
+# W009: Wheel contains multiple toplevel library entries
+ignore = "W009"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 99
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint]
+ignore = ["E741", "F841", "E731"]
+select = ["F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/hpc_connect/__init__.py" = ["F401", "F403", "F405"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = "mock"
+addopts = "-ra --durations=10"
+cache_dir = ".cache/pytest"
+python_files = "*.py"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.coverage.run]
+branch = true
+source = ["hpc_connect"]
+command_line = "-m pytest"
+
+[tool.coverage.html]
+directory = "html.cov"
