@@ -1,7 +1,6 @@
+import argparse
 import os
 import shutil
-import subprocess
-from typing import Any
 
 from .launch import HPCLauncher
 
@@ -11,11 +10,15 @@ class MPILauncher(HPCLauncher):
 
     def __init__(self) -> None:
         if exe := shutil.which("mpiexec"):
-            self.exe = exe
+            self._executable = exe
         elif exe := shutil.which("mpirun"):
-            self.exe = exe
+            self._executable = exe
         else:
             raise ValueError("mpiexec not found on PATH")
+
+    @property
+    def executable(self) -> str:
+        return self._executable
 
     @staticmethod
     def matches(name: str) -> bool:
@@ -25,8 +28,8 @@ class MPILauncher(HPCLauncher):
             return True
         return False
 
-    def launch(self, *args_in: str, **kwargs: Any) -> int:
-        args: list[str] = [self.exe]
-        args.extend(args_in)
-        result = subprocess.run(args)
-        return result.returncode
+    def options(self, args: argparse.Namespace, unknown_args: list[str]) -> list[str]:
+        """Return options to pass to ``self.executable``"""
+        opts: list[str] = []
+        opts.extend(unknown_args)
+        return opts

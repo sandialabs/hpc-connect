@@ -1,7 +1,5 @@
 import abc
 import argparse
-from typing import Any
-from typing import Optional
 
 
 class HPCLauncher(abc.ABC):
@@ -10,9 +8,14 @@ class HPCLauncher(abc.ABC):
     def __init__(self) -> None:
         pass
 
+    @property
+    @abc.abstractmethod
+    def executable(self) -> str: ...
+
     @staticmethod
     @abc.abstractmethod
     def matches(name: str) -> bool: ...
 
     @abc.abstractmethod
-    def launch(self, *args_in: str, **kwargs: Any) -> int: ...
+    def options(self, args: argparse.Namespace, unknown_args: list[str]) -> list[str]:
+        """Return options to pass to ``self.executable``"""
