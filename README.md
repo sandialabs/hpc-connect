@@ -35,7 +35,7 @@ schduler.submit_and_wait("submit.sh")
 hpc-launch --backend=mpi -n 4 echo 'Hello, world!'
 ```
 
-## User defined launchers and schedulers
+## User defined scheduler
 
 ```python
 from hpc_connect import HPCScheduler
@@ -73,6 +73,7 @@ class MyScheduler(HPCScheduler):
     ) -> None:
         # submit script ``script`` and wait for it to finish
 ```
+## User defined launcher
 
 ```python
 from hpc_connect import HPCLauncher
@@ -98,11 +99,11 @@ Custom launchers and schedulers must be registered in your `pyproject.toml` file
 
 ```toml
 [project]
-name = "your_project_name"
+name = "my_project"
 version = "0.1.0"
 
 [project.entry_points."hpc_connect.scheduler"]
-my_scheduler = "myodule:MyScheduler"
+my_scheduler = "my_odule:MyScheduler"
 
 [project.entry_points."hpc_connect.launcher"]
 my_launcher = "my_module:MyLauncher"
