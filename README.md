@@ -32,7 +32,11 @@ schduler.submit_and_wait("submit.sh")
 ### Launcher
 
 ```console
-hpc-launch --backend=mpi -n 4 echo 'Hello, world!'
+$ hpc-launch --backend=mpi -n 4 echo 'Hello, world!'
+Hello, world!
+Hello, world!
+Hello, world!
+Hello, world!
 ```
 
 ## User defined scheduler
