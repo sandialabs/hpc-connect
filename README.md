@@ -107,7 +107,7 @@ name = "my_project"
 version = "0.1.0"
 
 [project.entry_points."hpc_connect.scheduler"]
-my_scheduler = "my_odule:MyScheduler"
+my_scheduler = "my_module:MyScheduler"
 
 [project.entry_points."hpc_connect.launcher"]
 my_launcher = "my_module:MyLauncher"
