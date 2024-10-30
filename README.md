@@ -25,7 +25,7 @@ import hpc_connect
 hpc_connect.set(scheduler="shell")
 scheduler = hpc_connect.scheduler
 with open("submit.sh", "w") as fh:
-    scheduler.write_submission_script(["echo 'Hello, world!'"], fh)
+    scheduler.write_submission_script(["echo 'Hello, world!'"], fh, tasks=1)
 schduler.submit_and_wait("submit.sh")
 ```
 
