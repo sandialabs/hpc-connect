@@ -24,9 +24,10 @@ python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-te
 import hpc_connect
 hpc_connect.set(scheduler="shell")
 scheduler = hpc_connect.scheduler
-with open("submit.sh", "w") as fh:
-    scheduler.write_submission_script(["echo 'Hello, world!'"], fh, tasks=1)
-schduler.submit_and_wait("submit.sh")
+script = "submit-hello-world.sh"
+with open(script, "w") as fh:
+    scheduler.write_submission_script(["echo 'Hello, world!'"], fh)
+schduler.submit_and_wait(script, job_name="hello-world")
 ```
 
 ### Launcher
@@ -67,16 +68,10 @@ class MyScheduler(HPCScheduler):
     ) -> None:
         # write the submission script
 
-    def submit_and_wait(
-        self,
-        script: str,
-        *,
-        job_name: Optional[str] = None,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-    ) -> None:
-        # submit script ``script`` and wait for it to finish
+    def submit(self, script: str, *, job_name: Optional[str] = None) -> HPCProcess:
+        # submit script ``script`` and return the HPCProcess
 ```
+
 ## User defined launcher
 
 ```python

@@ -1,12 +1,44 @@
 import getpass
+import io
+import re
+import shutil
 import subprocess
-import sys
 from datetime import datetime
 from typing import Optional
 from typing import TextIO
 
+from .submit import HPCProcess
 from .submit import HPCScheduler
 from .util import hhmmss
+
+
+class ShellProcess(HPCProcess):
+    def __init__(self, script: str, *, job_name: Optional[str] = None) -> None:
+        super().__init__(script, job_name=job_name)
+        sh = shutil.which("sh")
+        if sh is None:
+            raise RuntimeError("sh not found on PATH")
+        text = open(script).read()
+        if match := re.search(r"^# output: (?!None).*$", text, re.MULTILINE):
+            f = match.group()[9:].strip()
+            self.stdout = open(f, "w")
+        if match := re.search(r"^# error: (?!None).*$", text, re.MULTILINE):
+            f = match.group()[8:].strip()
+            if isinstance(self.stdout, io.IOBase) and self.stdout.name == f:
+                self.stderr = subprocess.STDOUT
+            else:
+                self.stderr = open(f, "w")
+        args = [sh, script]
+        self.proc: subprocess.Popen = subprocess.Popen(
+            args, stdout=self.stdout, stderr=self.stderr
+        )
+
+    def cancel(self) -> None:
+        return self.proc.terminate()
+
+    def poll(self) -> Optional[int]:
+        self.returncode = self.proc.poll()
+        return self.returncode
 
 
 class ShellScheduler(HPCScheduler):
@@ -14,7 +46,6 @@ class ShellScheduler(HPCScheduler):
 
     name = "shell"
     shell = "/bin/sh"
-    command_name = "sh"
 
     @staticmethod
     def matches(name: Optional[str]) -> bool:
@@ -38,6 +69,9 @@ class ShellScheduler(HPCScheduler):
         file.write(f"#!{self.shell}\n")
         file.write(f"# user: {getpass.getuser()}\n")
         file.write(f"# date: {datetime.now().strftime('%c')}\n")
+        file.write(f"# output: {output}\n")
+        file.write(f"# error: {error}\n")
+        file.write(f"# qtime: {qtime}\n")
         file.write(f"# approximate runtime: {hhmmss(qtime)}\n")
         if variables is not None:
             for var, val in variables.items():
@@ -48,34 +82,5 @@ class ShellScheduler(HPCScheduler):
         for line in script:
             file.write(f"{line}\n")
 
-    def submit_and_wait(
-        self,
-        script: str,
-        job_name: Optional[str] = None,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-    ) -> None:
-        fo: TextIO = sys.stdout
-        fe: TextIO = sys.stderr
-        own_fo = own_fe = False
-        if output is not None:
-            fo = open(output, "w")
-            own_fo = True
-        if error is not None:
-            if error == output:
-                fe = fo
-            else:
-                fe = open(error, "w")
-                own_fe = True
-        try:
-            args = [self.exe, script]
-            proc = subprocess.Popen(args, stdout=fo, stderr=fe)
-            proc.wait()
-        except subprocess.CalledProcessError:
-            pass
-        finally:
-            if own_fo:
-                fo.close()
-            if own_fe:
-                fe.close()
-        return
+    def submit(self, script: str, job_name: Optional[str] = None) -> HPCProcess:
+        return ShellProcess(script, job_name=job_name)

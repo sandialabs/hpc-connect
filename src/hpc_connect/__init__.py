@@ -4,7 +4,9 @@ from typing import Optional
 from typing import Type
 
 from .launch import HPCLauncher
+from .submit import HPCProcess
 from .submit import HPCScheduler
+from .submit import HPCSubmissionFailedError
 from .util import get_entry_points
 
 
