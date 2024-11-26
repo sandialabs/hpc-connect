@@ -1,3 +1,4 @@
+import os
 import re
 
 
@@ -34,10 +35,12 @@ class Job:
         self.error = error
         self.qtime = qtime
         self.variables = variables
-        self.script = script or f"{sanitize_path(self.name)}-submit.sh"
+        self.script = sanitize_path(script or f"{self.name}-submit.sh")
         self.returncode: int | None = None
 
 
 def sanitize_path(path: str) -> str:
     """Remove illegal file characters from ``path``"""
-    return re.sub(r"[^\w_. -]", "_", path).strip("_")
+    dirname, basename = os.path.split(path)
+    basename = re.sub(r"[^\w_. -]", "_", basename).strip("_")
+    return os.path.join(dirname, basename)

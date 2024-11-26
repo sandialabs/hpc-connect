@@ -57,6 +57,10 @@ class HPCScheduler(ABC):
                 self.node_count = int(val)
 
         @property
+        def supports_subscheduling(self) -> bool:
+            return False
+
+        @property
         def cpus_per_node(self) -> int:
             return self._cpus_per_node
 
