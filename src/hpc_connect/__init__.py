@@ -3,6 +3,7 @@ from typing import Any
 from typing import Optional
 from typing import Type
 
+from .job import Job
 from .launch import HPCLauncher
 from .submit import HPCProcess
 from .submit import HPCScheduler

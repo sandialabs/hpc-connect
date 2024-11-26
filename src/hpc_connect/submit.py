@@ -5,10 +5,9 @@ import shlex
 import time
 from abc import ABC
 from abc import abstractmethod
-from typing import Optional
 from typing import TextIO
-from typing import Union
 
+from .job import Job
 from .util import cpu_count
 
 logger = logging.getLogger("hpc_connect")
@@ -19,16 +18,16 @@ class HPCProcess(ABC):
         self,
         script: str,
         *,
-        job_name: Optional[str] = None,
+        job_name: str | None = None,
     ) -> None:
         self.script = script
         self.job_name = job_name
-        self.stdout: Optional[Union[TextIO, int]] = None
-        self.stderr: Optional[Union[TextIO, int]] = None
-        self.returncode: Optional[int] = None
+        self.stdout: TextIO | int | None = None
+        self.stderr: TextIO | int | None = None
+        self.returncode: int | None = None
 
     @abstractmethod
-    def poll(self) -> Optional[int]:
+    def poll(self) -> int | None:
         """Check if child process has terminated. Set and return returncode attribute. Otherwise, returns None."""
 
     @abstractmethod
@@ -98,7 +97,7 @@ class HPCScheduler(ABC):
         def nodes_required(self, tasks: int) -> int:
             """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
             rank"""
-            nodes = int(math.ceil(tasks / self.cpus_per_node))
+            nodes = int(math.ceil(tasks or 1 / self.cpus_per_node))
             return nodes if nodes <= self.node_count else -1
 
     def __init__(self) -> None:
@@ -118,67 +117,56 @@ class HPCScheduler(ABC):
             default_args.extend(shlex.split(envargs))
         return default_args
 
-    def nodes_required(self, tasks: int) -> int:
+    def nodes_required(self, tasks: int | None) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of a single MPI rank"""
-        return self.config.nodes_required(tasks)
+        return self.config.nodes_required(tasks or 1)
 
     @staticmethod
     @abstractmethod
-    def matches(name: Optional[str]) -> bool:
+    def matches(name: str | None) -> bool:
         """Is this the scheduler for ``name``?"""
 
     @abstractmethod
-    def write_submission_script(
-        self,
-        script: list[str],
-        file: TextIO,
-        *,
-        tasks: int,
-        nodes: Optional[int] = None,
-        job_name: Optional[str] = None,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-        qtime: Optional[float] = None,
-        variables: Optional[dict[str, Optional[str]]] = None,
-    ) -> None:
+    def write_submission_script(self, job: Job, file: TextIO) -> None:
         """Write a submission script that is compatible with ``submit_and_wait`` and ``submit``"""
 
     @abstractmethod
-    def submit(self, script: str, *, job_name: Optional[str] = None) -> HPCProcess:
-        """Submit ``script`` to the scheduler"""
+    def submit(self, job: Job) -> HPCProcess:
+        """Submit ``job`` to the scheduler."""
 
     def submit_and_wait(
         self,
-        script: str,
-        *,
-        job_name: Optional[str] = None,
-        timeout: Optional[float] = None,
-    ) -> Optional[int]:
-        """Submit ``script`` to the scheduler and wait for it to return"""
+        *jobs: Job,
+        independent: bool = False,
+        timeout: float | None = None,
+        poll_frequency=0.5,
+    ) -> None:
+        """Submit ``job`` to the scheduler and wait for it to return"""
         timeout = timeout or -1.0
+        returncode: int | None = None
         start = time.monotonic()
-        proc = self.submit(script, job_name=job_name)
-        try:
-            # give the process time to get in the queue
-            time.sleep(1)
-            while True:
-                if proc.poll() is not None:
-                    break
-                if timeout > 0 and time.monotonic() - start > timeout:
-                    proc.cancel()
-                    break
-                time.sleep(0.5)
-        except BaseException as e:
-            proc.cancel()
-            if isinstance(e, KeyboardInterrupt):
-                return None
-            raise
-        finally:
-            if hasattr(proc.stdout, "fileno"):
-                proc.stdout.close()  # type: ignore
-            if hasattr(proc.stderr, "fileno"):
-                proc.stderr.close()  # type: ignore
-        return proc.returncode
+        for job in jobs:
+            proc = self.submit(job)
+            try:
+                # give the process time to get in the queue
+                time.sleep(1)
+                while proc.poll() is None:
+                    if timeout > 0 and time.monotonic() - start > timeout:
+                        proc.cancel()
+                        break
+                    time.sleep(poll_frequency)
+            except BaseException as e:
+                proc.cancel()
+                if isinstance(e, KeyboardInterrupt):
+                    return None
+                raise
+            finally:
+                if hasattr(proc.stdout, "fileno"):
+                    proc.stdout.close()  # type: ignore
+                if hasattr(proc.stderr, "fileno"):
+                    proc.stderr.close()  # type: ignore
+            job.returncode = proc.returncode
+        return
 
 
 class HPCSubmissionFailedError(Exception):
