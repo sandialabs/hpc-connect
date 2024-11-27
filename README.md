@@ -24,10 +24,11 @@ python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-te
 import hpc_connect
 hpc_connect.set(scheduler="shell")
 scheduler = hpc_connect.scheduler
-script = "submit-hello-world.sh"
-with open(script, "w") as fh:
-    scheduler.write_submission_script(["echo 'Hello, world!'"], fh)
-schduler.submit_and_wait(script, job_name="hello-world")
+
+job = hpc_connect.Job(
+    name="hello-world", commands=["echo 'Hello, world!'"], ranks=1
+)
+schduler.submit_and_wait(job)
 ```
 
 ### Launcher
