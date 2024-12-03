@@ -141,7 +141,7 @@ class HPCScheduler(ABC):
     def submit_and_wait(
         self,
         *jobs: Job,
-        independent: bool = False,
+        sequential: bool = True,
         timeout: float | None = None,
         poll_frequency=0.5,
     ) -> None:
