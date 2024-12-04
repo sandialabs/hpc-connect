@@ -101,8 +101,11 @@ class HPCScheduler(ABC):
         def nodes_required(self, tasks: int) -> int:
             """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
             rank"""
-            nodes = int(math.ceil(tasks or 1 / self.cpus_per_node))
-            return nodes if nodes <= self.node_count else -1
+            tasks = tasks or 1
+            if tasks < self.cpus_per_node:
+                return 1
+            nodes = int(math.ceil(tasks / self.cpus_per_node))
+            return nodes
 
     def __init__(self) -> None:
         self.config = HPCScheduler.Config()
