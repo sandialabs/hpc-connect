@@ -5,6 +5,7 @@ import shlex
 import time
 from abc import ABC
 from abc import abstractmethod
+from typing import Dict
 from typing import TextIO
 
 from .job import Job
@@ -141,6 +142,36 @@ class HPCScheduler(ABC):
     def submit(self, job: Job) -> HPCProcess:
         """Submit ``job`` to the scheduler."""
 
+    def finalize_proc(self, proc: HPCProcess, job: Job) -> None:
+        if hasattr(proc.stdout, "fileno"):
+            proc.stdout.close()  # type: ignore
+        if hasattr(proc.stderr, "fileno"):
+            proc.stderr.close()  # type: ignore
+        job.returncode = proc.returncode
+
+    def poll_processes(
+        self, processes: Dict[HPCProcess, Job], timeout: float, poll_frequency: float
+    ) -> None:
+        """Poll the status of ``processes`` and update their status"""
+        start = time.monotonic()
+        try:
+            while processes:
+                for proc, job in processes.items():
+                    if proc.poll() is None:
+                        if timeout > 0 and time.monotonic() - start > timeout:
+                            proc.cancel()
+                            continue
+                    self.finalize_proc(proc, job)
+                    processes.pop(proc)
+                time.sleep(poll_frequency)
+        except BaseException as e:
+            for proc, job in processes.items():
+                proc.cancel()
+                self.finalize_proc(proc, job)
+            if isinstance(e, KeyboardInterrupt):
+                return None
+            raise
+
     def submit_and_wait(
         self,
         *jobs: Job,
@@ -150,29 +181,23 @@ class HPCScheduler(ABC):
     ) -> None:
         """Submit ``job`` to the scheduler and wait for it to return"""
         timeout = timeout or -1.0
-        returncode: int | None = None
-        start = time.monotonic()
-        for job in jobs:
-            proc = self.submit(job)
-            try:
-                # give the process time to get in the queue
-                time.sleep(1)
-                while proc.poll() is None:
-                    if timeout > 0 and time.monotonic() - start > timeout:
-                        proc.cancel()
-                        break
-                    time.sleep(poll_frequency)
-            except BaseException as e:
-                proc.cancel()
-                if isinstance(e, KeyboardInterrupt):
-                    return None
-                raise
-            finally:
-                if hasattr(proc.stdout, "fileno"):
-                    proc.stdout.close()  # type: ignore
-                if hasattr(proc.stderr, "fileno"):
-                    proc.stderr.close()  # type: ignore
-            job.returncode = proc.returncode
+        if sequential:
+            for job in jobs:
+                proc = self.submit(job)
+                time.sleep(1)  # wait for the process to start
+                self.poll_processes(
+                    {proc: job}, timeout=timeout, poll_frequency=poll_frequency
+                )
+        else:
+            processes = dict()
+            for job in jobs:
+                proc = self.submit(job)
+                processes[proc] = job
+
+            time.sleep(1)  # wait for the processes to start
+            self.poll_processes(
+                processes=processes, timeout=timeout, poll_frequency=poll_frequency
+            )
         return
 
 
