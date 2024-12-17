@@ -1,7 +1,6 @@
 import getpass
 import io
 import os
-import re
 import shutil
 import subprocess
 from datetime import datetime
@@ -15,28 +14,27 @@ from .util import set_executable
 
 
 class ShellProcess(HPCProcess):
-    def __init__(self, script: str, *, job_name: str | None = None) -> None:
-        super().__init__(script, job_name=job_name)
+    def __init__(self, job: Job) -> None:
+        super().__init__(job=job)
         sh = shutil.which("sh")
         if sh is None:
             raise RuntimeError("sh not found on PATH")
-        text = open(script).read()
-        if match := re.search(r"^# output: (?!None).*$", text, re.MULTILINE):
-            f = match.group()[9:].strip()
-            self.stdout = open(f, "w")
-        if match := re.search(r"^# error: (?!None).*$", text, re.MULTILINE):
-            f = match.group()[8:].strip()
-            if isinstance(self.stdout, io.IOBase) and self.stdout.name == f:
+        if job.output:
+            self.stdout = open(job.output, "w")
+        if job.error:
+            if isinstance(self.stdout, io.IOBase) and self.stdout.name == job.error:
                 self.stderr = subprocess.STDOUT
             else:
-                self.stderr = open(f, "w")
-        args = [sh, script]
+                self.stderr = open(job.error, "w")
+
+        args = [sh, job.script]
         self.proc: subprocess.Popen = subprocess.Popen(
             args, stdout=self.stdout, stderr=self.stderr
         )
 
-    def cancel(self) -> None:
-        return self.proc.terminate()
+    def cancel(self, returncode: int) -> None:
+        self.proc.terminate()
+        self.returncode = returncode
 
     def poll(self) -> int | None:
         self.returncode = self.proc.poll()
@@ -80,4 +78,4 @@ class ShellScheduler(HPCScheduler):
         with open(job.script, "w") as fh:
             self.write_submission_script(job, fh)
         set_executable(job.script)
-        return ShellProcess(job.script, job_name=job.name)
+        return ShellProcess(job)

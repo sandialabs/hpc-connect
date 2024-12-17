@@ -27,8 +27,8 @@ class Job:
         elif nodes is not None and tasks is not None and nodes > tasks:
             raise ValueError("requesting more nodes than tasks")
         self.tasks = tasks
-        self.cpus_per_task = cpus_per_task
-        self.gpus_per_task = gpus_per_task
+        self.cpus_per_task = cpus_per_task or 1
+        self.gpus_per_task = gpus_per_task or 0
         self.tasks_per_node = tasks_per_node
         self.nodes = nodes
         self.output = output
