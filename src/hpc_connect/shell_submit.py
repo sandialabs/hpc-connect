@@ -14,7 +14,6 @@ from .util import set_executable
 
 
 class ShellProcess(HPCProcess):
-
     def __init__(self, job: Job) -> None:
         super().__init__(job=job)
         sh = shutil.which("sh")

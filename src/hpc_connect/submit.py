@@ -14,7 +14,6 @@ logger = logging.getLogger("hpc_connect")
 
 
 class HPCProcess(ABC):
-
     def __init__(
         self,
         *,
