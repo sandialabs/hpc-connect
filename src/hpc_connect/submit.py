@@ -29,8 +29,8 @@ class HPCProcess(ABC):
         """Check if child process has terminated. Set and return returncode attribute. Otherwise, returns None."""
 
     @abstractmethod
-    def cancel(self) -> None:
-        """Stop the child process."""
+    def cancel(self, returncode: int) -> None:
+        """Stop the child process. Set the return code to the specified value."""
 
     def finalize(self) -> None:
         """Perform any necessary cleanup after a job has finished running."""
@@ -147,32 +147,33 @@ class HPCScheduler(ABC):
     def submit(self, job: Job) -> HPCProcess:
         """Submit ``job`` to the scheduler."""
 
-    def finalize_proc(self, proc: HPCProcess, job: Job) -> None:
-        if hasattr(proc.stdout, "fileno"):
-            proc.stdout.close()  # type: ignore
-        if hasattr(proc.stderr, "fileno"):
-            proc.stderr.close()  # type: ignore
-        job.returncode = proc.returncode
+    def poll(self, processes: list[HPCProcess]) -> None:
+        """Poll the status of running processes and finalize any that have finished"""
+        for proc in processes:
+            if proc.returncode is not None:
+                continue
+            elif proc.poll() is not None:
+                proc.finalize()
 
-    def poll_processes(
-        self, processes: list[HPCProcess], timeout: float, poll_frequency: float
-    ) -> None:
-        """Poll the status of ``processes`` and update their status"""
+    def cancel(self, processes: list[HPCProcess], returncode: int) -> None:
+        """Cancel any processes that have not completed"""
+        for proc in processes:
+            if proc.returncode is None:
+                proc.cancel(returncode)
+                proc.finalize()
+
+    def wait(self, processes: list[HPCProcess], timeout: float, poll_frequency: float) -> None:
+        """Wait for running processes to complete"""
         start = time.monotonic()
         try:
-            while processes:
-                for i, proc in enumerate(processes):
-                    if proc.poll() is None:
-                        if timeout > 0 and time.monotonic() - start > timeout:
-                            proc.cancel()
-                    else:
-                        proc.finalize()
-                        processes.pop(i)
+            while any(proc.returncode is None for proc in processes):
+                if timeout > 0 and time.monotonic() - start > timeout:
+                    raise TimeoutError
+                self.poll(processes)
                 time.sleep(poll_frequency)
         except BaseException as e:
-            for proc in processes:
-                proc.cancel()
-                proc.finalize()
+            returncode = 66 if isinstance(e, TimeoutError) else 1
+            self.cancel(processes, returncode)
             if isinstance(e, KeyboardInterrupt):
                 return None
             raise
@@ -184,21 +185,21 @@ class HPCScheduler(ABC):
         timeout: float | None = None,
         poll_frequency=0.5,
     ) -> None:
-        """Submit ``job`` to the scheduler and wait for it to return"""
+        """Submit ``jobs`` to the scheduler and wait for it to return"""
         timeout = timeout or -1.0
         if sequential:
             for job in jobs:
                 proc = self.submit(job)
                 time.sleep(1)  # wait for the process to start
-                self.poll_processes([proc], timeout, poll_frequency)
+                self.wait([proc], timeout, poll_frequency)
         else:
-            processes = list()
+            processes = list() 
             for job in jobs:
                 proc = self.submit(job)
                 processes.append(proc)
 
             time.sleep(1)  # wait for the processes to start
-            self.poll_processes(processes, timeout, poll_frequency)
+            self.wait(processes, timeout, poll_frequency)
         return
 
 

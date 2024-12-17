@@ -32,8 +32,9 @@ class ShellProcess(HPCProcess):
             args, stdout=self.stdout, stderr=self.stderr
         )
 
-    def cancel(self) -> None:
-        return self.proc.terminate()
+    def cancel(self, returncode: int) -> None:
+        self.proc.terminate()
+        self.returncode = returncode
 
     def poll(self) -> int | None:
         self.returncode = self.proc.poll()
