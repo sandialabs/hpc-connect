@@ -5,7 +5,6 @@ import shlex
 import time
 from abc import ABC
 from abc import abstractmethod
-from typing import Dict
 from typing import TextIO
 
 from .job import Job
@@ -15,14 +14,13 @@ logger = logging.getLogger("hpc_connect")
 
 
 class HPCProcess(ABC):
+
     def __init__(
         self,
-        script: str,
         *,
-        job_name: str | None = None,
+        job: Job,
     ) -> None:
-        self.script = script
-        self.job_name = job_name
+        self.job = job
         self.stdout: TextIO | int | None = None
         self.stderr: TextIO | int | None = None
         self.returncode: int | None = None
@@ -34,6 +32,14 @@ class HPCProcess(ABC):
     @abstractmethod
     def cancel(self) -> None:
         """Stop the child process."""
+
+    def finalize(self) -> None:
+        """Perform any necessary cleanup after a job has finished running."""
+        if hasattr(self.stdout, "fileno"):
+            self.stdout.close()  # type: ignore
+        if hasattr(self.stderr, "fileno"):
+            self.stderr.close()  # type: ignore
+        self.job.returncode = self.returncode
 
 
 class HPCScheduler(ABC):
@@ -150,24 +156,24 @@ class HPCScheduler(ABC):
         job.returncode = proc.returncode
 
     def poll_processes(
-        self, processes: Dict[HPCProcess, Job], timeout: float, poll_frequency: float
+        self, processes: list[HPCProcess], timeout: float, poll_frequency: float
     ) -> None:
         """Poll the status of ``processes`` and update their status"""
         start = time.monotonic()
         try:
             while processes:
-                for proc, job in processes.items():
+                for i, proc in enumerate(processes):
                     if proc.poll() is None:
                         if timeout > 0 and time.monotonic() - start > timeout:
                             proc.cancel()
-                            continue
-                    self.finalize_proc(proc, job)
-                    processes.pop(proc)
+                    else:
+                        proc.finalize()
+                        processes.pop(i)
                 time.sleep(poll_frequency)
         except BaseException as e:
-            for proc, job in processes.items():
+            for proc in processes:
                 proc.cancel()
-                self.finalize_proc(proc, job)
+                proc.finalize()
             if isinstance(e, KeyboardInterrupt):
                 return None
             raise
@@ -185,19 +191,15 @@ class HPCScheduler(ABC):
             for job in jobs:
                 proc = self.submit(job)
                 time.sleep(1)  # wait for the process to start
-                self.poll_processes(
-                    {proc: job}, timeout=timeout, poll_frequency=poll_frequency
-                )
+                self.poll_processes([proc], timeout, poll_frequency)
         else:
-            processes = dict()
+            processes = list()
             for job in jobs:
                 proc = self.submit(job)
-                processes[proc] = job
+                processes.append(proc)
 
             time.sleep(1)  # wait for the processes to start
-            self.poll_processes(
-                processes=processes, timeout=timeout, poll_frequency=poll_frequency
-            )
+            self.poll_processes(processes, timeout, poll_frequency)
         return
 
 
