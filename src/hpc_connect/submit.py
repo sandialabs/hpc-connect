@@ -63,10 +63,6 @@ class HPCScheduler(ABC):
                 self.node_count = int(val)
 
         @property
-        def supports_subscheduling(self) -> bool:
-            return False
-
-        @property
         def cpus_per_node(self) -> int:
             return self._cpus_per_node
 
@@ -116,6 +112,10 @@ class HPCScheduler(ABC):
     def __init__(self) -> None:
         self.config = HPCScheduler.Config()
         self.default_args = self.read_default_args()
+
+    @property
+    def supports_subscheduling(self) -> bool:
+        return False
 
     def add_default_args(self, *args: str) -> None:
         """Add default arguments to the scheduler submission command line"""
