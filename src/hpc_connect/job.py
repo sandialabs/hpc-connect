@@ -1,3 +1,4 @@
+import math
 import os
 import re
 
@@ -37,6 +38,20 @@ class Job:
         self.variables = variables
         self.script = sanitize_path(script or f"{self.name}-submit.sh")
         self.returncode: int | None = None
+
+    def time_limit_in_seconds(self, pad: int = 0) -> int:
+        """Return the time limit in seconds. Guarenteed return value >= 1."""
+        limit = 1 if self.qtime is None else math.ceil(self.qtime)
+        limit = max(limit, 1)
+        limit = limit + pad if pad > 0 else limit
+        return limit
+
+    def time_limit_in_minutes(self, pad: int = 0) -> int:
+        """Return the time limit in minutes. Guarenteed return value >= 1."""
+        sec = self.time_limit_in_seconds()
+        minutes = math.ceil(sec / 60.0)
+        minutes = minutes + pad if pad > 0 else minutes
+        return minutes
 
 
 def sanitize_path(path: str) -> str:
