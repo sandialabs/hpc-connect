@@ -1,6 +1,6 @@
+import math
 import os
 import re
-import math
 
 
 class Job:

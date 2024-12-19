@@ -193,7 +193,7 @@ class HPCScheduler(ABC):
                 time.sleep(1)  # wait for the process to start
                 self.wait([proc], timeout, poll_frequency)
         else:
-            processes = list() 
+            processes = list()
             for job in jobs:
                 proc = self.submit(job)
                 processes.append(proc)
