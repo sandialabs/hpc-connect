@@ -1,7 +1,9 @@
 import logging
 import math
+import multiprocessing
 import os
 import shlex
+import signal
 import time
 from abc import ABC
 from abc import abstractmethod
@@ -46,6 +48,7 @@ class HPCScheduler(ABC):
 
     shell = "/bin/sh"
     name = "<none>"
+    lock = multiprocessing.RLock()
 
     class Config:
         def __init__(self) -> None:
@@ -112,6 +115,8 @@ class HPCScheduler(ABC):
     def __init__(self) -> None:
         self.config = HPCScheduler.Config()
         self.default_args = self.read_default_args()
+        self.processes: list[HPCProcess] = list()
+        self._signaled = False
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -147,33 +152,39 @@ class HPCScheduler(ABC):
     def submit(self, job: Job) -> HPCProcess:
         """Submit ``job`` to the scheduler."""
 
-    def poll(self, processes: list[HPCProcess]) -> None:
+    def shutdown(self, returncode: int = 0) -> None:
+        """Perform any post-run cleanup"""
+        self.cancel(returncode)
+
+    def poll(self) -> None:
         """Poll the status of running processes and finalize any that have finished"""
-        for proc in processes:
+        for proc in self.processes:
             if proc.returncode is not None:
                 continue
             elif proc.poll() is not None:
                 proc.finalize()
 
-    def cancel(self, processes: list[HPCProcess], returncode: int) -> None:
+    def cancel(self, returncode: int) -> None:
         """Cancel any processes that have not completed"""
-        for proc in processes:
-            if proc.returncode is None:
-                proc.cancel(returncode)
+        with self.lock:
+            for proc in self.processes:
+                if proc.returncode is None:
+                    proc.cancel(returncode)
                 proc.finalize()
 
-    def wait(self, processes: list[HPCProcess], timeout: float, poll_frequency: float) -> None:
+    def wait(self, timeout: float, poll_frequency: float) -> None:
         """Wait for running processes to complete"""
         start = time.monotonic()
         try:
-            while any(proc.returncode is None for proc in processes):
+            while any(proc.returncode is None for proc in self.processes):
                 if timeout > 0 and time.monotonic() - start > timeout:
                     raise TimeoutError
-                self.poll(processes)
+                self.poll()
                 time.sleep(poll_frequency)
         except BaseException as e:
+            logging.error(f"Got exception, cancelling jobs: {e}")
             returncode = 66 if isinstance(e, TimeoutError) else 1
-            self.cancel(processes, returncode)
+            self.cancel(returncode)
             if isinstance(e, KeyboardInterrupt):
                 return None
             raise
@@ -186,20 +197,32 @@ class HPCScheduler(ABC):
         poll_frequency=0.5,
     ) -> None:
         """Submit ``jobs`` to the scheduler and wait for it to return"""
+
+        def cancel_jobs(sig, frame) -> None:
+            with self.lock:
+                if not self._signaled:
+                    self._signaled = True
+                    logger.error(
+                        f"Caught signal {sig}, canceling jobs and shutting down scheduler ({self.name})."
+                    )
+                self.shutdown(1)
+
+        signal.signal(signal.SIGINT, cancel_jobs)
+        signal.signal(signal.SIGTERM, cancel_jobs)
+
         timeout = timeout or -1.0
         if sequential:
             for job in jobs:
-                proc = self.submit(job)
+                self.processes = [self.submit(job)]
                 time.sleep(1)  # wait for the process to start
-                self.wait([proc], timeout, poll_frequency)
+                self.wait(timeout, poll_frequency)
         else:
-            processes = list()
             for job in jobs:
-                proc = self.submit(job)
-                processes.append(proc)
+                self.processes.append(self.submit(job))
 
             time.sleep(1)  # wait for the processes to start
-            self.wait(processes, timeout, poll_frequency)
+            self.wait(timeout, poll_frequency)
+        self.shutdown()
         return
 
 
