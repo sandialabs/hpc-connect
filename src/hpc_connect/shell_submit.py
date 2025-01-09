@@ -56,7 +56,6 @@ class ShellScheduler(HPCScheduler):
     def write_submission_script(self, job: Job, file: TextIO) -> None:
         file.write(f"#!{self.shell}\n")
         args = list(self.default_args)
-        print("HERE I AM B.0:", id(self))
         for arg in args:
             file.write(f"# BASH: {arg}\n")
         file.write(f"# user: {getpass.getuser()}\n")
