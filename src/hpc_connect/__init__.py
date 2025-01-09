@@ -1,7 +1,4 @@
-import logging
-import os
-from typing import Any
-from typing import Optional
+import importlib.metadata as im
 from typing import Type
 
 from .job import Job
@@ -9,10 +6,26 @@ from .launch import HPCLauncher
 from .submit import HPCProcess
 from .submit import HPCScheduler
 from .submit import HPCSubmissionFailedError
-from .util import get_entry_points
 
-_launchers: dict[str, Type[HPCLauncher]] | None = None
-_schedulers: dict[str, Type[HPCScheduler]] | None = None
+
+class EntryPointLoadFailure:
+    def __init__(self, ep: im.EntryPoint, ex: Exception) -> None:
+        self.ep = ep
+        self.ex = ex
+        self.name = f"{self.ep.name}*"
+
+    def __repr__(self) -> str:
+        return f"Failed to load {self.ep!r} due to: {self.ex!r}"
+
+    def matches(self, name: str) -> bool:
+        return name.lower() == self.ep.name.lower()
+
+    def __call__(self):
+        raise RuntimeError(repr(self))
+
+
+_launchers: dict[str, Type[HPCLauncher] | EntryPointLoadFailure] | None = None
+_schedulers: dict[str, Type[HPCScheduler] | EntryPointLoadFailure] | None = None
 
 
 def scheduler(name: str) -> HPCScheduler:
@@ -32,41 +45,37 @@ def launcher(name: str) -> HPCLauncher:
     raise ValueError(f"No matching launcher for {name!r}")
 
 
-def schedulers() -> dict[str, Type[HPCScheduler]]:
+def schedulers() -> dict[str, Type[HPCScheduler] | EntryPointLoadFailure]:
     global _schedulers
     if _schedulers is None:
         from .shell_submit import ShellScheduler
 
-        _schedulers = {ShellScheduler.name: ShellScheduler}
-        entry_points = get_entry_points(group="hpc_connect.scheduler") or []
+        hooks: dict[str, Type[HPCScheduler] | EntryPointLoadFailure] = {
+            ShellScheduler.name: ShellScheduler
+        }
+        entry_points = im.entry_points(group="hpc_connect.scheduler")
         for entry_point in entry_points:
             try:
-                scheduler_t = entry_point.load()
-                _schedulers[scheduler_t.name] = scheduler_t
+                hooks[entry_point.name] = entry_point.load()
             except ImportError as e:
-                _report_failed_plugin(entry_point, e)
+                hooks[entry_point.name] = EntryPointLoadFailure(entry_point, e)
+        _schedulers = hooks
     return _schedulers
 
 
-def launchers() -> dict[str, Type[HPCLauncher]]:
+def launchers() -> dict[str, Type[HPCLauncher] | EntryPointLoadFailure]:
     global _launchers
     if _launchers is None:
         from .mpi_launch import MPILauncher
 
-        _launchers = {MPILauncher.name: MPILauncher}
-        entry_points = get_entry_points(group="hpc_connect.launcher") or []
+        hooks: dict[str, Type[HPCLauncher] | EntryPointLoadFailure] = {
+            MPILauncher.name: MPILauncher
+        }
+        entry_points = im.entry_points(group="hpc_connect.launcher")
         for entry_point in entry_points:
             try:
-                launcher_t = entry_point.load()
-                _launchers[launcher_t.name] = entry_point.load()
+                hooks[entry_point.name] = entry_point.load()
             except ImportError as e:
-                _report_failed_plugin(entry_point, e)
+                hooks[entry_point.name] = EntryPointLoadFailure(entry_point, e)
+        _launchers = hooks
     return _launchers
-
-
-def _report_failed_plugin(ep, e):
-    logger = logging.getLogger("hpc_connect")
-    logger.error(
-        "\033[1m\033[91m==>\033[0m Error: "
-        f"Failed to load HPC connect plugin {ep.name} due to the following error:\n    {e!r}"
-    )
