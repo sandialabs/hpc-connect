@@ -16,11 +16,7 @@ logger = logging.getLogger("hpc_connect")
 
 
 class HPCProcess(ABC):
-    def __init__(
-        self,
-        *,
-        job: Job,
-    ) -> None:
+    def __init__(self, *, job: Job) -> None:
         self.job = job
         self.stdout: TextIO | int | None = None
         self.stderr: TextIO | int | None = None

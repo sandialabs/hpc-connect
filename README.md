@@ -22,8 +22,7 @@ python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-te
 
 ```python
 import hpc_connect
-hpc_connect.set(scheduler="shell")
-scheduler = hpc_connect.scheduler
+scheduler = hpc_connect.scheduler("shell")
 
 job = hpc_connect.Job(
     name="hello-world", commands=["echo 'Hello, world!'"], ranks=1

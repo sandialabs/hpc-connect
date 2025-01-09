@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 from typing import Optional
@@ -10,127 +11,62 @@ from .submit import HPCScheduler
 from .submit import HPCSubmissionFailedError
 from .util import get_entry_points
 
-
-def set(*, scheduler: Optional[str] = None, launcher: Optional[str] = None):
-    if scheduler is not None:
-        if backend._scheduler is None:
-            for scheduler_t in schedulers():
-                if scheduler_t.matches(scheduler):
-                    backend.scheduler = scheduler_t()
-                    break
-            else:
-                raise ValueError(f"No matching scheduler for {scheduler!r}")
-        elif not backend._scheduler.matches(scheduler):
-            raise ValueError(f"hpc_connect scheduler already set to {backend._scheduler.name}")
-    if launcher is not None:
-        if backend._launcher is None:
-            for launcher_t in launchers():
-                if launcher_t.matches(launcher):
-                    backend.launcher = launcher_t()
-                    break
-            else:
-                raise ValueError(f"No matching launcher for {launcher!r}")
-        elif not backend._launcher.matches(launcher):
-            raise ValueError(f"hpc_connect launcher already set to {backend._launcher.name}")
+_launchers: dict[str, Type[HPCLauncher]] | None = None
+_schedulers: dict[str, Type[HPCScheduler]] | None = None
 
 
-class Backend:
-    def __init__(self) -> None:
-        self._scheduler: Optional[HPCScheduler] = None
-        self._launcher: Optional[HPCLauncher] = None
-
-    @property
-    def scheduler(self) -> HPCScheduler:
-        if self._scheduler is None:
-            name: str
-            if var := os.getenv("HPC_CONNECT_SCHEDULER"):
-                name = var
-            elif var := os.getenv("HPC_CONNECT_DEFAULT_SCHEDULER"):
-                name = var
-            else:
-                name = "default"
-            for key, scheduler_t in find_schedulers().items():
-                if scheduler_t.matches(name) or key == name:
-                    self.scheduler = scheduler_t()
-                    break
-            else:
-                raise ValueError(f"could not determine scheduler backend end for {name!r}")
-        assert self._scheduler is not None
-        return self._scheduler
-
-    @scheduler.setter
-    def scheduler(self, arg: HPCScheduler) -> None:
-        assert isinstance(arg, HPCScheduler)
-        self._scheduler = arg
-
-    @property
-    def launcher(self) -> HPCLauncher:
-        if self._launcher is None:
-            name: str
-            if var := os.getenv("HPC_CONNECT_LAUNCHER"):
-                name = var
-            elif var := os.getenv("HPC_CONNECT_DEFAULT_LAUNCHER"):
-                name = var
-            else:
-                name = "default"
-            for key, launcher_t in find_launchers().items():
-                if launcher_t.matches(name) or key == name:
-                    self.launcher = launcher_t()
-                    break
-            else:
-                raise ValueError(f"could not determine launcher backend end for {name!r}")
-        assert self._launcher is not None
-        return self._launcher
-
-    @launcher.setter
-    def launcher(self, arg: HPCLauncher) -> None:
-        assert isinstance(arg, HPCLauncher)
-        self._launcher = arg
+def scheduler(name: str) -> HPCScheduler:
+    """Return the scheduler matchine ``name``"""
+    avail = schedulers()
+    for scheduler_t in avail.values():
+        if scheduler_t.matches(name):
+            return scheduler_t()
+    raise ValueError(f"No matching scheduler for {name!r}")
 
 
-_schedulers: Optional[dict[str, Type[HPCScheduler]]] = None
-_launchers: Optional[dict[str, Type[HPCLauncher]]] = None
+def launcher(name: str) -> HPCLauncher:
+    avail = launchers()
+    for launcher_t in avail.values():
+        if launcher_t.matches(name):
+            return launcher_t()
+    raise ValueError(f"No matching launcher for {name!r}")
 
 
-def find_schedulers() -> dict[str, Type[HPCScheduler]]:
+def schedulers() -> dict[str, Type[HPCScheduler]]:
     global _schedulers
     if _schedulers is None:
         from .shell_submit import ShellScheduler
 
-        _schedulers = {"default": ShellScheduler}
+        _schedulers = {ShellScheduler.name: ShellScheduler}
         entry_points = get_entry_points(group="hpc_connect.scheduler") or []
         for entry_point in entry_points:
-            _schedulers[entry_point.name] = entry_point.load()
+            try:
+                scheduler_t = entry_point.load()
+                _schedulers[scheduler_t.name] = scheduler_t
+            except ImportError as e:
+                _report_failed_plugin(entry_point, e)
     return _schedulers
 
 
-def schedulers() -> list[Type[HPCScheduler]]:
-    return list(find_schedulers().values())
-
-
-def find_launchers() -> dict[str, Type[HPCLauncher]]:
+def launchers() -> dict[str, Type[HPCLauncher]]:
     global _launchers
     if _launchers is None:
         from .mpi_launch import MPILauncher
 
-        _launchers = {"default": MPILauncher}
+        _launchers = {MPILauncher.name: MPILauncher}
         entry_points = get_entry_points(group="hpc_connect.launcher") or []
         for entry_point in entry_points:
-            _launchers[entry_point.name] = entry_point.load()
+            try:
+                launcher_t = entry_point.load()
+                _launchers[launcher_t.name] = entry_point.load()
+            except ImportError as e:
+                _report_failed_plugin(entry_point, e)
     return _launchers
 
 
-def launchers() -> list[Type[HPCLauncher]]:
-    return list(find_launchers().values())
-
-
-backend = Backend()
-
-
-def __getattr__(attrname: str) -> Any:
-    if attrname == "scheduler":
-        return backend.scheduler
-    elif attrname == "launcher":
-        return backend.launcher
-    else:
-        raise AttributeError(attrname)
+def _report_failed_plugin(ep, e):
+    logger = logging.getLogger("hpc_connect")
+    logger.error(
+        "\033[1m\033[91m==>\033[0m Error: "
+        f"Failed to load HPC connect plugin {ep.name} due to the following error:\n    {e!r}"
+    )
