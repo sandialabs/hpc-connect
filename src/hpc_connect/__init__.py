@@ -15,7 +15,7 @@ class EntryPointLoadFailure:
         self.name = f"{self.ep.name}*"
 
     def __repr__(self) -> str:
-        return f"Failed to load {self.ep!r} due to: {self.ex!r}"
+        return f"EntryPointLoadFailure(entry_point={self.ep!r}, exception={self.ex!r})"
 
     def matches(self, name: str) -> bool:
         return name.lower() == self.ep.name.lower()
