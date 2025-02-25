@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 
+from .hookspec import hookimpl
 from .launch import HPCLauncher
 
 
@@ -33,3 +34,8 @@ class MPILauncher(HPCLauncher):
         opts: list[str] = []
         opts.extend(unknown_args)
         return opts
+
+
+@hookimpl
+def hpc_connect_launcher():
+    return MPILauncher

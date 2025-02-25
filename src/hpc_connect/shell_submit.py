@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime
 from typing import TextIO
 
+from .hookspec import hookimpl
 from .job import Job
 from .submit import HPCProcess
 from .submit import HPCScheduler
@@ -79,3 +80,8 @@ class ShellScheduler(HPCScheduler):
             self.write_submission_script(job, fh)
         set_executable(job.script)
         return ShellProcess(job)
+
+
+@hookimpl
+def hpc_connect_scheduler():
+    return ShellScheduler
