@@ -210,6 +210,7 @@ class HPCScheduler(ABC):
                 self.shutdown(sig)
 
         signal.signal(signal.SIGTERM, cancel_jobs)
+        signal.signal(signal.SIGINT, cancel_jobs)
 
         timeout = timeout or -1.0
         if sequential:
