@@ -1,3 +1,4 @@
+import getpass
 import logging
 import math
 import multiprocessing
@@ -7,10 +8,13 @@ import signal
 import time
 from abc import ABC
 from abc import abstractmethod
+from datetime import datetime
+from typing import Any
 from typing import TextIO
 
 from .job import Job
 from .util import cpu_count
+from .util import make_template_env
 
 logger = logging.getLogger("hpc_connect")
 
@@ -116,6 +120,15 @@ class HPCScheduler(ABC):
     def __del__(self) -> None:
         self.shutdown()
 
+    @staticmethod
+    @abstractmethod
+    def matches(name: str | None) -> bool:
+        """Is this the scheduler for ``name``?"""
+
+    @abstractmethod
+    def submit(self, job: Job) -> HPCProcess:
+        """Submit ``job`` to the scheduler."""
+
     @property
     def supports_subscheduling(self) -> bool:
         return False
@@ -137,18 +150,35 @@ class HPCScheduler(ABC):
         """Nodes required to run ``tasks`` tasks.  A task can be thought of a single MPI rank"""
         return self.config.nodes_required(tasks or 1)
 
-    @staticmethod
-    @abstractmethod
-    def matches(name: str | None) -> bool:
-        """Is this the scheduler for ``name``?"""
+    def submission_data(self, job: Job) -> dict[str, Any]:
+        nodes = job.nodes
+        if nodes is None:
+            nodes = self.nodes_required(job.tasks)
+        data: dict[str, Any] = {
+            "job": job,
+            "nodes": nodes,
+            "cpus_per_node": self.config.cpus_per_node,
+            "gpus_per_node": self.config.gpus_per_node,
+            "time": job.qtime or 1.0,
+            "args": list(self.default_args),
+            "user": getpass.getuser(),
+            "date": datetime.now().strftime("%c"),
+        }
+        return data
 
-    @abstractmethod
+    @property
+    def submission_template(self) -> str:
+        raise NotImplementedError
+
     def write_submission_script(self, job: Job, file: TextIO) -> None:
-        """Write a submission script that is compatible with ``submit_and_wait`` and ``submit``"""
-
-    @abstractmethod
-    def submit(self, job: Job) -> HPCProcess:
-        """Submit ``job`` to the scheduler."""
+        data = self.submission_data(job)
+        template = self.submission_template
+        if not os.path.exists(template):
+            raise FileNotFoundError(template)
+        d, f = os.path.split(os.path.abspath(template))
+        env = make_template_env(dirs=(d,))
+        t = env.get_template(f)
+        file.write(t.render(data))
 
     def shutdown(self, returncode: int = 0) -> None:
         """

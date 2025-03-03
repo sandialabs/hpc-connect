@@ -1,0 +1,23 @@
+#/bin/sh
+{% for arg in args %}
+#BASH {{ arg }}
+{% endfor %}
+# user: {{ user }}
+# date: {{ date }}
+# output: {{ job.output }}
+# error: {{ job.error }}
+# approximate runtime: {{ hhmmss(time * 1.25, threshold=0) }}
+{% if job.variables %}
+  {% for var, val in job.variables.items() %}
+    {% if val is none %}
+unset {{ var }}
+    {% else %}
+export {{ var }}={{ val }}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+export HPC_CONNECT_DEFAULT_LAUNCHER=mpiexec
+printenv || true
+{% for command in job.commands %}
+{{ command }}
+{% endfor %}

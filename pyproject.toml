@@ -4,7 +4,7 @@ version = "0.2.0"
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy"]
+dependencies = ["pluggy", "jinja2"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"

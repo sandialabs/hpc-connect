@@ -6,10 +6,9 @@ import subprocess
 import sys
 from datetime import datetime
 from datetime import timezone
-from typing import Optional
 
 
-def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
+def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
     if seconds is None:
         return "--:--:--"
     t = datetime.fromtimestamp(seconds)
@@ -36,7 +35,7 @@ def cpu_count(default: int = 4) -> int:
     return default
 
 
-def read_lscpu() -> Optional[int]:
+def read_lscpu() -> int | None:
     """"""
     if lscpu := shutil.which("lscpu"):
         try:
@@ -45,8 +44,8 @@ def read_lscpu() -> Optional[int]:
         except subprocess.CalledProcessError:
             return None
         else:
-            sockets: Optional[int] = None
-            cores_per_socket: Optional[int] = None
+            sockets: int | None = None
+            cores_per_socket: int | None = None
             for line in output.split("\n"):
                 if line.startswith("Core(s) per socket:"):
                     cores_per_socket = int(line.split(":")[1])
@@ -58,7 +57,7 @@ def read_lscpu() -> Optional[int]:
     return None
 
 
-def read_cpuinfo() -> Optional[int]:
+def read_cpuinfo() -> int | None:
     """
     count the number of lines of this pattern:
 
@@ -113,3 +112,18 @@ def set_executable(path: str) -> None:
     if mode & stat.S_IROTH:
         mode |= stat.S_IXOTH
     os.chmod(path, mode)
+
+
+def make_template_env(dirs: tuple[str, ...] | None = None):
+    """Returns a configured environment for template rendering."""
+    import importlib.resources
+
+    import jinja2
+
+    if dirs is None:
+        # Default directories where to search for templates
+        dirs = (str(importlib.resources.files("hpc_connect")),)
+    loader = jinja2.FileSystemLoader(dirs)
+    env = jinja2.Environment(loader=loader, trim_blocks=True, lstrip_blocks=True)
+    env.globals["hhmmss"] = hhmmss
+    return env
