@@ -4,18 +4,9 @@ import shutil
 import stat
 import subprocess
 import sys
-from datetime import datetime
-from datetime import timezone
 
-
-def hhmmss(seconds: float | None, threshold: float = 2.0) -> str:
-    if seconds is None:
-        return "--:--:--"
-    t = datetime.fromtimestamp(seconds)
-    utc = datetime.fromtimestamp(seconds, timezone.utc)
-    if seconds < threshold:
-        return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
-    return datetime.strftime(utc, "%H:%M:%S")
+from .time import hhmmss
+from .time import time_in_seconds
 
 
 def cpu_count(default: int = 4) -> int:

@@ -15,6 +15,7 @@ from typing import TextIO
 from .job import Job
 from .util import cpu_count
 from .util import make_template_env
+from .util import time_in_seconds
 
 logger = logging.getLogger("hpc_connect")
 
@@ -210,7 +211,9 @@ class HPCScheduler(ABC):
                 for proc in self.sched_proc_list:
                     self.cancel(returncode, proc)
 
-    def wait(self, timeout: float, poll_frequency: float, proc: HPCProcess | None = None) -> None:
+    def wait(
+        self, timeout: float, polling_frequency: float, proc: HPCProcess | None = None
+    ) -> None:
         """Wait for running processes to complete"""
         start = time.monotonic()
         try:
@@ -218,7 +221,7 @@ class HPCScheduler(ABC):
                 if timeout > 0 and time.monotonic() - start > timeout:
                     raise TimeoutError
                 self.poll(proc)
-                time.sleep(poll_frequency)
+                time.sleep(polling_frequency)
         except BaseException as e:
             returncode = 66 if isinstance(e, TimeoutError) else 1
             self.cancel(returncode, proc)
@@ -231,7 +234,7 @@ class HPCScheduler(ABC):
         *jobs: Job,
         sequential: bool = True,
         timeout: float | None = None,
-        poll_frequency=0.5,
+        polling_frequency: float | None = None,
     ) -> None:
         """Submit ``jobs`` to the scheduler and wait for it to return"""
 
@@ -243,21 +246,27 @@ class HPCScheduler(ABC):
         signal.signal(signal.SIGINT, cancel_jobs)
 
         timeout = timeout or -1.0
+        polling_frequency = polling_frequency or default_polling_frequency()
         if sequential:
             for job in jobs:
                 proc = self.submit(job)
                 with self.lock:
                     self.sched_proc_list.append(proc)
                 time.sleep(1)  # wait for the process to start
-                self.wait(timeout, poll_frequency, proc)
+                self.wait(timeout, polling_frequency, proc)
         else:
             with self.lock:
                 for job in jobs:
                     self.sched_proc_list.append(self.submit(job))
 
             time.sleep(1)  # wait for the processes to start
-            self.wait(timeout, poll_frequency)
+            self.wait(timeout, polling_frequency)
         return
+
+
+def default_polling_frequency() -> float:
+    s = os.getenv("HPC_CONNECT_POLLING_FREQUENCY") or 30.0  # 30s.
+    return time_in_seconds(s)
 
 
 class HPCSubmissionFailedError(Exception):
