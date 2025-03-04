@@ -4,19 +4,9 @@ import shutil
 import stat
 import subprocess
 import sys
-from datetime import datetime
-from datetime import timezone
-from typing import Optional
 
-
-def hhmmss(seconds: Optional[float], threshold: float = 2.0) -> str:
-    if seconds is None:
-        return "--:--:--"
-    t = datetime.fromtimestamp(seconds)
-    utc = datetime.fromtimestamp(seconds, timezone.utc)
-    if seconds < threshold:
-        return datetime.strftime(utc, "%H:%M:%S.%f")[:-4]
-    return datetime.strftime(utc, "%H:%M:%S")
+from .time import hhmmss
+from .time import time_in_seconds
 
 
 def cpu_count(default: int = 4) -> int:
@@ -36,7 +26,7 @@ def cpu_count(default: int = 4) -> int:
     return default
 
 
-def read_lscpu() -> Optional[int]:
+def read_lscpu() -> int | None:
     """"""
     if lscpu := shutil.which("lscpu"):
         try:
@@ -45,8 +35,8 @@ def read_lscpu() -> Optional[int]:
         except subprocess.CalledProcessError:
             return None
         else:
-            sockets: Optional[int] = None
-            cores_per_socket: Optional[int] = None
+            sockets: int | None = None
+            cores_per_socket: int | None = None
             for line in output.split("\n"):
                 if line.startswith("Core(s) per socket:"):
                     cores_per_socket = int(line.split(":")[1])
@@ -58,7 +48,7 @@ def read_lscpu() -> Optional[int]:
     return None
 
 
-def read_cpuinfo() -> Optional[int]:
+def read_cpuinfo() -> int | None:
     """
     count the number of lines of this pattern:
 
