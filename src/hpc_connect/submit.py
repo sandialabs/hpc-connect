@@ -1,4 +1,5 @@
 import getpass
+import importlib.resources
 import logging
 import math
 import multiprocessing
@@ -47,7 +48,6 @@ class HPCProcess(ABC):
 class HPCScheduler(ABC):
     """Setup and submit jobs to an HPC scheduler"""
 
-    shell = "/bin/sh"
     name = "<none>"
     lock = multiprocessing.RLock()
     sched_proc_list: list[HPCProcess] = list()
@@ -172,12 +172,15 @@ class HPCScheduler(ABC):
         raise NotImplementedError
 
     def write_submission_script(self, job: Job, file: TextIO) -> None:
+        dir = importlib.resources.files("hpc_connect").joinpath("templates")
+        template_dirs: set[str] = {str(dir)}
         data = self.submission_data(job)
         template = self.submission_template
         if not os.path.exists(template):
             raise FileNotFoundError(template)
         d, f = os.path.split(os.path.abspath(template))
-        env = make_template_env(dirs=(d,))
+        template_dirs.add(d)
+        env = make_template_env(dirs=tuple(template_dirs))
         t = env.get_template(f)
         file.write(t.render(data))
 
@@ -246,7 +249,7 @@ class HPCScheduler(ABC):
         signal.signal(signal.SIGINT, cancel_jobs)
 
         timeout = timeout or -1.0
-        polling_frequency = polling_frequency or default_polling_frequency()
+        polling_frequency = polling_frequency or self.default_polling_frequency()
         if sequential:
             for job in jobs:
                 proc = self.submit(job)
@@ -263,10 +266,10 @@ class HPCScheduler(ABC):
             self.wait(timeout, polling_frequency)
         return
 
-
-def default_polling_frequency() -> float:
-    s = os.getenv("HPC_CONNECT_POLLING_FREQUENCY") or 30.0  # 30s.
-    return time_in_seconds(s)
+    @staticmethod
+    def default_polling_frequency() -> float:
+        s = os.getenv("HPCC_POLLING_FREQUENCY") or 30.0  # 30s.
+        return time_in_seconds(s)
 
 
 class HPCSubmissionFailedError(Exception):

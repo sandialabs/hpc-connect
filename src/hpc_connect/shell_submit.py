@@ -1,3 +1,4 @@
+import importlib.resources
 import io
 import os
 import shutil
@@ -8,6 +9,7 @@ from .job import Job
 from .submit import HPCProcess
 from .submit import HPCScheduler
 from .util import set_executable
+from .util import time_in_seconds
 
 
 class ShellProcess(HPCProcess):
@@ -42,7 +44,6 @@ class ShellScheduler(HPCScheduler):
     """Default 'scheduler' submits jobs to the shell"""
 
     name = "shell"
-    shell = "/bin/sh"
 
     @staticmethod
     def matches(name: str | None) -> bool:
@@ -52,9 +53,7 @@ class ShellScheduler(HPCScheduler):
 
     @property
     def submission_template(self) -> str:
-        import importlib.resources
-
-        return str(importlib.resources.files("hpc_connect").joinpath("shell.sh.in"))
+        return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
 
     def submit(self, job: Job) -> HPCProcess:
         os.makedirs(os.path.dirname(job.script), exist_ok=True)
@@ -62,6 +61,11 @@ class ShellScheduler(HPCScheduler):
             self.write_submission_script(job, fh)
         set_executable(job.script)
         return ShellProcess(job)
+
+    @staticmethod
+    def default_polling_frequency() -> float:
+        s = os.getenv("HPCC_SHELL_POLLING_FREQUENCY") or 0.5
+        return time_in_seconds(s)
 
 
 @hookimpl
