@@ -1,11 +1,8 @@
-{% extends "base.sh.in" %}
+{% extends "hpcc-submit.sh.in" %}
 {% block header %}
 {% for arg in args %}
 #BASH {{ arg }}
 {% endfor %}
-# user: {{ user }}
-# date: {{ date }}
 # output: {{ job.output }}
 # error: {{ job.error }}
-# approximate runtime: {{ hhmmss(time * 1.25, threshold=0) }}
 {% endblock header %}

@@ -178,15 +178,14 @@ class HPCScheduler(ABC):
         raise NotImplementedError
 
     def write_submission_script(self, job: Job, file: TextIO) -> None:
-        dir = importlib.resources.files("hpc_connect").joinpath("templates")
-        template_dirs: set[str] = {str(dir)}
+        template_dirs = {str(importlib.resources.files("hpc_connect").joinpath("templates"))}
         data = self.submission_data(job)
         template = self.submission_template
         if not os.path.exists(template):
             raise FileNotFoundError(template)
         d, f = os.path.split(os.path.abspath(template))
         template_dirs.add(d)
-        env = make_template_env(dirs=tuple(template_dirs))
+        env = make_template_env(*template_dirs)
         t = env.get_template(f)
         file.write(t.render(data))
 
