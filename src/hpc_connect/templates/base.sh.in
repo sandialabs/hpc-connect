@@ -1,8 +1,8 @@
 #!/bin/sh
 {% block header required %}{% endblock %}
 {% block environment %}
-{% if job.variables %}
-  {% for var, val in job.variables.items() %}
+{% if variables %}
+  {% for var, val in variables.items() %}
     {% if val is none %}
 unset {{ var }}
     {% else %}

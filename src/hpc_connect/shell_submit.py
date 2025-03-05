@@ -45,6 +45,10 @@ class ShellScheduler(HPCScheduler):
 
     name = "shell"
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.variables["HPC_CONNECT_DEFAULT_LAUNCHER"] = "mpiexec"
+
     @staticmethod
     def matches(name: str | None) -> bool:
         if name is None:

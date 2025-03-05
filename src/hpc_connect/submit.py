@@ -117,6 +117,7 @@ class HPCScheduler(ABC):
     def __init__(self) -> None:
         self.config = HPCScheduler.Config()
         self.default_args = self.read_default_args()
+        self.variables: dict[str, str] = {}
 
     def __del__(self) -> None:
         self.shutdown()
@@ -155,6 +156,10 @@ class HPCScheduler(ABC):
         nodes = job.nodes
         if nodes is None:
             nodes = self.nodes_required(job.tasks)
+        variables: dict[str, str | None] = {}
+        self.variables.update(self.variables)
+        if job.variables:
+            variables.update(job.variables)
         data: dict[str, Any] = {
             "job": job,
             "nodes": nodes,
@@ -164,6 +169,7 @@ class HPCScheduler(ABC):
             "args": list(self.default_args),
             "user": getpass.getuser(),
             "date": datetime.now().strftime("%c"),
+            "variables": variables,
         }
         return data
 
