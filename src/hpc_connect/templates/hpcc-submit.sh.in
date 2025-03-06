@@ -1,0 +1,24 @@
+#!/bin/sh
+{% block header required %}{% endblock %}
+{% block meta %}
+# user: {{ user }}
+# date: {{ date }}
+# approximate runtime: {{ hhmmss(time * 1.25, threshold=0) }}
+{% endblock meta %}
+{% block environment %}
+{% if variables %}
+  {% for var, val in variables.items() %}
+    {% if val is none %}
+unset {{ var }}
+    {% else %}
+export {{ var }}={{ val }}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+printenv || true
+{% endblock environment %}
+{% block commands %}
+{% for command in job.commands %}
+{{ command }}
+{% endfor %}
+{% endblock commands %}

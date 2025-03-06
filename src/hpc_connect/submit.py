@@ -1,3 +1,5 @@
+import getpass
+import importlib.resources
 import logging
 import math
 import multiprocessing
@@ -7,10 +9,14 @@ import signal
 import time
 from abc import ABC
 from abc import abstractmethod
+from datetime import datetime
+from typing import Any
 from typing import TextIO
 
 from .job import Job
 from .util import cpu_count
+from .util import make_template_env
+from .util import time_in_seconds
 
 logger = logging.getLogger("hpc_connect")
 
@@ -42,7 +48,6 @@ class HPCProcess(ABC):
 class HPCScheduler(ABC):
     """Setup and submit jobs to an HPC scheduler"""
 
-    shell = "/bin/sh"
     name = "<none>"
     lock = multiprocessing.RLock()
     sched_proc_list: list[HPCProcess] = list()
@@ -112,9 +117,19 @@ class HPCScheduler(ABC):
     def __init__(self) -> None:
         self.config = HPCScheduler.Config()
         self.default_args = self.read_default_args()
+        self.variables: dict[str, str] = {}
 
     def __del__(self) -> None:
         self.shutdown()
+
+    @staticmethod
+    @abstractmethod
+    def matches(name: str | None) -> bool:
+        """Is this the scheduler for ``name``?"""
+
+    @abstractmethod
+    def submit(self, job: Job) -> HPCProcess:
+        """Submit ``job`` to the scheduler."""
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -137,18 +152,42 @@ class HPCScheduler(ABC):
         """Nodes required to run ``tasks`` tasks.  A task can be thought of a single MPI rank"""
         return self.config.nodes_required(tasks or 1)
 
-    @staticmethod
-    @abstractmethod
-    def matches(name: str | None) -> bool:
-        """Is this the scheduler for ``name``?"""
+    def submission_data(self, job: Job) -> dict[str, Any]:
+        nodes = job.nodes
+        if nodes is None:
+            nodes = self.nodes_required(job.tasks)
+        variables: dict[str, str | None] = {}
+        self.variables.update(self.variables)
+        if job.variables:
+            variables.update(job.variables)
+        data: dict[str, Any] = {
+            "job": job,
+            "nodes": nodes,
+            "cpus_per_node": self.config.cpus_per_node,
+            "gpus_per_node": self.config.gpus_per_node,
+            "time": job.qtime or 1.0,
+            "args": list(self.default_args),
+            "user": getpass.getuser(),
+            "date": datetime.now().strftime("%c"),
+            "variables": variables,
+        }
+        return data
 
-    @abstractmethod
+    @property
+    def submission_template(self) -> str:
+        raise NotImplementedError
+
     def write_submission_script(self, job: Job, file: TextIO) -> None:
-        """Write a submission script that is compatible with ``submit_and_wait`` and ``submit``"""
-
-    @abstractmethod
-    def submit(self, job: Job) -> HPCProcess:
-        """Submit ``job`` to the scheduler."""
+        template_dirs = {str(importlib.resources.files("hpc_connect").joinpath("templates"))}
+        data = self.submission_data(job)
+        template = self.submission_template
+        if not os.path.exists(template):
+            raise FileNotFoundError(template)
+        d, f = os.path.split(os.path.abspath(template))
+        template_dirs.add(d)
+        env = make_template_env(*template_dirs)
+        t = env.get_template(f)
+        file.write(t.render(data))
 
     def shutdown(self, returncode: int = 0) -> None:
         """
@@ -180,7 +219,9 @@ class HPCScheduler(ABC):
                 for proc in self.sched_proc_list:
                     self.cancel(returncode, proc)
 
-    def wait(self, timeout: float, poll_frequency: float, proc: HPCProcess | None = None) -> None:
+    def wait(
+        self, timeout: float, polling_frequency: float, proc: HPCProcess | None = None
+    ) -> None:
         """Wait for running processes to complete"""
         start = time.monotonic()
         try:
@@ -188,7 +229,7 @@ class HPCScheduler(ABC):
                 if timeout > 0 and time.monotonic() - start > timeout:
                     raise TimeoutError
                 self.poll(proc)
-                time.sleep(poll_frequency)
+                time.sleep(polling_frequency)
         except BaseException as e:
             returncode = 66 if isinstance(e, TimeoutError) else 1
             self.cancel(returncode, proc)
@@ -201,7 +242,7 @@ class HPCScheduler(ABC):
         *jobs: Job,
         sequential: bool = True,
         timeout: float | None = None,
-        poll_frequency=0.5,
+        polling_frequency: float | None = None,
     ) -> None:
         """Submit ``jobs`` to the scheduler and wait for it to return"""
 
@@ -213,21 +254,27 @@ class HPCScheduler(ABC):
         signal.signal(signal.SIGINT, cancel_jobs)
 
         timeout = timeout or -1.0
+        polling_frequency = polling_frequency or self.default_polling_frequency()
         if sequential:
             for job in jobs:
                 proc = self.submit(job)
                 with self.lock:
                     self.sched_proc_list.append(proc)
                 time.sleep(1)  # wait for the process to start
-                self.wait(timeout, poll_frequency, proc)
+                self.wait(timeout, polling_frequency, proc)
         else:
             with self.lock:
                 for job in jobs:
                     self.sched_proc_list.append(self.submit(job))
 
             time.sleep(1)  # wait for the processes to start
-            self.wait(timeout, poll_frequency)
+            self.wait(timeout, polling_frequency)
         return
+
+    @staticmethod
+    def default_polling_frequency() -> float:
+        s = os.getenv("HPCC_POLLING_FREQUENCY") or 30.0  # 30s.
+        return time_in_seconds(s)
 
 
 class HPCSubmissionFailedError(Exception):

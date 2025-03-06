@@ -1,10 +1,10 @@
 [project]
 name = "hpc-connect"
-version = "0.2.0"
+version = "0.3.0"
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy"]
+dependencies = ["pluggy", "jinja2"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"
@@ -46,6 +46,7 @@ select = ["F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/hpc_connect/__init__.py" = ["F401", "F403", "F405"]
+"src/hpc_connect/util/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,8 @@
+{% extends "hpcc-submit.sh.in" %}
+{% block header %}
+{% for arg in args %}
+#BASH {{ arg }}
+{% endfor %}
+# output: {{ job.output }}
+# error: {{ job.error }}
+{% endblock header %}

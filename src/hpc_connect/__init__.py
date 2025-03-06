@@ -31,7 +31,7 @@ def scheduler(name: str) -> HPCScheduler:
     raise ValueError(f"No matching scheduler for {name!r}")
 
 
-def schedulers() -> dict[str, HPCScheduler]:
+def schedulers() -> dict[str, Type[HPCScheduler]]:
     return {_.name: _ for _ in manager.hook.hpc_connect_scheduler()}
 
 
