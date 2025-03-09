@@ -1,15 +1,14 @@
-import importlib.resources
 import io
 import os
 import shutil
 import subprocess
 
-from .hookspec import hookimpl
-from .job import Job
-from .submit import HPCProcess
-from .submit import HPCScheduler
-from .util import set_executable
-from .util import time_in_seconds
+from ..hookspec import hookimpl
+from ..submit import HPCProcess
+from ..submit import HPCScheduler
+from ..submit import Job
+from ..util import set_executable
+from ..util import time_in_seconds
 
 
 class ShellProcess(HPCProcess):
@@ -57,7 +56,7 @@ class ShellScheduler(HPCScheduler):
 
     @property
     def submission_template(self) -> str:
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
+        return "shell.sh.in"
 
     def submit(self, job: Job) -> HPCProcess:
         os.makedirs(os.path.dirname(job.script), exist_ok=True)

@@ -4,11 +4,10 @@ from typing import Type
 import pluggy
 
 from . import hookspec
-from . import mpi_launch
-from . import shell_submit
-from . import submit
+from .impl import builtin
 from .job import Job
 from .launch import HPCLauncher
+from .launch import Parser as LaunchParser
 from .submit import HPCProcess
 from .submit import HPCScheduler
 from .submit import HPCSubmissionFailedError
@@ -18,8 +17,8 @@ hookimpl = hookspec.hookimpl
 
 manager = pluggy.PluginManager("hpc_connect")
 manager.add_hookspecs(hookspec)
-manager.register(shell_submit)
-manager.register(mpi_launch)
+for module in builtin:
+    manager.register(module)
 manager.load_setuptools_entrypoints("hpc_connect")
 
 
@@ -35,10 +34,10 @@ def schedulers() -> dict[str, Type[HPCScheduler]]:
     return {_.name: _ for _ in manager.hook.hpc_connect_scheduler()}
 
 
-def launcher(name: str) -> HPCLauncher:
+def launcher(name: str, config_file: str | None = None) -> HPCLauncher:
     for launcher_t in manager.hook.hpc_connect_launcher():
-        if launcher_t.matches(name):
-            return launcher_t()
+        if launcher := launcher_t.factory(name, config_file=config_file):
+            return launcher
     raise ValueError(f"No matching launcher for {name!r}")
 
 

@@ -1,0 +1,21 @@
+{% extends "hpcc-submit.sh.in" %}
+{% block header %}
+#PBS -N {{ job.name }}
+#PBS -l nodes={{ nodes }}:ppn={{ cpus_per_node }}
+#PBS -l walltime={{ hhmmss(time * 1.25, threshold=0) }}
+#PBS --job-name={{ job.name }}
+{% if job.output %}
+  {% if job.error == job.output %}
+#PBS -j oe
+  {% endif %}
+#PBS -o {{ job.output }}
+{% endif %}
+{% if job.error %}
+  {% if job.error != job.output %}
+#PBS -e {{ job.error }}
+  {% endif %}
+{% endif %}
+{% for arg in args %}
+#PBS {{ arg }}
+{% endfor %}
+{% endblock header %}
