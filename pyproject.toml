@@ -1,6 +1,6 @@
 [project]
 name = "hpc-connect"
-version = "0.3.0"
+dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
@@ -15,6 +15,9 @@ dev = ["ruff", "mypy", "pytest"]
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}
 
 [[tool.mypy.overrides]]
 module = "pkg_resources.*"

@@ -2,9 +2,8 @@ import io
 import os
 from contextlib import contextmanager
 
+import hpc_connect
 import hpc_connect.job
-
-import hpcc_pbs
 
 
 @contextmanager
@@ -21,7 +20,7 @@ def tmp_environ():
 
 
 def test_basic():
-    sched = hpcc_pbs.PBSScheduler()
+    sched = hpc_connect.impl.pbs.PBSScheduler()
     job = hpc_connect.job.Job(
         name="my-job",
         commands=["ls"],

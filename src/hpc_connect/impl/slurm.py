@@ -125,7 +125,7 @@ class SlurmScheduler(HPCScheduler):
     def submission_template(self) -> str:
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpcc_slurm").joinpath("templates/slurm.sh.in"))
+        return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
 
     def submit(self, job: Job) -> HPCProcess:
         os.makedirs(os.path.dirname(job.script), exist_ok=True)

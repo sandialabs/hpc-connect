@@ -2,10 +2,8 @@ import io
 import os
 from contextlib import contextmanager
 
+import hpc_connect
 import hpc_connect.job
-
-import hpcc_slurm
-
 
 @contextmanager
 def tmp_environ():
@@ -21,7 +19,7 @@ def tmp_environ():
 
 
 def test_basic():
-    slurm = hpcc_slurm.SlurmScheduler()
+    slurm = hpc_connect.impl.slurm.SlurmScheduler()
     job = hpc_connect.job.Job(
         name="my-job",
         commands=["ls"],

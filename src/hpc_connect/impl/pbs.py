@@ -82,7 +82,7 @@ class PBSScheduler(HPCScheduler):
     def submission_template(self) -> str:
         if "HPCC_PBS_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_PBS_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpcc_pbs").joinpath("templates/pbs.sh.in"))
+        return str(importlib.resources.files("hpc_connect").joinpath("templates/pbs.sh.in"))
 
     def submit(self, job: Job) -> HPCProcess:
         os.makedirs(os.path.dirname(job.script), exist_ok=True)
