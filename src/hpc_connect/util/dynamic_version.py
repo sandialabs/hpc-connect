@@ -33,7 +33,7 @@ __static_version__: str = "{major}.{minor}.{micro}+{local}"
 def __getattr__(name):
     import os
 
-    from _hpc_connect.util.dynamic_version import version_components_from_git
+    from hpc_connect.util.dynamic_version import version_components_from_git
 
     if name not in ("version", "__version__", "version_info", "__version_info__"):
         raise AttributeError(name)
