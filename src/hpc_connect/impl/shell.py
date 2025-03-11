@@ -1,3 +1,4 @@
+import importlib
 import io
 import os
 import shutil
@@ -56,7 +57,7 @@ class ShellScheduler(HPCScheduler):
 
     @property
     def submission_template(self) -> str:
-        return "shell.sh.in"
+        return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
 
     def submit(self, job: Job) -> HPCProcess:
         os.makedirs(os.path.dirname(job.script), exist_ok=True)
