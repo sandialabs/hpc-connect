@@ -248,6 +248,7 @@ class HPCScheduler(ABC):
 
         def cancel_jobs(sig, frame) -> None:
             with self.lock:
+                logger.debug(f"{self.__class__.__name__}: canceling jobs")
                 self.shutdown(sig)
 
         signal.signal(signal.SIGTERM, cancel_jobs)

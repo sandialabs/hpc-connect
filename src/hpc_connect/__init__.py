@@ -1,4 +1,6 @@
 import importlib.metadata as im
+import logging
+import os
 from typing import Type
 
 import pluggy
@@ -12,6 +14,15 @@ from .submit import HPCProcess
 from .submit import HPCScheduler
 from .submit import HPCSubmissionFailedError
 
+logger = logging.getLogger("hpc_connect")
+ch = logging.StreamHandler()
+ch.setFormatter(logging.Formatter("==> hpc_connect: %(message)s"))
+logger.addHandler(ch)
+if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
+    ch.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+
+
 hookimpl = hookspec.hookimpl
 
 
@@ -20,6 +31,13 @@ manager.add_hookspecs(hookspec)
 for module in builtin:
     manager.register(module)
 # manager.load_setuptools_entrypoints("hpc_connect")
+
+
+def set_debug(arg: bool) -> None:
+    if arg:
+        for h in logger.handlers:
+            h.setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
 
 
 def scheduler(name: str) -> HPCScheduler:
