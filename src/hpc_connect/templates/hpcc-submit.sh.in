@@ -18,7 +18,7 @@ export {{ var }}={{ val }}
 printenv || true
 {% endblock environment %}
 {% block commands %}
-{% for command in job.commands %}
+{% for command in commands %}
 {{ command }}
 {% endfor %}
 {% endblock commands %}

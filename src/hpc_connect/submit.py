@@ -247,12 +247,16 @@ class HPCScheduler(ABC):
         """Submit ``jobs`` to the scheduler and wait for it to return"""
 
         def cancel_jobs(sig, frame) -> None:
+            print("HERE I AM: submit.py")
             with self.lock:
                 logger.debug(f"{self.__class__.__name__}: canceling jobs")
                 self.shutdown(sig)
+            print("HERE I AM: submit.py: CANCELLED")
 
-        signal.signal(signal.SIGTERM, cancel_jobs)
+        # the client code sends SIGTERM to signal the submission should be shutdown
+        # and is responsible for capturing SIGINT and performing shutdown functions.
         signal.signal(signal.SIGINT, cancel_jobs)
+        signal.signal(signal.SIGTERM, cancel_jobs)
 
         timeout = timeout or -1.0
         polling_frequency = polling_frequency or self.default_polling_frequency()

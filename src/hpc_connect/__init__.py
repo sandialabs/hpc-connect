@@ -33,11 +33,40 @@ for module in builtin:
 # manager.load_setuptools_entrypoints("hpc_connect")
 
 
+_backend = None
+def set_backend(arg: str) -> None:
+    global _backend
+    for scheduler_t in manager.hook.hpc_connect_scheduler():
+        if scheduler_t.matches(backend):
+            _backend = backend
+            break
+    else:
+        raise ValueError(f"invalid backend {backend!r}")
+
+
+def backend():
+    return _backend
+
+
 def set_debug(arg: bool) -> None:
     if arg:
         for h in logger.handlers:
             h.setLevel(logging.DEBUG)
         logger.setLevel(logging.DEBUG)
+
+
+def initialize(backend: str, debug: bool = False) -> None:
+    set_backend(backend)
+    set_debug(debug)
+
+
+def Popen(args, **kwargs):
+    from .impl.shell2 import ShellBackend
+#    b = backend()
+#    if b is None:
+#        raise ValueError("hpc_connect backend must be initialized")
+    b = ShellBackend()
+    return b.popen(args, **kwargs)
 
 
 def scheduler(name: str) -> HPCScheduler:
