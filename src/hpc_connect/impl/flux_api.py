@@ -123,7 +123,6 @@ class FluxBackend(HPCBackend):
 
     def __init__(self) -> None:
         super().__init__()
-        self.exclusive: bool = False
 
     def __del__(self) -> None:
         self.shutdown()
@@ -158,6 +157,7 @@ class FluxBackend(HPCBackend):
         gpus_per_task: int | None = None,
         tasks_per_node: int | None = None,
         nodes: int | None = None,
+        exclusive: bool = True,
     ) -> FluxProcess:
         # the Flux submission script is not used, but we write it for inspection, if needed
         script = self.write_submission_script(
@@ -188,6 +188,7 @@ class FluxBackend(HPCBackend):
             gpus_per_task=gpus_per_task,
             tasks_per_node=tasks_per_node,
             nodes=nodes,
+            exclusive=exclusive,
         )
         fut = self.flux.submit(jobspec)  # type: ignore
         return FluxProcess(name, future=fut)
@@ -206,6 +207,7 @@ class FluxBackend(HPCBackend):
         gpus_per_task: int | None = None,
         tasks_per_node: int | None = None,
         nodes: int | None = None,
+        exclusive: bool = True,
     ) -> Jobspec:
         jobspec = JobspecV1.from_command(
             command=[script],
@@ -213,7 +215,7 @@ class FluxBackend(HPCBackend):
             num_nodes=self.config.nodes_required(tasks or 1),
             cores_per_task=cpus_per_task or 1,
             gpus_per_task=gpus_per_task or 0,
-            exclusive=self.exclusive,
+            exclusive=exclusive,
         )
         jobspec.setattr("system.job.name", name)
         jobspec.stdout = output or "job-ouput.txt"
@@ -244,7 +246,7 @@ class FluxBackend(HPCBackend):
         self,
         name: list[str],
         args: list[list[str]],
-        script: list[str] | None = None,
+        scriptname: list[str] | None = None,
         qtime: list[float] | None = None,
         submit_flags: list[list[str]] | None = None,
         variables: list[dict[str, str | None]] | None = None,
@@ -264,7 +266,7 @@ class FluxBackend(HPCBackend):
                 proc = self.submit(
                     name[i],
                     args[i],
-                    select(script, i, f"flux-submit-{i}"),
+                    select(scriptname, i, f"flux-submit-{i}"),
                     qtime=select(qtime, i),
                     submit_flags=select(submit_flags, i),
                     variables=select(variables, i),
@@ -275,6 +277,7 @@ class FluxBackend(HPCBackend):
                     gpus_per_task=select(gpus_per_task, i),
                     tasks_per_node=select(tasks_per_node, i),
                     nodes=select(nodes, i),
+                    exclusive=False,
                 )
                 procs.append(proc)
         return procs

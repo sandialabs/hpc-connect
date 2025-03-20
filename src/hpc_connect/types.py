@@ -138,7 +138,7 @@ class HPCBackend(ABC):
         self,
         name: list[str],
         args: list[list[str]],
-        script: list[str] | None = None,
+        scriptname: list[str] | None = None,
         qtime: list[float] | None = None,
         submit_flags: list[list[str]] | None = None,
         variables: list[dict[str, str | None]] | None = None,
