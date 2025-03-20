@@ -12,3 +12,8 @@ def hpc_connect_scheduler():
 @hookspec
 def hpc_connect_launcher():
     """HPC launcher implementation"""
+
+
+@hookspec
+def hpc_connect_backend():
+    """HPC connect backend implementation"""

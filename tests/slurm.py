@@ -5,6 +5,7 @@ from contextlib import contextmanager
 import hpc_connect
 import hpc_connect.job
 
+
 @contextmanager
 def tmp_environ():
     save_env = os.environ.copy()
@@ -19,23 +20,24 @@ def tmp_environ():
 
 
 def test_basic():
-    slurm = hpc_connect.impl.slurm.SlurmScheduler()
-    job = hpc_connect.job.Job(
-        name="my-job",
-        commands=["ls"],
-        tasks=1,
-        cpus_per_task=1,
-        gpus_per_task=0,
-        tasks_per_node=10,
-        nodes=1,
-        output="my-out.txt",
-        error="my-err.txt",
-        qtime=1.0,
-        variables={"MY_VAR": "SPAM"},
-    )
+    backend = hpc_connect.impl.slurm.SlurmBackend()
     with io.StringIO() as fh:
-        slurm.write_submission_script(job, fh)
+        backend.write_submission_script(
+            "my-job",
+            ["ls"],
+            fh,
+            tasks=1,
+            cpus_per_task=1,
+            gpus_per_task=0,
+            tasks_per_node=10,
+            nodes=1,
+            output="my-out.txt",
+            error="my-err.txt",
+            qtime=1.0,
+            variables={"MY_VAR": "SPAM"},
+        )
         text = fh.getvalue()
+    print(text)
     assert "#!/bin/sh" in text
     assert "#SBATCH --nodes=1" in text
     assert "#SBATCH --ntasks-per-node=10" in text

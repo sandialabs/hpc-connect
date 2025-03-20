@@ -6,48 +6,24 @@ import shutil
 import subprocess
 
 from ..hookspec import hookimpl
-from ..launch import HPCLauncher
-from ..submit import HPCProcess
-from ..submit import HPCScheduler
-from ..submit import HPCSubmissionFailedError
-from ..submit import Job
-from ..util import set_executable
+from ..types import HPCSubmissionFailedError
+from ..types import HPCBackend
+from ..types import HPCProcess
 
 logger = logging.getLogger("hpc_connect")
 
 
-class SlurmLauncher(HPCLauncher):
-    def __init__(self, *hints: str, config_file: str | None = None) -> None:
-        hints = hints or ("srun",)
-        for hint in hints:
-            exe = shutil.which(hint)
-            if exe is not None:
-                break
-        else:
-            raise ValueError(f"{hints[0]} not found on PATH")
-        assert exe is not None
-        self._executable = os.fsdecode(exe)
-
-    @classmethod
-    def factory(self, arg: str, config_file: str | None = None) -> "SlurmLauncher | None":
-        if arg == "slurm":
-            return SlurmLauncher()
-        elif os.path.basename(arg) == "srun":
-            return SlurmLauncher(arg)
-        return None
-
-    @property
-    def executable(self) -> str:
-        return self._executable
-
-
 class SlurmProcess(HPCProcess):
-    def __init__(self, job: Job) -> None:
-        super().__init__(job=job)
+    def __init__(self, script: str) -> None:
+        self._rc: int | None = None
+        self.jobid = self.submit(script)
+        logger.debug(f"Submitted batch with jobid={self.jobid}")
+
+    def submit(self, script) -> str:
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
-        args = [sbatch, job.script]
+        args = [sbatch, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
@@ -55,15 +31,20 @@ class SlurmProcess(HPCProcess):
         if i >= 0:
             parts = result[i:].split()
             if len(parts) > 3 and parts[3]:
-                jobid = parts[3]
-        else:
-            logger.error("Failed to find jobid!")
-            logger.error(f"    The following output was received from {sbatch}:")
-            for line in result.split("\n"):
-                logger.log(logging.ERROR, f"    {line}")
-            raise HPCSubmissionFailedError
-        logger.debug(f"Submitted batch with jobid={jobid}")
-        self.jobid = jobid
+                return parts[3]
+        logger.error("Failed to find jobid!")
+        logger.error(f"    The following output was received from {sbatch}:")
+        for line in result.split("\n"):
+            logger.log(logging.ERROR, f"    {line}")
+        raise HPCSubmissionFailedError
+
+    @property
+    def returncode(self) -> int | None:
+        return self._rc
+
+    @returncode.setter
+    def returncode(self, arg: int) -> None:
+        self._rc = arg
 
     def poll(self) -> int | None:
         squeue = shutil.which("squeue")
@@ -84,21 +65,29 @@ class SlurmProcess(HPCProcess):
         self.returncode = 0
         return self.returncode
 
-    def cancel(self, returncode: int) -> None:
+    def cancel(self) -> None:
         logger.debug(f"cancelling batch {self.jobid}")
         subprocess.run(["scancel", self.jobid, "--cluster=all"])
-        self.returncode = returncode
+        self.returncode = 1
 
 
-class SlurmScheduler(HPCScheduler):
+class SlurmBackend(HPCBackend):
     """Setup and submit jobs to the slurm scheduler"""
 
     name = "slurm"
-    command_name = "sbatch"
+
+    @staticmethod
+    def matches(name: str | None) -> bool:
+        return name is not None and name.lower() in ("slurm", "sbatch")
 
     def __init__(self) -> None:
         super().__init__()
-        self.variables["HPC_CONNECT_DEFAULT_LAUNCHER"] = "srun"
+        sbatch = shutil.which("sbatch")
+        if sbatch is None:
+            raise ValueError("sbatch not found on PATH")
+        squeue = shutil.which("squeue")
+        if squeue is None:
+            raise ValueError("queue not found on PATH")
         if val := os.getenv("SLURM_NTASKS_PER_NODE"):
             # must be on an allocated node
             self.config.cpus_per_node = int(val)  # assumes 1 task per cpu
@@ -118,22 +107,45 @@ class SlurmScheduler(HPCScheduler):
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
-    @staticmethod
-    def matches(name: str | None) -> bool:
-        return name is not None and name.lower() in ("slurm", SlurmScheduler.command_name)
-
     @property
     def submission_template(self) -> str:
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
         return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
 
-    def submit(self, job: Job) -> HPCProcess:
-        os.makedirs(os.path.dirname(job.script), exist_ok=True)
-        with open(job.script, "w") as fh:
-            self.write_submission_script(job, fh)
-        set_executable(job.script)
-        return SlurmProcess(job)
+    def submit(
+        self,
+        name: str,
+        args: list[str],
+        scriptname: str | None = None,
+        qtime: float | None = None,
+        batch_options: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        #
+        tasks: int | None = None,
+        cpus_per_task: int | None = None,
+        gpus_per_task: int | None = None,
+        tasks_per_node: int | None = None,
+        nodes: int | None = None,
+    ) -> SlurmProcess:
+        script = self.write_submission_script(
+            name,
+            args,
+            scriptname,
+            qtime=qtime,
+            batch_options=batch_options,
+            variables=variables,
+            output=output,
+            error=error,
+            tasks=tasks,
+            cpus_per_task=cpus_per_task,
+            gpus_per_task=gpus_per_task,
+            tasks_per_node=tasks_per_node,
+            nodes=nodes,
+        )
+        return SlurmProcess(script)
 
 
 def read_sinfo() -> dict[str, int] | None:
@@ -179,10 +191,5 @@ def integer(arg: str) -> int:
 
 
 @hookimpl
-def hpc_connect_scheduler():
-    return SlurmScheduler
-
-
-@hookimpl
-def hpc_connect_launcher():
-    return SlurmLauncher
+def hpc_connect_backend():
+    return SlurmBackend

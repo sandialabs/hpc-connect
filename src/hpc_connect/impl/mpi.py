@@ -2,7 +2,7 @@ import os
 import shutil
 
 from ..hookspec import hookimpl
-from ..launch import HPCLauncher
+from ..types import HPCLauncher
 
 
 class MPILauncher(HPCLauncher):

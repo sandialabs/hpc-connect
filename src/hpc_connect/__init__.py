@@ -7,12 +7,11 @@ import pluggy
 
 from . import hookspec
 from .impl import builtin
-from .job import Job
-from .launch import HPCLauncher
-from .launch import Parser as LaunchParser
-from .submit import HPCProcess
-from .submit import HPCScheduler
-from .submit import HPCSubmissionFailedError
+from .types import HPCBackend
+from .types import HPCLauncher
+from .types import HPCProcess
+from .types import HPCSubmissionFailedError
+from .types import Parser as LaunchParser
 
 logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
@@ -24,28 +23,11 @@ if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
 
 
 hookimpl = hookspec.hookimpl
-
-
 manager = pluggy.PluginManager("hpc_connect")
 manager.add_hookspecs(hookspec)
 for module in builtin:
     manager.register(module)
 # manager.load_setuptools_entrypoints("hpc_connect")
-
-
-_backend = None
-def set_backend(arg: str) -> None:
-    global _backend
-    for scheduler_t in manager.hook.hpc_connect_scheduler():
-        if scheduler_t.matches(backend):
-            _backend = backend
-            break
-    else:
-        raise ValueError(f"invalid backend {backend!r}")
-
-
-def backend():
-    return _backend
 
 
 def set_debug(arg: bool) -> None:
@@ -55,30 +37,16 @@ def set_debug(arg: bool) -> None:
         logger.setLevel(logging.DEBUG)
 
 
-def initialize(backend: str, debug: bool = False) -> None:
-    set_backend(backend)
-    set_debug(debug)
+def get_backend(arg: str) -> HPCBackend:
+    for type in manager.hook.hpc_connect_backend():
+        if type.matches(arg):
+            return type()
+    else:
+        raise ValueError(f"invalid backend {arg!r}")
 
 
-def Popen(args, **kwargs):
-    from .impl.shell2 import ShellBackend
-#    b = backend()
-#    if b is None:
-#        raise ValueError("hpc_connect backend must be initialized")
-    b = ShellBackend()
-    return b.popen(args, **kwargs)
-
-
-def scheduler(name: str) -> HPCScheduler:
-    """Return the scheduler matchine ``name``"""
-    for scheduler_t in manager.hook.hpc_connect_scheduler():
-        if scheduler_t.matches(name):
-            return scheduler_t()
-    raise ValueError(f"No matching scheduler for {name!r}")
-
-
-def schedulers() -> dict[str, Type[HPCScheduler]]:
-    return {_.name: _ for _ in manager.hook.hpc_connect_scheduler()}
+def backends() -> dict[str, Type[HPCBackend]]:
+    return {_.name: _ for _ in manager.hook.hpc_connect_backend()}
 
 
 def launcher(name: str, config_file: str | None = None) -> HPCLauncher:

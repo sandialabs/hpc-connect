@@ -7,9 +7,9 @@ import hpc_connect
 
 def main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv[1:]
-    print("HPC Connect schedulers:")
-    for scheduler_t in hpc_connect.schedulers().values():
-        print(f"- {scheduler_t.name}")
+    print("HPC Connect backends:")
+    for backend_t in hpc_connect.backends().values():
+        print(f"- {backend_t.name}")
     print()
     print("HPC Connect launchers:")
     for launcher_t in hpc_connect.launchers().values():

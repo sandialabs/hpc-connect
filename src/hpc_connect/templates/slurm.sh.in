@@ -4,12 +4,12 @@
 #SBATCH --ntasks-per-node={{ cpus_per_node }}
 #SBATCH --cpus-per-task=1
 #SBATCH --time={{ hhmmss(time * 1.25, threshold=0) }}
-#SBATCH --job-name={{ job.name }}
-{% if job.error %}
-#SBATCH --error={{ job.error }}
+#SBATCH --job-name={{ name }}
+{% if error %}
+#SBATCH --error={{ error }}
 {% endif %}
-{% if job.output %}
-#SBATCH --output={{ job.output }}
+{% if output %}
+#SBATCH --output={{ output }}
 {% endif %}
 {% for arg in args %}
 #SBATCH {{ arg }}

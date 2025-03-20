@@ -20,22 +20,22 @@ def tmp_environ():
 
 
 def test_basic():
-    sched = hpc_connect.impl.pbs.PBSScheduler()
-    job = hpc_connect.job.Job(
-        name="my-job",
-        commands=["ls"],
-        tasks=1,
-        cpus_per_task=1,
-        gpus_per_task=0,
-        tasks_per_node=10,
-        nodes=1,
-        output="my-out.txt",
-        error="my-err.txt",
-        qtime=1.0,
-        variables={"MY_VAR": "SPAM"},
-    )
+    backend = hpc_connect.impl.pbs.PBSBackend()
     with io.StringIO() as fh:
-        sched.write_submission_script(job, fh)
+        backend.write_submission_script(
+            "my-job",
+            ["ls"],
+            fh,
+            tasks=1,
+            cpus_per_task=1,
+            gpus_per_task=0,
+            tasks_per_node=10,
+            nodes=1,
+            output="my-out.txt",
+            error="my-err.txt",
+            qtime=1.0,
+            variables={"MY_VAR": "SPAM"},
+        )
         text = fh.getvalue()
     assert "#!/bin/sh" in text
     assert "#PBS -N my-job" in text
