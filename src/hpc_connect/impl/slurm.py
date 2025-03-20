@@ -6,9 +6,9 @@ import shutil
 import subprocess
 
 from ..hookspec import hookimpl
-from ..types import HPCSubmissionFailedError
 from ..types import HPCBackend
 from ..types import HPCProcess
+from ..types import HPCSubmissionFailedError
 
 logger = logging.getLogger("hpc_connect")
 
@@ -119,7 +119,7 @@ class SlurmBackend(HPCBackend):
         args: list[str],
         scriptname: str | None = None,
         qtime: float | None = None,
-        batch_options: list[str] | None = None,
+        submit_flags: list[str] | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -135,7 +135,7 @@ class SlurmBackend(HPCBackend):
             args,
             scriptname,
             qtime=qtime,
-            batch_options=batch_options,
+            submit_flags=submit_flags,
             variables=variables,
             output=output,
             error=error,
@@ -145,6 +145,7 @@ class SlurmBackend(HPCBackend):
             tasks_per_node=tasks_per_node,
             nodes=nodes,
         )
+        assert script is not None
         return SlurmProcess(script)
 
 

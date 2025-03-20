@@ -122,7 +122,7 @@ class HPCBackend(ABC):
         args: list[str],
         scriptname: str | None = None,
         qtime: float | None = None,
-        batch_options: list[str] | None = None,
+        submit_flags: list[str] | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -134,6 +134,25 @@ class HPCBackend(ABC):
         nodes: int | None = None,
     ) -> HPCProcess: ...
 
+    def submitn(
+        self,
+        name: list[str],
+        args: list[list[str]],
+        script: list[str] | None = None,
+        qtime: list[float] | None = None,
+        submit_flags: list[list[str]] | None = None,
+        variables: list[dict[str, str | None]] | None = None,
+        output: list[str] | None = None,
+        error: list[str] | None = None,
+        #
+        tasks: list[int] | None = None,
+        cpus_per_task: list[int] | None = None,
+        gpus_per_task: list[int] | None = None,
+        tasks_per_node: list[int] | None = None,
+        nodes: list[int] | None = None,
+    ) -> HPCProcess:
+        raise NotImplementedError(f"{self.name} backend has not implemented submitn")
+
     @property
     def submission_template(self) -> str:
         raise NotImplementedError
@@ -144,7 +163,7 @@ class HPCBackend(ABC):
         args: list[str],
         scriptname: str | TextIO | None,
         qtime: float | None = None,
-        batch_options: list[str] | None = None,
+        submit_flags: list[str] | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -160,7 +179,7 @@ class HPCBackend(ABC):
             name,
             args,
             qtime=qtime,
-            batch_options=batch_options,
+            submit_flags=submit_flags,
             variables=variables,
             output=output,
             error=error,
@@ -178,7 +197,7 @@ class HPCBackend(ABC):
         env = make_template_env(*template_dirs)
         t = env.get_template(f)
         if hasattr(scriptname, "write"):
-            scriptname.write(t.render(data))
+            scriptname.write(t.render(data))  # type: ignore
             return None
         scriptname = scriptname or unique_scriptname()
         file = sanitize_path(scriptname)
@@ -193,7 +212,7 @@ class HPCBackend(ABC):
         name: str,
         args: list[str],
         qtime: float | None = None,
-        batch_options: list[str] | None = None,
+        submit_flags: list[str] | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -211,7 +230,7 @@ class HPCBackend(ABC):
         data: dict[str, Any] = {
             "name": name,
             "time": qtime or 1.0,
-            "args": batch_options or [],
+            "args": submit_flags or [],
             "nodes": nodes,
             "cpus_per_task": cpus_per_task or 1,
             "gpus_per_task": gpus_per_task or 0,

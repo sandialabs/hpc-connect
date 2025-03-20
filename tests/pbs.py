@@ -3,7 +3,6 @@ import os
 from contextlib import contextmanager
 
 import hpc_connect
-import hpc_connect.job
 
 
 @contextmanager

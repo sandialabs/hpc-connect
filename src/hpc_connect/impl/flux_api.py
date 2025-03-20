@@ -148,7 +148,7 @@ class FluxBackend(HPCBackend):
         args: list[str],
         scriptname: str | None = None,
         qtime: float | None = None,
-        batch_options: list[str] | None = None,
+        submit_flags: list[str] | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -160,12 +160,12 @@ class FluxBackend(HPCBackend):
         nodes: int | None = None,
     ) -> FluxProcess:
         # the Flux submission script is not used, but we write it for inspection, if needed
-        script =self.write_submission_script(
+        script = self.write_submission_script(
             name,
             args,
             scriptname,
             qtime=qtime,
-            batch_options=batch_options,
+            submit_flags=submit_flags,
             variables=variables,
             output=output,
             error=error,
@@ -175,6 +175,7 @@ class FluxBackend(HPCBackend):
             tasks_per_node=tasks_per_node,
             nodes=nodes,
         )
+        assert script is not None
         jobspec = self.create_jobspec(
             name,
             script,
@@ -245,7 +246,7 @@ class FluxBackend(HPCBackend):
         args: list[list[str]],
         script: list[str] | None = None,
         qtime: list[float] | None = None,
-        batch_options: list[list[str]] | None = None,
+        submit_flags: list[list[str]] | None = None,
         variables: list[dict[str, str | None]] | None = None,
         output: list[str] | None = None,
         error: list[str] | None = None,
@@ -265,7 +266,7 @@ class FluxBackend(HPCBackend):
                     args[i],
                     select(script, i, f"flux-submit-{i}"),
                     qtime=select(qtime, i),
-                    batch_options=select(batch_options, i),
+                    submit_flags=select(submit_flags, i),
                     variables=select(variables, i),
                     output=select(output, i, f"flux-out-{i}"),
                     error=select(output, i, f"flux-err-{i}"),
