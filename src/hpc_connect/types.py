@@ -246,7 +246,7 @@ class HPCBackend(ABC):
         return data
 
 
-class Parser(argparse.ArgumentParser):
+class LaunchParser(argparse.ArgumentParser):
     def __init__(self, **kwargs):
         kwargs["add_help"] = False
         super().__init__(**kwargs)
@@ -289,7 +289,7 @@ class HPCLauncher(abc.ABC):
     @abc.abstractmethod
     def factory(self, arg: str, config_file: str | None = None) -> "HPCLauncher | None": ...
 
-    def setup_parser(self, parser: Parser) -> None:
+    def setup_parser(self, parser: LaunchParser) -> None:
         pass
 
     def set_main_options(self, args: argparse.Namespace) -> None:
