@@ -1,3 +1,4 @@
+import importlib.resources
 import logging
 import math
 import multiprocessing
@@ -139,7 +140,7 @@ class FluxBackend(HPCBackend):
     def submission_template(self) -> str:
         if "HPCC_FLUX_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_FLUX_SUBMIT_TEMPLATE"]
-        return "flux.sh.in"
+        return str(importlib.resources.files("hpc_connect").joinpath("templates/flux.sh.in"))
 
     def submit(
         self,
