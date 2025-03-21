@@ -11,7 +11,7 @@ from .types import HPCBackend
 from .types import HPCLauncher
 from .types import HPCProcess
 from .types import HPCSubmissionFailedError
-from .types import Parser as LaunchParser
+from .types import LaunchParser
 
 logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
