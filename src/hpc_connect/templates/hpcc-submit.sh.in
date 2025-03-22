@@ -15,10 +15,11 @@ export {{ var }}={{ val }}
     {% endif %}
   {% endfor %}
 {% endif %}
-printenv || true
+# printenv || true
 {% endblock environment %}
 {% block commands %}
 {% for command in commands %}
+echo {{ command }}
 {{ command }}
 {% endfor %}
 {% endblock commands %}

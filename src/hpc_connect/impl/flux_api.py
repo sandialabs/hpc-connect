@@ -25,9 +25,9 @@ logger = logging.getLogger("hpc_connect")
 
 class FluxProcess(HPCProcess):
     JOB_TIMEOUT_CODE = 66
-    fh = Flux()
 
     def __init__(self, name: str, future: FluxExecutorFuture) -> None:
+        self.fh = Flux()
         self.name = name
         self.fut: FluxExecutorFuture = future
         self.jobid: int | None = None
@@ -118,15 +118,15 @@ class FluxBackend(HPCBackend):
     """Setup and submit jobs to the Flux scheduler"""
 
     name = "flux"
-    flux: FluxExecutor | None = FluxExecutor()
-    fh = Flux()
     lock: multiprocessing.synchronize.RLock = multiprocessing.RLock()
 
     def __init__(self) -> None:
         super().__init__()
+        self.flux: FluxExecutor | None = FluxExecutor()
+        self.fh = Flux()
 
-    def __del__(self) -> None:
-        self.shutdown()
+#    def __del__(self) -> None:
+#        self.shutdown()
 
     @property
     def supports_subscheduling(self) -> bool:

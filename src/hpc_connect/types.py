@@ -232,6 +232,7 @@ class HPCBackend(ABC):
             "time": qtime or 1.0,
             "args": submit_flags or [],
             "nodes": nodes,
+            "tasks": tasks,
             "cpus_per_task": cpus_per_task or 1,
             "gpus_per_task": gpus_per_task or 0,
             "cpus_per_node": self.config.cpus_per_node,
