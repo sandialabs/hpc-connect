@@ -1,9 +1,8 @@
 import os
 import re
-import shutil
 import stat
-import subprocess
-import sys
+from typing import Any
+from typing import Callable
 
 from .proc import cpu_count
 from .tengine import make_template_env
@@ -21,3 +20,21 @@ def set_executable(path: str) -> None:
     if mode & stat.S_IROTH:
         mode |= stat.S_IXOTH
     os.chmod(path, mode)
+
+
+def partition(arg: list[Any], predicate: Callable) -> tuple[list[Any], list[Any]]:
+    a: list[Any] = []
+    b: list[Any] = []
+    for item in arg:
+        if predicate(item):
+            a.append(item)
+        else:
+            b.append(item)
+    return a, b
+
+
+def sanitize_path(path: str) -> str:
+    """Remove illegal file characters from ``path``"""
+    dirname, basename = os.path.split(path)
+    basename = re.sub(r"[^\w_. -]", "_", basename).strip("_")
+    return os.path.join(dirname, basename)

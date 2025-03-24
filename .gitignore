@@ -7,7 +7,7 @@ _test-cache
 __pycache__
 .mypy_cache
 src/*.egg-info/
-src/hpc_connect/_version.py
+src/hpc_connect/version.py
 
 docs/build
 

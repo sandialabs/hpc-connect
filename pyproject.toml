@@ -1,10 +1,10 @@
 [project]
 name = "hpc-connect"
-version = "0.3.0"
+dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2"]
+dependencies = ["pluggy", "jinja2", "psutil"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"
@@ -15,6 +15,9 @@ dev = ["ruff", "mypy", "pytest"]
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}
 
 [[tool.mypy.overrides]]
 module = "pkg_resources.*"
@@ -66,3 +69,11 @@ command_line = "-m pytest"
 
 [tool.coverage.html]
 directory = "html.cov"
+
+[[tool.mypy.overrides]]
+module = "psutil"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "flux"
+ignore_missing_imports = true

@@ -1,16 +1,15 @@
-import argparse
 import os
+import subprocess
 import sys
-from typing import Optional
 
 import hpc_connect
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv[1:]
-    print("HPC Connect schedulers:")
-    for scheduler_t in hpc_connect.schedulers().values():
-        print(f"- {scheduler_t.name}")
+    print("HPC Connect backends:")
+    for backend_t in hpc_connect.backends().values():
+        print(f"- {backend_t.name}")
     print()
     print("HPC Connect launchers:")
     for launcher_t in hpc_connect.launchers().values():
@@ -18,28 +17,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     return 0
 
 
-def launch(argv: Optional[list[str]] = None):
-    argv = argv or sys.argv[1:]
-    parser = argparse.ArgumentParser(
-        prog="hpc-launch", description="Abstract HPC launch interface"
-    )
-    parser.add_argument("--backend", help="Launch with this backend [default: mpi]")
-    ns, unknown_args = parser.parse_known_args(argv)
+def launch(argv: list[str] | None = None) -> None:
+    parser = hpc_connect.LaunchParser(prog="hpc-launch")
+    pre, local_options, prog_options = parser.preparse(argv)
     name: str = "mpi"
-    if ns.backend:
-        name = ns.backend
+    if pre.backend:
+        name = pre.backend
     elif "HPC_CONNECT_PREFERRED_LAUNCHER" in os.environ:
         name = os.environ["HPC_CONNECT_PREFERRED_LAUNCHER"]
-    launcher = hpc_connect.launcher(name)
+    launcher = hpc_connect.launcher(name, config_file=pre.config_file)
+    launcher.setup_parser(parser)
+    parser.parse_args(local_options, namespace=pre)
+    launcher.set_main_options(pre)
+    ns = launcher.inspect_args(prog_options)
+    if ns.help:
+        parser.print_help()
+        sys.exit(0)
+    args = launcher.format_program_args(ns)
     exe = os.fsdecode(launcher.executable)
-    opts = launcher.options(ns, unknown_args)
-    if sys.platform == "win32":
-        import subprocess
-
-        completed_process = subprocess.run([exe, *opts])
-        sys.exit(completed_process.returncode)
-    else:
-        os.execvp(exe, [exe, *opts])
+    completed_process = subprocess.run([exe, *args])
+    sys.exit(completed_process.returncode)
 
 
 if __name__ == "__main__":
