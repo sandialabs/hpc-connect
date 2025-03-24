@@ -1,77 +1,139 @@
 import importlib
-import io
 import os
 import shutil
 import subprocess
+import weakref
+from typing import TextIO
+
+import psutil
 
 from ..hookspec import hookimpl
-from ..submit import HPCProcess
-from ..submit import HPCScheduler
-from ..submit import Job
-from ..util import set_executable
+from ..types import HPCBackend
+from ..types import HPCProcess
 from ..util import time_in_seconds
 
 
+def streamify(arg: str | None) -> TextIO | None:
+    if arg is None:
+        return None
+    os.makedirs(os.path.dirname(arg), exist_ok=True)
+    return open(arg, mode="w")
+
+
 class ShellProcess(HPCProcess):
-    def __init__(self, job: Job) -> None:
-        super().__init__(job=job)
+    def __init__(
+        self,
+        script: str,
+        output: str | None = None,
+        error: str | None = None,
+    ) -> None:
         sh = shutil.which("sh")
         if sh is None:
             raise RuntimeError("sh not found on PATH")
-        if job.output:
-            self.stdout = open(job.output, "w")
-        if job.error:
-            if isinstance(self.stdout, io.IOBase) and self.stdout.name == job.error:
-                self.stderr = subprocess.STDOUT
-            else:
-                self.stderr = open(job.error, "w")
+        stdout = streamify(output)
+        if stdout is not None:
+            weakref.finalize(stdout, stdout.close)
+        stderr: TextIO | int | None
+        if error is None:
+            stderr = None
+        elif error == output:
+            stderr = subprocess.STDOUT
+        else:
+            stderr = streamify(error)
+        if hasattr(stderr, "write"):
+            weakref.finalize(stderr, stderr.close)  # type: ignore
+        self.proc = subprocess.Popen([sh, script], stdout=stdout, stderr=stderr)
 
-        args = [sh, job.script]
-        self.proc: subprocess.Popen = subprocess.Popen(
-            args, stdout=self.stdout, stderr=self.stderr
-        )
+    @property
+    def returncode(self) -> int | None:
+        return self.proc.returncode
 
-    def cancel(self, returncode: int) -> None:
-        self.proc.terminate()
-        self.returncode = returncode
+    @returncode.setter
+    def returncode(self, arg: int) -> None:
+        raise NotImplementedError
 
     def poll(self) -> int | None:
-        self.returncode = self.proc.poll()
-        return self.returncode
+        return self.proc.poll()
+
+    def cancel(self) -> None:
+        """Kill a process tree (including grandchildren)"""
+        try:
+            parent = psutil.Process(self.proc.pid)
+        except psutil.NoSuchProcess:
+            return
+        children = parent.children(recursive=True)
+        children.append(parent)
+        for p in children:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        _, alive = psutil.wait_procs(children)
+        for p in alive:
+            try:
+                p.kill()
+            except Exception:
+                pass
 
 
-class ShellScheduler(HPCScheduler):
-    """Default 'scheduler' submits jobs to the shell"""
-
+class ShellBackend(HPCBackend):
     name = "shell"
 
-    def __init__(self) -> None:
+    def __init__(self):
         super().__init__()
-        self.variables["HPC_CONNECT_DEFAULT_LAUNCHER"] = "mpiexec"
+        sh = shutil.which("sh")
+        if sh is None:
+            raise ValueError("sh not found on PATH")
 
     @staticmethod
-    def matches(name: str | None) -> bool:
-        if name is None:
-            return False
-        return name.lower() in ("shell", "subshell", "none")
+    def matches(name) -> bool:
+        return name in ("shell", "none")
+
+    @property
+    def polling_frequency(self) -> float:
+        s = os.getenv("HPCC_POLLING_FREQUENCY") or 0.5
+        return time_in_seconds(s)
+
+    def submit(
+        self,
+        name: str,
+        args: list[str],
+        scriptname: str | None = None,
+        qtime: float | None = None,
+        submit_flags: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        #
+        tasks: int | None = None,
+        cpus_per_task: int | None = None,
+        gpus_per_task: int | None = None,
+        tasks_per_node: int | None = None,
+        nodes: int | None = None,
+    ) -> HPCProcess:
+        script = self.write_submission_script(
+            name,
+            args,
+            scriptname,
+            qtime=qtime,
+            submit_flags=submit_flags,
+            variables=variables,
+            output=output,
+            error=error,
+            tasks=tasks,
+            cpus_per_task=cpus_per_task,
+            gpus_per_task=gpus_per_task,
+            tasks_per_node=tasks_per_node,
+            nodes=nodes,
+        )
+        assert script is not None
+        return ShellProcess(script, output=output, error=error)
 
     @property
     def submission_template(self) -> str:
         return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
 
-    def submit(self, job: Job) -> HPCProcess:
-        os.makedirs(os.path.dirname(job.script), exist_ok=True)
-        with open(job.script, "w") as fh:
-            self.write_submission_script(job, fh)
-        set_executable(job.script)
-        return ShellProcess(job)
-
-    @staticmethod
-    def default_polling_frequency() -> float:
-        s = os.getenv("HPCC_SHELL_POLLING_FREQUENCY") or 0.5
-        return time_in_seconds(s)
-
 
 @hookimpl
-def hpc_connect_scheduler():
-    return ShellScheduler
+def hpc_connect_backend():
+    return ShellBackend

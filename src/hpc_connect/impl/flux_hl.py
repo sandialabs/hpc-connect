@@ -5,23 +5,23 @@ try:
 
 except ImportError:
 
-    class _FluxScheduler:
+    class _FluxBackend:
         name = "flux"
 
         def __init__(self):
-            raise RuntimeError("FluxScheduler requires the flux module be importable")
+            raise RuntimeError("FluxBackend requires the flux module be importable")
 
         @staticmethod
         def matches(name: str) -> bool:
             return name == "flux"
 
     @hookimpl
-    def hpc_connect_scheduler():
-        return _FluxScheduler
+    def hpc_connect_backend():
+        return _FluxBackend
 
 else:
-    from .flux_api import FluxScheduler
+    from .flux_api import FluxBackend
 
     @hookimpl
-    def hpc_connect_scheduler():
-        return FluxScheduler
+    def hpc_connect_backend():
+        return FluxBackend

@@ -3,6 +3,6 @@
 {% for arg in args %}
 #BASH {{ arg }}
 {% endfor %}
-# output: {{ job.output }}
-# error: {{ job.error }}
+# output: {{ output }}
+# error: {{ error }}
 {% endblock header %}

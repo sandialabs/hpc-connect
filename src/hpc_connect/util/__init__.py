@@ -1,4 +1,5 @@
 import os
+import re
 import stat
 from typing import Any
 from typing import Callable
@@ -30,3 +31,10 @@ def partition(arg: list[Any], predicate: Callable) -> tuple[list[Any], list[Any]
         else:
             b.append(item)
     return a, b
+
+
+def sanitize_path(path: str) -> str:
+    """Remove illegal file characters from ``path``"""
+    dirname, basename = os.path.split(path)
+    basename = re.sub(r"[^\w_. -]", "_", basename).strip("_")
+    return os.path.join(dirname, basename)
