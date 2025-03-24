@@ -210,12 +210,15 @@ class FluxBackend(HPCBackend):
         nodes: int | None = None,
         exclusive: bool = True,
     ) -> Jobspec:
+        tasks = tasks or 1
+        cores_per_task = tasks * (cpus_per_task or 1)
+        gpus_per_task = tasks * (gpus_per_task or 1)
         jobspec = JobspecV1.from_command(
             command=[script],
-            num_tasks=tasks or 1,
-            num_nodes=self.config.nodes_required(tasks or 1),
-            cores_per_task=cpus_per_task or 1,
-            gpus_per_task=gpus_per_task or 0,
+            num_tasks=1,
+            num_nodes=nodes or self.config.nodes_required(cores_per_task),
+            cores_per_task=cores_per_task,
+            gpus_per_task=gpus_per_task,
             exclusive=exclusive,
         )
         jobspec.setattr("system.job.name", name)

@@ -23,14 +23,18 @@ from .util import time_in_seconds
 
 class HPCProcess(Protocol):
     @property
-    def returncode(self) -> int | None: ...
+    def returncode(self) -> int | None:
+        raise NotImplementedError
 
     @returncode.setter
-    def returncode(self, arg: int) -> None: ...
+    def returncode(self, arg: int) -> None:
+        raise NotImplementedError
 
-    def poll(self) -> int | None: ...
+    def poll(self) -> int | None:
+        raise NotImplementedError
 
-    def cancel(self) -> None: ...
+    def cancel(self) -> None:
+        raise NotImplementedError
 
 
 class Config:
