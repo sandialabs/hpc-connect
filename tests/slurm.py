@@ -28,7 +28,7 @@ def test_basic():
             tasks=1,
             cpus_per_task=1,
             gpus_per_task=0,
-            tasks_per_node=10,
+            tasks_per_node=backend.config.cpus_per_node,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",
@@ -39,7 +39,7 @@ def test_basic():
     print(text)
     assert "#!/bin/sh" in text
     assert "#SBATCH --nodes=1" in text
-    assert "#SBATCH --ntasks-per-node=10" in text
+    assert f"#SBATCH --ntasks-per-node={backend.config.cpus_per_node}" in text
     assert "#SBATCH --cpus-per-task=1" in text
     assert "#SBATCH --time=00:00:01" in text
     assert "#SBATCH --job-name=my-job" in text

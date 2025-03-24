@@ -28,7 +28,7 @@ def test_basic():
             tasks=1,
             cpus_per_task=1,
             gpus_per_task=0,
-            tasks_per_node=10,
+            tasks_per_node=backend.config.cpus_per_node,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",
@@ -38,7 +38,7 @@ def test_basic():
         text = fh.getvalue()
     assert "#!/bin/sh" in text
     assert "#PBS -N my-job" in text
-    assert "#PBS -l nodes=1:ppn=10" in text
+    assert f"#PBS -l nodes=1:ppn={backend.config.cpus_per_node}" in text
     assert "#PBS -l walltime=00:00:01" in text
     assert "#PBS --job-name=my-job" in text
     assert "#PBS -o my-out.txt" in text

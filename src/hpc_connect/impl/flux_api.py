@@ -125,8 +125,8 @@ class FluxBackend(HPCBackend):
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
 
-#    def __del__(self) -> None:
-#        self.shutdown()
+    #    def __del__(self) -> None:
+    #        self.shutdown()
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -210,9 +210,15 @@ class FluxBackend(HPCBackend):
         nodes: int | None = None,
         exclusive: bool = True,
     ) -> Jobspec:
+        """
+        Create the flux jobspec for the executable script ``script``.  The number of tasks
+        ``tasks`` is the number of MPI tasks that ``script`` launches, not the number of
+        copies of ``script`` that flux should launch.
+
+        """
         tasks = tasks or 1
         cores_per_task = tasks * (cpus_per_task or 1)
-        gpus_per_task = tasks * (gpus_per_task or 1)
+        gpus_per_task = tasks * (gpus_per_task or 0)
         jobspec = JobspecV1.from_command(
             command=[script],
             num_tasks=1,
@@ -263,6 +269,14 @@ class FluxBackend(HPCBackend):
         tasks_per_node: list[int] | None = None,
         nodes: list[int] | None = None,
     ) -> FluxMultiProcess:
+        if not os.getenv("HPC_CONNECT_ENABLE_FLUX_SUBMITN"):
+            raise NotImplementedError(
+                "canary seems to lock up when running submitn for all but trivial tests. "
+                "This will need to be debugged and fixed. The problem may be in our use of "
+                "JobspecV1.from_command *or* it could be an issue with file locking in "
+                "canary on some file systems.  Set the HPC_CONNECT_ENABLE_FLUX_SUBMITN "
+                "environment variable to bypass this check"
+            )
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
         with self.lock:
