@@ -1,4 +1,5 @@
 import importlib
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ from ..hookspec import hookimpl
 from ..types import HPCBackend
 from ..types import HPCProcess
 from ..util import time_in_seconds
+
+logger = logging.getLogger("hpc_connect")
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -57,6 +60,7 @@ class ShellProcess(HPCProcess):
 
     def cancel(self) -> None:
         """Kill a process tree (including grandchildren)"""
+        logger.warning(f"cancelling shell batch with pid {self.proc.pid}")
         try:
             parent = psutil.Process(self.proc.pid)
         except psutil.NoSuchProcess:

@@ -64,13 +64,13 @@ class FluxProcess(HPCProcess):
         return self.returncode
 
     def cancel(self) -> None:
-        logger.info(f"Canceling job {self.jobid}.")
+        logger.warning(f"Canceling flux job {self.jobid}")
         try:
             flux.job.cancel(self.fh, self.jobid)
         except OSError:
-            logger.debug(f"Job {self.jobid} is inactive, cannot cancel.")
+            logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
         except Exception:
-            logger.error(f"Failed to cancel job {self.jobid}.")
+            logger.error(f"Failed to cancel job {self.jobid}")
         self.returncode = 1
 
 

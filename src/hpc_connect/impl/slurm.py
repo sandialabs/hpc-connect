@@ -66,7 +66,7 @@ class SlurmProcess(HPCProcess):
         return self.returncode
 
     def cancel(self) -> None:
-        logger.info(f"cancelling batch {self.jobid}")
+        logger.warning(f"cancelling slurm job {self.jobid}")
         subprocess.run(["scancel", self.jobid, "--cluster=all"])
         self.returncode = 1
 
