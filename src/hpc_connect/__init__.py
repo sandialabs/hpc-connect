@@ -17,9 +17,45 @@ logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
 ch.setFormatter(logging.Formatter("==> hpc_connect: %(message)s"))
 logger.addHandler(ch)
-if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
-    ch.setLevel(logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
+
+
+loglevelmap: dict[str, int] = {
+    "CRITICAL": logging.CRITICAL,
+    "FATAL": logging.FATAL,
+    "ERROR": logging.ERROR,
+    "WARN": logging.WARNING,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+
+def set_debug(arg: bool) -> None:
+    if arg:
+        set_logging_level("DEBUG")
+
+
+def set_logging_level(levelname: str) -> None:
+    level = loglevelmap[levelname.upper()]
+    for h in logger.handlers:
+        h.setLevel(level)
+    logger.setLevel(level)
+
+
+def _initial_logging_setup(*, _ini_setup=[False]):
+    if _ini_setup[0]:
+        return
+    if levelname := os.getenv("HPC_CONNECT_LOG_LEVEL"):
+        set_logging_level(levelname)
+    else:
+        set_logging_level("INFO")
+    if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
+        set_logging_level("DEBUG")
+    _ini_setup[0] = True
+
+
+_initial_logging_setup()
 
 
 hookimpl = hookspec.hookimpl
@@ -28,13 +64,6 @@ manager.add_hookspecs(hookspec)
 for module in builtin:
     manager.register(module)
 # manager.load_setuptools_entrypoints("hpc_connect")
-
-
-def set_debug(arg: bool) -> None:
-    if arg:
-        for h in logger.handlers:
-            h.setLevel(logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
 
 
 def get_backend(arg: str) -> HPCBackend:
