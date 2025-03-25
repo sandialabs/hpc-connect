@@ -37,7 +37,7 @@ class HPCProcess(Protocol):
         raise NotImplementedError
 
 
-class Config:
+class HPCConfig:
     def __init__(self) -> None:
         self._cpus_per_node: int = cpu_count()
         self._gpus_per_node: int = 0
@@ -104,7 +104,7 @@ class HPCBackend(ABC):
     name = "<backend>"
 
     def __init__(self) -> None:
-        self.config = Config()
+        self.config = HPCConfig()
 
     @staticmethod
     @abstractmethod
