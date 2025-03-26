@@ -39,48 +39,47 @@ class HPCProcess(Protocol):
 
 class HPCConfig:
     def __init__(self) -> None:
-        self._cpus_per_node: int = cpu_count()
-        self._gpus_per_node: int = 0
-        self._node_count: int = 1
-        self.set_from_environment()
+        self.resources: list[dict] = [
+            {
+                "name": "node",
+                "type": None,
+                "count": 1,
+                "resources": [
+                    {
+                        "name": "cpu",
+                        "type": None,
+                        "count": cpu_count(),
+                    },
+                ],
+            }
+        ]
 
-    def set_from_environment(self) -> None:
-        if val := os.getenv("HPC_CONNECT_CPUS_PER_NODE"):
-            self.cpus_per_node = int(val)
-        if val := os.getenv("HPC_CONNECT_GPUS_PER_NODE"):
-            self.gpus_per_node = int(val)
-        if val := os.getenv("HPC_CONNECT_NODE_COUNT"):
-            self.node_count = int(val)
+    def set(self, arg: list[dict]) -> None:
+        self.resources.clear()
+        self.resources.extend(arg)
+
+    def get_per_node(self, name: str) -> int | None:
+        for resource in self.resources:
+            if resource["name"] == "node":
+                for child in resource["resources"]:
+                    if child["name"] == name:
+                        return child["count"]
+        return None
 
     @property
     def cpus_per_node(self) -> int:
-        return self._cpus_per_node
-
-    @cpus_per_node.setter
-    def cpus_per_node(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"cpus_per_node must be a positive integer ({arg} < 0)")
-        self._cpus_per_node = int(arg)
+        return self.get_per_node("cpu") or 1
 
     @property
     def gpus_per_node(self) -> int:
-        return self._gpus_per_node
-
-    @gpus_per_node.setter
-    def gpus_per_node(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"gpus_per_node must be a positive integer ({arg} < 0)")
-        self._gpus_per_node = int(arg)
+        return self.get_per_node("gpu") or 0
 
     @property
     def node_count(self) -> int:
-        return self._node_count
-
-    @node_count.setter
-    def node_count(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"node_count must be a positive integer ({arg} < 0)")
-        self._node_count = int(arg)
+        for resource in self.resources:
+            if resource["name"] == "node":
+                return resource["count"]
+        raise ValueError("Unable to determine node count")
 
     @property
     def cpu_count(self) -> int:

@@ -1,9 +1,9 @@
 import importlib.resources
 import logging
-import math
 import os
 import shutil
 import subprocess
+from typing import Any
 
 from ..hookspec import hookimpl
 from ..types import HPCBackend
@@ -88,22 +88,10 @@ class SlurmBackend(HPCBackend):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise ValueError("queue not found on PATH")
-        if val := os.getenv("SLURM_NTASKS_PER_NODE"):
-            # must be on an allocated node
-            self.config.cpus_per_node = int(val)  # assumes 1 task per cpu
-            self.config.node_count = int(os.environ["SLURM_NNODES"])
-            gpu_count = int(os.environ.get("SLURM_GPUS", 0))
-            self.config.gpus_per_node = math.ceil(gpu_count / self.config.node_count)
+        if sinfo := read_sinfo():
+            self.config.set([sinfo])
         elif sinfo := read_sinfo():
-            cores_per_socket: int = sinfo["cores_per_socket"]
-            gpus_per_socket: int = sinfo.get("gpus_per_socket", 0)
-            sockets_per_node: int = sinfo["sockets_per_node"]
-            if "HPC_CONNNECT_CPUS_PER_NODE" not in os.environ:
-                self.config.cpus_per_node = cores_per_socket * sockets_per_node
-            if "HPC_CONNNECT_GPUS_PER_NODE" not in os.environ:
-                self.config.gpus_per_node = gpus_per_socket * sockets_per_node
-            if "HPC_CONNECT_NODE_COUNT" not in os.environ:
-                self.config.node_count = sinfo["node_count"]
+            self.config.set([sinfo])
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
@@ -149,7 +137,7 @@ class SlurmBackend(HPCBackend):
         return SlurmProcess(script)
 
 
-def read_sinfo() -> dict[str, int] | None:
+def read_sinfo() -> dict[str, Any] | None:
     if sinfo := shutil.which("sinfo"):
         opts = [
             "%X",  # Number of sockets per node
@@ -157,6 +145,7 @@ def read_sinfo() -> dict[str, int] | None:
             "%Z",  # Number of threads per core
             "%c",  # Number of CPUs per node
             "%D",  # Number of nodes
+            "%G",  # General resources
         ]
         format = " ".join(opts)
         args = [sinfo, "-o", format]
@@ -171,24 +160,50 @@ def read_sinfo() -> dict[str, int] | None:
                     continue
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
-                spn, cps, _, cpn, nc = [integer(_) for _ in parts]
+                spn, cps, _, cpn, nc, *gres = [safe_loads(_) for _ in parts]
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{output}")
-            info = {
-                "sockets_per_node": spn,
-                "cores_per_socket": cps,
-                "cpu_count": spn * cps * nc,
-                "node_count": nc,
-            }
+            info = {"name": "node", "type": None, "count": nc}
+            resources = info.setdefault("resources", [])
+            resources.append({"name": "socket", "type": None, "count": spn})
+            resources.append({"name": "cpu", "type": None, "count": cps * spn})
+            for res in gres:
+                rn, *type, rc = res.split(":")
+                resource = {"name": rn, "type": None, "count": int(rc)}
+                if type:
+                    resource["type"] = ":".join(type)
+                resources.append(resource)
             return info
     return None
 
 
-def integer(arg: str) -> int:
+def read_einfo(self) -> dict[str, Any] | None:
+    """Read information from slurm allocation environment"""
+    if "SLURM_JOBID" not in os.environ:
+        return None
+    node_count = safe_loads(os.environ["SLURM_JOB_NUM_NODES"])
+    info = {"name": "node", "type": None, "count": node_count}
+    resources = info.setdefault("resources", [])
+
+    cpus_per_node = safe_loads(os.environ["SLURM_CPUS_ON_NODE"])
+    resources.append({"name": "cpu", "type": None, "count": cpus_per_node})
+
+    gpus_per_node = safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0
+    resources.append({"name": "gpu", "type": None, "count": gpus_per_node})
+
+    return info
+
+
+def safe_loads(arg: str) -> Any:
+    import json
+
     if arg.endswith("+"):
-        return int(arg[:-1])
-    return int(arg)
+        return safe_loads(arg[:-1])
+    try:
+        return json.loads(arg)
+    except json.JSONDecodeError:
+        return arg
 
 
 @hookimpl
