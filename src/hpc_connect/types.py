@@ -93,9 +93,10 @@ class HPCConfig:
     def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
-        nodes_required_cpu = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
-        nodes_required_gpu = max(1, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
-        return max(nodes_required_cpu, nodes_required_gpu)
+        nodes = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
+        if self.gpus_per_node:
+            nodes = max(nodes, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
+        return nodes
 
 
 class HPCBackend(ABC):
