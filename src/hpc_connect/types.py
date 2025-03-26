@@ -44,6 +44,7 @@ class HPCConfig:
                 "name": "node",
                 "type": None,
                 "count": 1,
+                "partition": None,
                 "resources": [
                     {
                         "name": "cpu",

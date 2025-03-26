@@ -169,10 +169,10 @@ def read_sinfo() -> dict[str, Any] | None:
                 resource: dict[str, Any]
                 parts = res.split(":")
                 if len(parts) == 2:
-                    resource = {"name": parts[0], "type": None, "count": int(parts[1])}
+                    resource = {"name": parts[0], "type": None, "count": safe_loads(parts[1])}
                 else:
                     type = ":".join(parts[1:-1])
-                    resource = {"name": parts[0], "type": type, "count": int(parts[-1])}
+                    resource = {"name": parts[0], "type": type, "count": safe_loads(parts[-1])}
                 resources.append(resource)
             return info
     return None
@@ -198,6 +198,8 @@ def read_einfo(self) -> dict[str, Any] | None:
 def safe_loads(arg: str) -> Any:
     import json
 
+    if arg == "(null)":
+        return None
     if arg.endswith("+"):
         return safe_loads(arg[:-1])
     try:
