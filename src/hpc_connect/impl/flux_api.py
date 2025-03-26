@@ -166,7 +166,9 @@ class FluxBackend(HPCBackend):
         if nodes is not None:
             kwds["num_nodes"] = nodes
             if cpus is None:
-                cpus = self.config.cpus_per_node
+                cpus = nodes * self.config.cpus_per_node
+            if gpus is None:
+                gpus = nodes * self.config.gpus_per_node
         kwds["cores_per_task"] = cpus or 1
         kwds["gpus_per_task"] = gpus or 0
         jobspec = JobspecV1.from_command(**kwds)
