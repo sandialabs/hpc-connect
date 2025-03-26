@@ -90,14 +90,12 @@ class HPCConfig:
     def gpu_count(self) -> int:
         return self.node_count * self.gpus_per_node
 
-    def nodes_required(self, tasks: int) -> int:
+    def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
-        tasks = tasks or 1
-        if tasks < self.cpus_per_node:
-            return 1
-        nodes = int(math.ceil(tasks / self.cpus_per_node))
-        return nodes
+        nodes_required_cpu = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
+        nodes_required_gpu = max(1, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
+        return max(nodes_required_cpu, nodes_required_gpu)
 
 
 class HPCBackend(ABC):

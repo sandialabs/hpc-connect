@@ -168,11 +168,9 @@ def read_sinfo() -> dict[str, Any] | None:
             for res in gres:
                 resource: dict[str, Any]
                 parts = res.split(":")
-                if len(parts) == 2:
-                    resource = {"name": parts[0], "type": None, "count": safe_loads(parts[1])}
-                else:
-                    type = ":".join(parts[1:-1])
-                    resource = {"name": parts[0], "type": type, "count": safe_loads(parts[-1])}
+                resource = {"name": parts[0], "type": None, "count": safe_loads(parts[-1])}
+                if len(parts) > 2:
+                    resource["type"] = ":".join(parts[1:-1])
                 resources.append(resource)
             return info
     return None
