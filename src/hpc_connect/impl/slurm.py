@@ -111,13 +111,12 @@ class SlurmBackend(HPCBackend):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> SlurmProcess:
+        cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,
             args,
@@ -127,11 +126,9 @@ class SlurmBackend(HPCBackend):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         assert script is not None
         return SlurmProcess(script)

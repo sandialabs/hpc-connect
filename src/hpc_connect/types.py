@@ -129,12 +129,10 @@ class HPCBackend(ABC):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> HPCProcess: ...
 
     def submitn(
@@ -147,12 +145,10 @@ class HPCBackend(ABC):
         variables: list[dict[str, str | None]] | None = None,
         output: list[str] | None = None,
         error: list[str] | None = None,
-        #
-        tasks: list[int] | None = None,
-        cpus_per_task: list[int] | None = None,
-        gpus_per_task: list[int] | None = None,
-        tasks_per_node: list[int] | None = None,
         nodes: list[int] | None = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        **kwargs: Any,
     ) -> HPCProcess:
         raise NotImplementedError(f"{self.name} backend has not implemented submitn")
 
@@ -171,11 +167,9 @@ class HPCBackend(ABC):
         output: str | None = None,
         error: str | None = None,
         #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
     ) -> str | None:
         template_dirs = {str(importlib.resources.files("hpc_connect").joinpath("templates"))}
         data = self.format_submission_data(
@@ -186,11 +180,9 @@ class HPCBackend(ABC):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task or 1,
-            gpus_per_task=gpus_per_task or 0,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         template = self.submission_template
         if not os.path.exists(template):
@@ -220,24 +212,20 @@ class HPCBackend(ABC):
         output: str | None = None,
         error: str | None = None,
         #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
     ) -> dict[str, Any]:
-        tasks = tasks or 1
-        if nodes is None:
-            nodes = self.config.nodes_required(tasks)
+        if nodes is None and cpus is None:
+            raise ValueError("must specify at least one of nodes and cpus")
         output = output or "stdout.txt"
         data: dict[str, Any] = {
             "name": name,
             "time": qtime or 1.0,
             "args": submit_flags or [],
             "nodes": nodes,
-            "tasks": tasks,
-            "cpus_per_task": cpus_per_task or 1,
-            "gpus_per_task": gpus_per_task or 0,
+            "cpus": cpus,
+            "gpus": gpus,
             "cpus_per_node": self.config.cpus_per_node,
             "gpus_per_node": self.config.gpus_per_node,
             "user": getpass.getuser(),

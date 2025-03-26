@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import weakref
+from typing import Any
 from typing import TextIO
 
 import psutil
@@ -108,13 +109,12 @@ class ShellBackend(HPCBackend):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> HPCProcess:
+        cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,
             args,
@@ -124,11 +124,9 @@ class ShellBackend(HPCBackend):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         assert script is not None
         return ShellProcess(script, output=output, error=error)

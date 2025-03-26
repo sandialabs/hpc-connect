@@ -8,7 +8,6 @@ def add_mock_path():
     mock = os.path.join(os.path.dirname(__file__), "mock")
     assert os.path.exists(mock), mock
     os.environ["PATH"] = f"{mock}:{os.environ['PATH']}"
-    print("HERE I AM!")
     yield
     os.environ.clear()
     os.environ.update(save_env)
