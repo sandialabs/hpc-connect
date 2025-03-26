@@ -166,10 +166,13 @@ def read_sinfo() -> dict[str, Any] | None:
             resources.append({"name": "socket", "type": None, "count": spn})
             resources.append({"name": "cpu", "type": None, "count": cps * spn})
             for res in gres:
-                rn, *type, rc = res.split(":")
-                resource = {"name": rn, "type": None, "count": int(rc)}
-                if type:
-                    resource["type"] = ":".join(type)
+                resource: dict[str, Any]
+                parts = res.split(":")
+                if len(parts) == 2:
+                    resource = {"name": parts[0], "type": None, "count": int(parts[1])}
+                else:
+                    type = ":".join(parts[1:-1])
+                    resource = {"name": parts[0], "type": type, "count": int(parts[-1])}
                 resources.append(resource)
             return info
     return None
