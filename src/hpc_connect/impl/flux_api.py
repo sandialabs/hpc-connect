@@ -268,6 +268,7 @@ class FluxBackend(HPCBackend):
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
+        submission_delay: float = 1.0
         with self.lock:
             for i in range(len(name)):
                 proc = self.submit(
@@ -284,6 +285,7 @@ class FluxBackend(HPCBackend):
                     gpus=select(gpus, i),
                     exclusive=False,
                 )
+                time.sleep(submission_delay)
                 procs.append(proc)
         return procs
 
