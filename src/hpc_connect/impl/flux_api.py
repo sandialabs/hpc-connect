@@ -267,7 +267,7 @@ class FluxBackend(HPCBackend):
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
-        submission_delay: float = 60.0
+        submission_delay: float = 0.0
         if t := os.getenv("HPC_CONNECT_FLUX_SUBMITN_DELAY"):
             submission_delay = time_in_seconds(t)
         with self.lock:
