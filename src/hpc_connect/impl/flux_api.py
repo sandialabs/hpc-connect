@@ -19,6 +19,7 @@ from ..hookspec import hookimpl
 from ..types import HPCBackend
 from ..types import HPCProcess
 from ..types import HPCSubmissionFailedError
+from ..util import time_in_seconds
 
 logger = logging.getLogger("hpc_connect")
 
@@ -125,9 +126,6 @@ class FluxBackend(HPCBackend):
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
 
-    #    def __del__(self) -> None:
-    #        self.shutdown()
-
     @property
     def supports_subscheduling(self) -> bool:
         return True
@@ -213,7 +211,6 @@ class FluxBackend(HPCBackend):
         exclusive: bool = True,
         **kwargs: Any,
     ) -> FluxProcess:
-        # the Flux submission script is not used, but we write it for inspection, if needed
         cpus = cpus or kwargs.get("tasks")
         script = self.write_submission_script(
             name,
@@ -270,7 +267,9 @@ class FluxBackend(HPCBackend):
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
-        submission_delay: float = 1.0
+        submission_delay: float = 60.0
+        if t := os.getenv("HPC_CONNECT_FLUX_SUBMITN_DELAY"):
+            submission_delay = time_in_seconds(t)
         with self.lock:
             for i in range(len(name)):
                 proc = self.submit(
@@ -287,9 +286,41 @@ class FluxBackend(HPCBackend):
                     gpus=select(gpus, i),
                     exclusive=False,
                 )
-                time.sleep(submission_delay)
+                if submission_delay:
+                    time.sleep(submission_delay)
                 procs.append(proc)
         return procs
+
+    def format_submission_data(
+        self,
+        name: str,
+        args: list[str],
+        qtime: float | None = None,
+        submit_flags: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        #
+        nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+    ) -> dict[str, Any]:
+        data = super().format_submission_data(
+            name,
+            args,
+            qtime=qtime,
+            submit_flags=submit_flags,
+            variables=variables,
+            output=output,
+            error=error,
+            nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
+        )
+        data["nslots"] = data["cpus"]
+        data["cores_per_slot"] = 1
+        data["gpus_per_slot"] = 1 if gpus else 0
+        return data
 
 
 def select(arg: Any, i: int, default: Any = None) -> Any:
