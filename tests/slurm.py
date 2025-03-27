@@ -25,10 +25,7 @@ def test_basic():
             "my-job",
             ["ls"],
             fh,
-            tasks=1,
-            cpus_per_task=1,
-            gpus_per_task=0,
-            tasks_per_node=backend.config.cpus_per_node,
+            cpus=1,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",
@@ -36,11 +33,8 @@ def test_basic():
             variables={"MY_VAR": "SPAM"},
         )
         text = fh.getvalue()
-    print(text)
     assert "#!/bin/sh" in text
     assert "#SBATCH --nodes=1" in text
-    assert f"#SBATCH --ntasks-per-node={backend.config.cpus_per_node}" in text
-    assert "#SBATCH --cpus-per-task=1" in text
     assert "#SBATCH --time=00:00:01" in text
     assert "#SBATCH --job-name=my-job" in text
     assert "#SBATCH --error=my-err.txt" in text
