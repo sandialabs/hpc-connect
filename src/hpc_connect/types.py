@@ -15,7 +15,6 @@ from typing import TextIO
 
 from .util import cpu_count
 from .util import make_template_env
-from .util import partition
 from .util import sanitize_path
 from .util import set_executable
 from .util import time_in_seconds
@@ -107,7 +106,7 @@ class HPCBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def matches(name) -> bool: ...
+    def matches(name: str) -> bool: ...
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -242,55 +241,68 @@ class LaunchParser(argparse.ArgumentParser):
     def __init__(self, **kwargs):
         kwargs["add_help"] = False
         super().__init__(**kwargs)
-        self.add_argument("--backend", help="Use this launcher backend [default: mpiexec]")
-        self.add_argument("--config-file", help="Use this configuration file")
+        self.add_argument("--backend", help="Use this launcher backend [default: mpi]")
+        self.add_argument("--config-file", help="Use this configuration file [default: None]")
+        self.add_argument(
+            "args", metavar="...", nargs=argparse.REMAINDER, help="Arguments to pass to launcher"
+        )
 
-    def preparse(
-        self, argv: list[str] | None = None
-    ) -> tuple[argparse.Namespace, list[str], list[str]]:
-        l_opts, g_opts = partition(argv or sys.argv[1:], lambda x: x.startswith("-Wl,"))
-        args, l_opts = self.parse_known_args([_[4:] for _ in l_opts])
-        return args, l_opts, g_opts
+    def preparse(self, argv: list[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
+        namespace = argparse.Namespace(help=False, backend=None, config_file=None)
+        remainder: list[str] = []
+        iter_argv = iter(argv or sys.argv[1:])
+        while True:
+            try:
+                arg = next(iter_argv)
+            except StopIteration:
+                break
+            if arg.startswith(("--backend=", "--config-file=")):
+                opt, _, value = arg.partition("=")
+                setattr(namespace, opt[2:].replace("-", "_"), value)
+            elif arg in ("--backend", "--config-file"):
+                setattr(namespace, arg[2:].replace("-", "_"), next(iter_argv))
+            elif arg in ("-h", "--help"):
+                namespace.help = True
+            else:
+                remainder.append(arg)
+                remainder.extend(iter_argv)
+                break
+        return namespace, remainder
 
 
 class LaunchArgs:
     def __init__(self) -> None:
         self.specs: list[list[str]] = []
         self.processes: list[int | None] = []
-        self.help: bool = False
 
     def add(self, spec: list[str], processes: int | None) -> None:
         self.specs.append(list(spec))
         self.processes.append(processes)
 
-    def empty(self) -> bool:
-        return len(self.specs) == 0
-
 
 class HPCLauncher(abc.ABC):
     name = "<launcher>"
+    numproc_flags = ("-n", "--n", "-np", "--np", "-c")
+    numproc_long_flags = ("--n=", "--np=")
 
-    def __init__(self, *hints: str, config_file: str | None = None) -> None:
-        pass
+    def __init__(self, *hints: str, config_file: str | None = None) -> None: ...
+
+    @staticmethod
+    @abstractmethod
+    def matches(name: str) -> bool: ...
 
     @property
     @abc.abstractmethod
     def executable(self) -> str: ...
 
-    @classmethod
-    @abc.abstractmethod
-    def factory(self, arg: str, config_file: str | None = None) -> "HPCLauncher | None": ...
-
     def setup_parser(self, parser: LaunchParser) -> None:
-        pass
-
-    def set_main_options(self, args: argparse.Namespace) -> None:
         pass
 
     def default_args(self) -> list[str]:
         return []
 
     def inspect_args(self, args: list[str]) -> LaunchArgs:
+        """Inspect arguments to launcher to infer number of processors requested"""
         la = LaunchArgs()
 
         spec: list[str] = []
@@ -306,16 +318,14 @@ class HPCLauncher(abc.ABC):
             if shutil.which(arg):
                 command_seen = True
             if not command_seen:
-                if la.empty() and arg in ("-h", "--help"):
-                    la.help = True
-                if arg in ("-n", "--n", "-np", "--np", "-c"):
+                if arg in self.numproc_flags:
                     s = next(iter_args)
                     processes = int(s)
                     spec.extend([arg, s])
-                elif arg.startswith(("--n=", "--np=")):
-                    arg, _, s = arg.partition("=")
+                elif arg.startswith(self.numproc_long_flags):
+                    _, _, s = arg.partition("=")
                     processes = int(s)
-                    spec.extend([arg, s])
+                    spec.append(arg)
                 else:
                     spec.append(arg)
             elif arg == ":":

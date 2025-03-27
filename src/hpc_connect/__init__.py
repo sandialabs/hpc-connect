@@ -70,19 +70,18 @@ def get_backend(arg: str) -> HPCBackend:
     for type in manager.hook.hpc_connect_backend():
         if type.matches(arg):
             return type()
-    else:
-        raise ValueError(f"invalid backend {arg!r}")
+    raise ValueError(f"No matching backend for {arg!r}")
 
 
 def backends() -> dict[str, Type[HPCBackend]]:
     return {_.name: _ for _ in manager.hook.hpc_connect_backend()}
 
 
-def launcher(name: str, config_file: str | None = None) -> HPCLauncher:
-    for launcher_t in manager.hook.hpc_connect_launcher():
-        if launcher := launcher_t.factory(name, config_file=config_file):
-            return launcher
-    raise ValueError(f"No matching launcher for {name!r}")
+def get_launcher(arg: str, config_file: str | None = None) -> HPCLauncher:
+    for type in manager.hook.hpc_connect_launcher():
+        if type.matches(arg):
+            return type(config_file=config_file)
+    raise ValueError(f"No matching launcher for {arg!r}")
 
 
 def launchers() -> dict[str, HPCLauncher]:

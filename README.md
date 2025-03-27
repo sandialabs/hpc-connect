@@ -22,12 +22,8 @@ python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-te
 
 ```python
 import hpc_connect
-scheduler = hpc_connect.scheduler("shell")
-
-job = hpc_connect.Job(
-    name="hello-world", commands=["echo 'Hello, world!'"], ranks=1
-)
-schduler.submit_and_wait(job)
+backend = hpc_connect.backend("shell")
+scheduler.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
 ```
 
 ### Launcher
@@ -40,36 +36,40 @@ Hello, world!
 Hello, world!
 ```
 
-## User defined scheduler
+## User defined scheduler backend
 
 ```python
-from hpc_connect import HPCScheduler
+from hpc_connect import HPCBackend
 
-class MyScheduler(HPCScheduler):
+class MyBackend(HPCBackend):
 
-    name = "my-scheduler"
+    name = "my-backend"
 
     @staticmethod
-    def matches(name: Optional[str]) -> bool:
-        # logic to determine if this scheduler matches ``name``
+    def matches(name: str | None) -> bool:
+        # logic to determine if this backend matches ``name``
 
-    def write_submission_script(
+    def submit(
         self,
-        script: list[str],
-        file: TextIO,
-        *,
-        tasks: int,
-        nodes: Optional[int] = None,
-        job_name: Optional[str] = None,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-        qtime: Optional[float] = None,
-        variables: Optional[dict[str, Optional[str]]] = None,
-    ) -> None:
-        # write the submission script
-
-    def submit(self, script: str, *, job_name: Optional[str] = None) -> HPCProcess:
+        name: str,
+        args: list[str],
+        scriptname: str | None = None,
+        qtime: float | None = None,
+        submit_flags: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
+    ) -> HPCProcess: ...
         # submit script ``script`` and return the HPCProcess
+
+
+@hpc_connect.hookimpl
+def hpc_connect_backend():
+    return MyBackend
 ```
 
 ## User defined launcher
@@ -80,30 +80,31 @@ from hpc_connect import HPCLauncher
 class MyLauncher(HPCLauncher):
     name = "my-launcher"
 
+    def __init__(self, config_file: str | None = None) -> None:
+        # setup
+
     @staticmethod
-    def matches(name: Optional[str]) -> bool:
+    def matches(name: str | None) -> bool:
         # logic to determine if this launcher matches ``name``
 
-    def launch(
-        self,
-        *args_in: str,
-        **kwargs_in: Any,
-    ) -> int:
-        # launch using *args_in
+    @property
+    def executable(self) -> str:
+        # return the string to the launcher's executable
+
+@hpc_connect.hookimpl
+def hpc_connect_launcher():
+    return MyLauncher
 ```
 
 ## Registering user defined launchers and schedulers
 
-Custom launchers and schedulers must be registered in your `pyproject.toml` file using the `hpc_connect.launcher` and `hpc_connect.scheduler` entry points. Here's an example configuration:
+Custom launchers and schedulers must be registered in your `pyproject.toml` file using the `hpc_connect` entry points. Here's an example configuration:
 
 ```toml
 [project]
 name = "my_project"
 version = "0.1.0"
 
-[project.entry_points."hpc_connect.scheduler"]
-my_scheduler = "my_module:MyScheduler"
-
-[project.entry_points."hpc_connect.launcher"]
-my_launcher = "my_module:MyLauncher"
+[project.entry_points.hpc_connect]
+my_hpc_connect = "my_module"
 ```

@@ -19,20 +19,27 @@ def main(argv: list[str] | None = None) -> int:
 
 def launch(argv: list[str] | None = None) -> None:
     parser = hpc_connect.LaunchParser(prog="hpc-launch")
-    pre, local_options, prog_options = parser.preparse(argv)
+
+    pre, prog_args = parser.preparse(argv or sys.argv[1:])
+
+    if pre.help:
+        print(pre)
+        if pre.backend is None and "HPC_CONNECT_LAUNCHER" not in os.environ:
+            parser.print_help()
+            sys.exit(0)
+        else:
+            prog_args.insert(0, "-h")
+
     name: str = "mpi"
     if pre.backend:
         name = pre.backend
+    elif "HPC_CONNECT_LAUNCHER" in os.environ:
+        name = os.environ["HPC_CONNECT_LAUNCHER"]
     elif "HPC_CONNECT_PREFERRED_LAUNCHER" in os.environ:
         name = os.environ["HPC_CONNECT_PREFERRED_LAUNCHER"]
-    launcher = hpc_connect.launcher(name, config_file=pre.config_file)
-    launcher.setup_parser(parser)
-    parser.parse_args(local_options, namespace=pre)
-    launcher.set_main_options(pre)
-    ns = launcher.inspect_args(prog_options)
-    if ns.help:
-        parser.print_help()
-        sys.exit(0)
+
+    launcher = hpc_connect.get_launcher(name, config_file=pre.config_file)
+    ns = launcher.inspect_args(prog_args)
     args = launcher.format_program_args(ns)
     exe = os.fsdecode(launcher.executable)
     completed_process = subprocess.run([exe, *args])
