@@ -55,7 +55,7 @@ class HPCConfig:
             }
         ]
 
-    def set(self, arg: list[dict]) -> None:
+    def set_resource_spec(self, arg: list[dict]) -> None:
         self.resources.clear()
         self.resources.extend(arg)
 

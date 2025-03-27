@@ -1,4 +1,5 @@
 import importlib.resources
+import json
 import logging
 import os
 import shutil
@@ -88,10 +89,10 @@ class SlurmBackend(HPCBackend):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise ValueError("queue not found on PATH")
-        if sinfo := read_sinfo():
-            self.config.set([sinfo])
+        if sinfo := read_einfo():
+            self.config.set_resource_spec([sinfo])
         elif sinfo := read_sinfo():
-            self.config.set([sinfo])
+            self.config.set_resource_spec([sinfo])
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
@@ -166,9 +167,14 @@ def read_sinfo() -> dict[str, Any] | None:
             resources.append({"name": "socket", "type": None, "count": spn})
             resources.append({"name": "cpu", "type": None, "count": cps * spn})
             for res in gres:
-                resource: dict[str, Any]
+                if not res:
+                    continue
                 parts = res.split(":")
-                resource = {"name": parts[0], "type": None, "count": safe_loads(parts[-1])}
+                resource: dict[str, Any] = {
+                    "name": parts[0],
+                    "type": None,
+                    "count": safe_loads(parts[-1]),
+                }
                 if len(parts) > 2:
                     resource["type"] = ":".join(parts[1:-1])
                 resources.append(resource)
@@ -176,7 +182,7 @@ def read_sinfo() -> dict[str, Any] | None:
     return None
 
 
-def read_einfo(self) -> dict[str, Any] | None:
+def read_einfo() -> dict[str, Any] | None:
     """Read information from slurm allocation environment"""
     if "SLURM_JOBID" not in os.environ:
         return None
@@ -194,8 +200,6 @@ def read_einfo(self) -> dict[str, Any] | None:
 
 
 def safe_loads(arg: str) -> Any:
-    import json
-
     if arg == "(null)":
         return None
     if arg.endswith("+"):
