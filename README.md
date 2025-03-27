@@ -22,8 +22,8 @@ python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-te
 
 ```python
 import hpc_connect
-backend = hpc_connect.backend("shell")
-scheduler.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
+backend = hpc_connect.get_backend("shell")
+backend.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
 ```
 
 ### Launcher
