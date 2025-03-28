@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import pluggy
 
 hookspec = pluggy.HookspecMarker("hpc_connect")
