@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from datetime import datetime
 import importlib.resources
 import logging
 import math
@@ -185,7 +186,7 @@ class FluxBackend(HPCBackend):
         self,
         name: str,
         script: str,
-        qtime: float | None = None,
+        duration: float | datetime.timedelta | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -202,6 +203,30 @@ class FluxBackend(HPCBackend):
 
         """
         kwds: dict[str, Any] = {"command": [script], "exclusive": exclusive}
+        alloc = self.get_alloc_settings(cpus, gpus, nodes)
+        kwds.update(alloc)
+        jobspec = JobspecV1.from_nest_command(**kwds)
+        jobspec.setattr("system.job.name", name)
+        jobspec.stdout = output or "job-ouput.txt"
+        jobspec.stderr = error or output or "job-error.txt"
+        jobspec.duration = duration or 60.0 # duration is in seconds
+        env = os.environ.copy()
+        if variables:
+            for key, val in variables.items():
+                if val is None:
+                    env.pop(key, None)
+                else:
+                    env[key] = val
+        jobspec.environment = env
+        return jobspec
+
+    def get_alloc_settings(
+        self,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        nodes: int | None = None,
+    ) -> dict[str, Any]:
+        alloc: dict[str, Any] = {}
         if nodes is not None:
             if cpus is None:
                 cpus = nodes*self.config.cpus_per_node
@@ -212,28 +237,15 @@ class FluxBackend(HPCBackend):
             gpus = gpus or 0
             nodes = self.config.nodes_required(max_cpus=cpus, max_gpus=gpus)
         
-        kwds["num_nodes"] = nodes
-        kwds["num_slots"] = nodes
+        alloc["num_nodes"] = nodes
+        alloc["num_slots"] = nodes
         if nodes > 1:
             cpus = max(1, math.ceil(cpus / nodes))
             gpus = max(0, math.ceil(gpus / nodes))
             
-        kwds["cores_per_slot"] = cpus
-        kwds["gpus_per_slot"] = gpus
-        jobspec = JobspecV1.from_nest_command(**kwds)
-        jobspec.setattr("system.job.name", name)
-        jobspec.stdout = output or "job-ouput.txt"
-        jobspec.stderr = error or output or "job-error.txt"
-        jobspec.duration = time_limit_in_seconds(qtime, pad=60)
-        env = os.environ.copy()
-        if variables:
-            for key, val in variables.items():
-                if val is None:
-                    env.pop(key, None)
-                else:
-                    env[key] = val
-        jobspec.environment = env
-        return jobspec
+        alloc["cores_per_slot"] = cpus
+        alloc["gpus_per_slot"] = gpus
+        return alloc
 
     def shutdown(self):
         with self.lock:
@@ -263,11 +275,12 @@ class FluxBackend(HPCBackend):
         **kwargs: Any,
     ) -> FluxProcess:
         cpus = cpus or kwargs.get("tasks")
+        duration = datetime.timedelta(seconds=time_limit_in_seconds(qtime, pad=60))
         script = self.write_submission_script(
             name,
             args,
             scriptname,
-            qtime=qtime,
+            qtime=max(1, duration.total_seconds()/60.0), # time limit in minutes in the script
             submit_flags=submit_flags,
             variables=variables,
             output=output,
@@ -368,9 +381,8 @@ class FluxBackend(HPCBackend):
             cpus=cpus,
             gpus=gpus,
         )
-        data["nslots"] = data["cpus"]
-        data["cores_per_slot"] = 1
-        data["gpus_per_slot"] = 1 if gpus else 0
+        alloc = self.get_alloc_settings(cpus=cpus, gpus=gpus, nodes=nodes)
+        data.update(alloc)
         return data
 
 
