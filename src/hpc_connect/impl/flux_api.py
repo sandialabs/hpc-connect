@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import datetime
+from datetime import timedelta
 import importlib.resources
 import logging
 import math
@@ -186,7 +186,7 @@ class FluxBackend(HPCBackend):
         self,
         name: str,
         script: str,
-        duration: float | datetime.timedelta | None = None,
+        duration: float | timedelta | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -275,7 +275,7 @@ class FluxBackend(HPCBackend):
         **kwargs: Any,
     ) -> FluxProcess:
         cpus = cpus or kwargs.get("tasks")
-        duration = datetime.timedelta(seconds=time_limit_in_seconds(qtime, pad=60))
+        duration = timedelta(seconds=time_limit_in_seconds(qtime, pad=60))
         script = self.write_submission_script(
             name,
             args,
@@ -293,7 +293,7 @@ class FluxBackend(HPCBackend):
         jobspec = self.create_jobspec(
             name,
             script,
-            qtime=qtime,
+            duration=duration,
             variables=variables,
             output=output,
             error=error,
