@@ -2,10 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+import argparse
 import importlib.resources
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 from typing import Any
@@ -22,6 +24,7 @@ class SlurmProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
         self.jobid = self.submit(script)
+        self.clusters: str | None = None
         f = os.path.basename(script)
         logger.info(f"Submitted batch script {f} with jobid={self.jobid}")
 
@@ -29,6 +32,9 @@ class SlurmProcess(HPCProcess):
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
+        ns = self.parse_script_args(script)
+        if ns.clusters:
+            self.clusters = ns.clusters
         args = [sbatch, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
@@ -43,6 +49,18 @@ class SlurmProcess(HPCProcess):
             logger.log(logging.ERROR, f"    {line}")
         raise HPCSubmissionFailedError
 
+    @staticmethod
+    def parse_script_args(script: str) -> argparse.Namespace:
+        args = []
+        with open(script, "r") as file:
+            for line in file:
+                if match := re.search("^#SBATCH\s+(.*)$", line):
+                    args.append(match.group(1).strip())
+        p = argparse.ArgumentParser()
+        p.add_argument("-M", "--cluster", "--clusters", dest="clusters")
+        ns, _ = p.parse_known_args(args)
+        return ns
+
     @property
     def returncode(self) -> int | None:
         return self._rc
@@ -55,7 +73,10 @@ class SlurmProcess(HPCProcess):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise RuntimeError("queue not found on PATH")
-        out = subprocess.check_output([squeue, "--noheader", "-o", "%i %t"], encoding="utf-8")
+        args = [squeue, "--noheader", "-o", "%i %t"]
+        if self.clusters:
+            args.append(f"--clusters={self.clusters}")
+        out = subprocess.check_output(args, encoding="utf-8")
         lines = [line.strip() for line in out.splitlines() if line.split()]
         for line in lines:
             # a line should be something like "16004759 PD"
@@ -72,7 +93,7 @@ class SlurmProcess(HPCProcess):
 
     def cancel(self) -> None:
         logger.warning(f"cancelling slurm job {self.jobid}")
-        subprocess.run(["scancel", self.jobid, "--cluster=all"])
+        subprocess.run(["scancel", self.jobid, "--clusters=all"])
         self.returncode = 1
 
 

@@ -4,6 +4,7 @@
 
 import io
 import os
+import tempfile
 from contextlib import contextmanager
 
 import hpc_connect
@@ -46,3 +47,21 @@ def test_basic():
     assert "export MY_VAR=SPAM" in text
     assert "printenv || true" in text
     assert "ls" in text
+
+
+def test_parse_script_args():
+    with tempfile.NamedTemporaryFile("w") as fh:
+        fh.write("""\
+#!/bin/sh
+#SBATCH --nodes=1
+#SBATCH --time=00:00:01
+#SBATCH --job-name=my-job
+#SBATCH --error=my-err.txt
+#SBATCH --output=my-out.txt
+#SBATCH --clusters=flight,eclipse
+export MY_VAR=SPAM
+printenv || true
+ls""")
+        fh.seek(0)
+        ns = hpc_connect.impl.slurm.SlurmProcess.parse_script_args(fh.name)
+        assert ns.clusters == "flight,eclipse"
