@@ -320,14 +320,6 @@ class FluxBackend(HPCBackend):
         gpus: list[int] | None = None,
         **kwargs: Any,
     ) -> FluxMultiProcess:
-        if not os.getenv("HPC_CONNECT_ENABLE_FLUX_SUBMITN"):
-            raise NotImplementedError(
-                "canary seems to lock up when running submitn for all but trivial tests. "
-                "This will need to be debugged and fixed. The problem may be in our use of "
-                "JobspecV1.from_command *or* it could be an issue with file locking in "
-                "canary on some file systems.  Set the HPC_CONNECT_ENABLE_FLUX_SUBMITN "
-                "environment variable to bypass this check"
-            )
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
