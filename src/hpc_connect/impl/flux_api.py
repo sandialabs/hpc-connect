@@ -201,16 +201,26 @@ class FluxBackend(HPCBackend):
         copies of ``script`` that flux should launch.
 
         """
-        kwds: dict[str, Any] = {"command": [script], "num_tasks": 1, "exclusive": exclusive}
+        kwds: dict[str, Any] = {"command": [script], "exclusive": exclusive}
         if nodes is not None:
-            kwds["num_nodes"] = nodes
             if cpus is None:
-                cpus = nodes * self.config.cpus_per_node
+                cpus = nodes*self.config.cpus_per_node
             if gpus is None:
-                gpus = nodes * self.config.gpus_per_node
-        kwds["cores_per_task"] = cpus or 1
-        kwds["gpus_per_task"] = gpus or 0
-        jobspec = JobspecV1.from_command(**kwds)
+                gpus = nodes*self.config.gpus_per_node
+        else:
+            cpus = cpus or 1
+            gpus = gpus or 0
+            nodes = self.config.nodes_required(max_cpus=cpus, max_gpus=gpus)
+        
+        kwds["num_nodes"] = nodes
+        kwds["num_slots"] = nodes
+        if nodes > 1:
+            cpus = max(1, math.ceil(cpus / nodes))
+            gpus = max(0, math.ceil(gpus / nodes))
+            
+        kwds["cores_per_slot"] = cpus
+        kwds["gpus_per_slot"] = gpus
+        jobspec = JobspecV1.from_nest_command(**kwds)
         jobspec.setattr("system.job.name", name)
         jobspec.stdout = output or "job-ouput.txt"
         jobspec.stderr = error or output or "job-error.txt"
