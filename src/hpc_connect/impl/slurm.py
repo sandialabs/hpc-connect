@@ -26,7 +26,7 @@ class SlurmProcess(HPCProcess):
         self.jobid = self.submit(script)
         self.clusters: str | None = None
         f = os.path.basename(script)
-        logger.info(f"Submitted batch script {f} with jobid={self.jobid}")
+        logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
     def submit(self, script) -> str:
         sbatch = shutil.which("sbatch")
@@ -44,7 +44,7 @@ class SlurmProcess(HPCProcess):
             parts = result[i:].split()
             if len(parts) > 3 and parts[3]:
                 return parts[3]
-        logger.error("Failed to find jobid!\n    The following output was received from {sbatch}:")
+        logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
         for line in result.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
         raise HPCSubmissionFailedError

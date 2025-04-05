@@ -49,7 +49,7 @@ class FluxProcess(HPCProcess):
         def set_jobid(fut: FluxExecutorFuture):
             try:
                 self.jobid = fut.jobid()
-                logger.info(f"submitted job {self.jobid} for {self.name}")
+                logger.debug(f"submitted job {self.jobid} for {self.name}")
             except CancelledError:
                 self.returncode = 1
             except Exception as e:
