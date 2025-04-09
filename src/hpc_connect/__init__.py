@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import importlib.metadata as im
 import logging
 import os
@@ -17,9 +21,45 @@ logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
 ch.setFormatter(logging.Formatter("==> hpc_connect: %(message)s"))
 logger.addHandler(ch)
-if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
-    ch.setLevel(logging.DEBUG)
-    logger.setLevel(logging.DEBUG)
+
+
+loglevelmap: dict[str, int] = {
+    "CRITICAL": logging.CRITICAL,
+    "FATAL": logging.FATAL,
+    "ERROR": logging.ERROR,
+    "WARN": logging.WARNING,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+
+def set_debug(arg: bool) -> None:
+    if arg:
+        set_logging_level("DEBUG")
+
+
+def set_logging_level(levelname: str) -> None:
+    level = loglevelmap[levelname.upper()]
+    for h in logger.handlers:
+        h.setLevel(level)
+    logger.setLevel(level)
+
+
+def _initial_logging_setup(*, _ini_setup=[False]):
+    if _ini_setup[0]:
+        return
+    if levelname := os.getenv("HPC_CONNECT_LOG_LEVEL"):
+        set_logging_level(levelname)
+    else:
+        set_logging_level("INFO")
+    if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
+        set_logging_level("DEBUG")
+    _ini_setup[0] = True
+
+
+_initial_logging_setup()
 
 
 hookimpl = hookspec.hookimpl
@@ -30,30 +70,22 @@ for module in builtin:
 # manager.load_setuptools_entrypoints("hpc_connect")
 
 
-def set_debug(arg: bool) -> None:
-    if arg:
-        for h in logger.handlers:
-            h.setLevel(logging.DEBUG)
-        logger.setLevel(logging.DEBUG)
-
-
 def get_backend(arg: str) -> HPCBackend:
     for type in manager.hook.hpc_connect_backend():
         if type.matches(arg):
             return type()
-    else:
-        raise ValueError(f"invalid backend {arg!r}")
+    raise ValueError(f"No matching backend for {arg!r}")
 
 
 def backends() -> dict[str, Type[HPCBackend]]:
     return {_.name: _ for _ in manager.hook.hpc_connect_backend()}
 
 
-def launcher(name: str, config_file: str | None = None) -> HPCLauncher:
-    for launcher_t in manager.hook.hpc_connect_launcher():
-        if launcher := launcher_t.factory(name, config_file=config_file):
-            return launcher
-    raise ValueError(f"No matching launcher for {name!r}")
+def get_launcher(arg: str, config_file: str | None = None) -> HPCLauncher:
+    for type in manager.hook.hpc_connect_launcher():
+        if type.matches(arg):
+            return type(config_file=config_file)
+    raise ValueError(f"No matching launcher for {arg!r}")
 
 
 def launchers() -> dict[str, HPCLauncher]:

@@ -1,8 +1,6 @@
 {% extends "hpcc-submit.sh.in" %}
 {% block header %}
 #SBATCH --nodes={{ nodes }}
-#SBATCH --ntasks-per-node={{ cpus_per_node }}
-#SBATCH --cpus-per-task=1
 #SBATCH --time={{ hhmmss(time * 1.25, threshold=0) }}
 #SBATCH --job-name={{ name }}
 {% if error %}

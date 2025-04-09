@@ -1,17 +1,17 @@
 {% extends "hpcc-submit.sh.in" %}
 {% block header %}
-#FLUX --nodes={{ nodes }}
-#FLUX --nslots={{ tasks }}
-#FLUX --cores-per-slot={{ cpus_per_task }}
-#FLUX --gpus-per-slot={{ gpus_per_task }}
-#FLUX --time-limit={{ time }}
+#FLUX: --nodes={{ nodes }}
+#FLUX: --nslots={{ nslots }}
+#FLUX: --cores-per-slot={{ cores_per_slot }}
+#FLUX: --gpus-per-slot={{ gpus_per_slot }}
+#FLUX: --time-limit={{ time }}
 {% if output %}
-#FLUX --output={{ output }}
+#FLUX: --output={{ output }}
 {% endif %}
 {% if error %}
-#FLUX --error={{ error }}
+#FLUX: --error={{ error }}
 {% endif %}
 {% for arg in args %}
-#FLUX {{ arg }}
+#FLUX: {{ arg }}
 {% endfor %}
 {% endblock header %}

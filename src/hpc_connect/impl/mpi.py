@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import os
 import shutil
 
@@ -20,13 +24,13 @@ class MPILauncher(HPCLauncher):
     def executable(self) -> str:
         return self._executable
 
-    @classmethod
-    def factory(self, arg: str, config_file: str | None = None) -> "MPILauncher | None":
+    @staticmethod
+    def matches(arg: str) -> bool:
         if arg == "mpi":
-            return MPILauncher()
+            return True
         elif os.path.basename(arg) in ("mpiexec", "mpirun"):
-            return MPILauncher(arg)
-        return None
+            return True
+        return False
 
 
 @hookimpl

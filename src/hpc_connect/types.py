@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import abc
 import argparse
 import getpass
@@ -15,7 +19,6 @@ from typing import TextIO
 
 from .util import cpu_count
 from .util import make_template_env
-from .util import partition
 from .util import sanitize_path
 from .util import set_executable
 from .util import time_in_seconds
@@ -37,50 +40,50 @@ class HPCProcess(Protocol):
         raise NotImplementedError
 
 
-class Config:
+class HPCConfig:
     def __init__(self) -> None:
-        self._cpus_per_node: int = cpu_count()
-        self._gpus_per_node: int = 0
-        self._node_count: int = 1
-        self.set_from_environment()
+        self.resources: list[dict] = [
+            {
+                "name": "node",
+                "type": None,
+                "count": 1,
+                "partition": None,
+                "resources": [
+                    {
+                        "name": "cpu",
+                        "type": None,
+                        "count": cpu_count(),
+                    },
+                ],
+            }
+        ]
 
-    def set_from_environment(self) -> None:
-        if val := os.getenv("HPC_CONNECT_CPUS_PER_NODE"):
-            self.cpus_per_node = int(val)
-        if val := os.getenv("HPC_CONNECT_GPUS_PER_NODE"):
-            self.gpus_per_node = int(val)
-        if val := os.getenv("HPC_CONNECT_NODE_COUNT"):
-            self.node_count = int(val)
+    def set_resource_spec(self, arg: list[dict]) -> None:
+        self.resources.clear()
+        self.resources.extend(arg)
+
+    def get_per_node(self, name: str) -> int | None:
+        for resource in self.resources:
+            if resource["name"] == "node":
+                for child in resource["resources"]:
+                    if child["name"] == name:
+                        return child["count"]
+        return None
 
     @property
     def cpus_per_node(self) -> int:
-        return self._cpus_per_node
-
-    @cpus_per_node.setter
-    def cpus_per_node(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"cpus_per_node must be a positive integer ({arg} < 0)")
-        self._cpus_per_node = int(arg)
+        return self.get_per_node("cpu") or 1
 
     @property
     def gpus_per_node(self) -> int:
-        return self._gpus_per_node
-
-    @gpus_per_node.setter
-    def gpus_per_node(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"gpus_per_node must be a positive integer ({arg} < 0)")
-        self._gpus_per_node = int(arg)
+        return self.get_per_node("gpu") or 0
 
     @property
     def node_count(self) -> int:
-        return self._node_count
-
-    @node_count.setter
-    def node_count(self, arg: int) -> None:
-        if arg < 0:
-            raise ValueError(f"node_count must be a positive integer ({arg} < 0)")
-        self._node_count = int(arg)
+        for resource in self.resources:
+            if resource["name"] == "node":
+                return resource["count"]
+        raise ValueError("Unable to determine node count")
 
     @property
     def cpu_count(self) -> int:
@@ -90,13 +93,12 @@ class Config:
     def gpu_count(self) -> int:
         return self.node_count * self.gpus_per_node
 
-    def nodes_required(self, tasks: int) -> int:
+    def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
-        tasks = tasks or 1
-        if tasks < self.cpus_per_node:
-            return 1
-        nodes = int(math.ceil(tasks / self.cpus_per_node))
+        nodes = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
+        if self.gpus_per_node:
+            nodes = max(nodes, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
         return nodes
 
 
@@ -104,11 +106,11 @@ class HPCBackend(ABC):
     name = "<backend>"
 
     def __init__(self) -> None:
-        self.config = Config()
+        self.config = HPCConfig()
 
     @staticmethod
     @abstractmethod
-    def matches(name) -> bool: ...
+    def matches(name: str) -> bool: ...
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -130,12 +132,10 @@ class HPCBackend(ABC):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> HPCProcess: ...
 
     def submitn(
@@ -148,12 +148,10 @@ class HPCBackend(ABC):
         variables: list[dict[str, str | None]] | None = None,
         output: list[str] | None = None,
         error: list[str] | None = None,
-        #
-        tasks: list[int] | None = None,
-        cpus_per_task: list[int] | None = None,
-        gpus_per_task: list[int] | None = None,
-        tasks_per_node: list[int] | None = None,
         nodes: list[int] | None = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        **kwargs: Any,
     ) -> HPCProcess:
         raise NotImplementedError(f"{self.name} backend has not implemented submitn")
 
@@ -172,11 +170,9 @@ class HPCBackend(ABC):
         output: str | None = None,
         error: str | None = None,
         #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
     ) -> str | None:
         template_dirs = {str(importlib.resources.files("hpc_connect").joinpath("templates"))}
         data = self.format_submission_data(
@@ -187,11 +183,9 @@ class HPCBackend(ABC):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task or 1,
-            gpus_per_task=gpus_per_task or 0,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         template = self.submission_template
         if not os.path.exists(template):
@@ -221,24 +215,20 @@ class HPCBackend(ABC):
         output: str | None = None,
         error: str | None = None,
         #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
     ) -> dict[str, Any]:
-        tasks = tasks or 1
-        if nodes is None:
-            nodes = self.config.nodes_required(tasks)
+        if nodes is None and cpus is None:
+            raise ValueError("must specify at least one of nodes and cpus")
         output = output or "stdout.txt"
         data: dict[str, Any] = {
             "name": name,
             "time": qtime or 1.0,
             "args": submit_flags or [],
             "nodes": nodes,
-            "tasks": tasks,
-            "cpus_per_task": cpus_per_task or 1,
-            "gpus_per_task": gpus_per_task or 0,
+            "cpus": cpus,
+            "gpus": gpus,
             "cpus_per_node": self.config.cpus_per_node,
             "gpus_per_node": self.config.gpus_per_node,
             "user": getpass.getuser(),
@@ -255,55 +245,68 @@ class LaunchParser(argparse.ArgumentParser):
     def __init__(self, **kwargs):
         kwargs["add_help"] = False
         super().__init__(**kwargs)
-        self.add_argument("--backend", help="Use this launcher backend [default: mpiexec]")
-        self.add_argument("--config-file", help="Use this configuration file")
+        self.add_argument("--backend", help="Use this launcher backend [default: mpi]")
+        self.add_argument("--config-file", help="Use this configuration file [default: None]")
+        self.add_argument(
+            "args", metavar="...", nargs=argparse.REMAINDER, help="Arguments to pass to launcher"
+        )
 
-    def preparse(
-        self, argv: list[str] | None = None
-    ) -> tuple[argparse.Namespace, list[str], list[str]]:
-        l_opts, g_opts = partition(argv or sys.argv[1:], lambda x: x.startswith("-Wl,"))
-        args, l_opts = self.parse_known_args([_[4:] for _ in l_opts])
-        return args, l_opts, g_opts
+    def preparse(self, argv: list[str] | None = None) -> tuple[argparse.Namespace, list[str]]:
+        namespace = argparse.Namespace(help=False, backend=None, config_file=None)
+        remainder: list[str] = []
+        iter_argv = iter(argv or sys.argv[1:])
+        while True:
+            try:
+                arg = next(iter_argv)
+            except StopIteration:
+                break
+            if arg.startswith(("--backend=", "--config-file=")):
+                opt, _, value = arg.partition("=")
+                setattr(namespace, opt[2:].replace("-", "_"), value)
+            elif arg in ("--backend", "--config-file"):
+                setattr(namespace, arg[2:].replace("-", "_"), next(iter_argv))
+            elif arg in ("-h", "--help"):
+                namespace.help = True
+            else:
+                remainder.append(arg)
+                remainder.extend(iter_argv)
+                break
+        return namespace, remainder
 
 
 class LaunchArgs:
     def __init__(self) -> None:
         self.specs: list[list[str]] = []
         self.processes: list[int | None] = []
-        self.help: bool = False
 
     def add(self, spec: list[str], processes: int | None) -> None:
         self.specs.append(list(spec))
         self.processes.append(processes)
 
-    def empty(self) -> bool:
-        return len(self.specs) == 0
-
 
 class HPCLauncher(abc.ABC):
     name = "<launcher>"
+    numproc_flags = ("-n", "--n", "-np", "--np", "-c")
+    numproc_long_flags = ("--n=", "--np=")
 
-    def __init__(self, *hints: str, config_file: str | None = None) -> None:
-        pass
+    def __init__(self, *hints: str, config_file: str | None = None) -> None: ...
+
+    @staticmethod
+    @abstractmethod
+    def matches(name: str) -> bool: ...
 
     @property
     @abc.abstractmethod
     def executable(self) -> str: ...
 
-    @classmethod
-    @abc.abstractmethod
-    def factory(self, arg: str, config_file: str | None = None) -> "HPCLauncher | None": ...
-
     def setup_parser(self, parser: LaunchParser) -> None:
-        pass
-
-    def set_main_options(self, args: argparse.Namespace) -> None:
         pass
 
     def default_args(self) -> list[str]:
         return []
 
     def inspect_args(self, args: list[str]) -> LaunchArgs:
+        """Inspect arguments to launcher to infer number of processors requested"""
         la = LaunchArgs()
 
         spec: list[str] = []
@@ -319,16 +322,14 @@ class HPCLauncher(abc.ABC):
             if shutil.which(arg):
                 command_seen = True
             if not command_seen:
-                if la.empty() and arg in ("-h", "--help"):
-                    la.help = True
-                if arg in ("-n", "--n", "-np", "--np", "-c"):
+                if arg in self.numproc_flags:
                     s = next(iter_args)
                     processes = int(s)
                     spec.extend([arg, s])
-                elif arg.startswith(("--n=", "--np=")):
-                    arg, _, s = arg.partition("=")
+                elif arg.startswith(self.numproc_long_flags):
+                    _, _, s = arg.partition("=")
                     processes = int(s)
-                    spec.extend([arg, s])
+                    spec.append(arg)
                 else:
                     spec.append(arg)
             elif arg == ":":

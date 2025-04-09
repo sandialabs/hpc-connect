@@ -15,3 +15,7 @@ docs/build
 .DS_Store
 
 *.orig
+
+# spack develop build artifacts
+build/
+build-linux*

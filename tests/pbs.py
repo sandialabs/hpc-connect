@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import io
 import os
 from contextlib import contextmanager
@@ -25,10 +29,7 @@ def test_basic():
             "my-job",
             ["ls"],
             fh,
-            tasks=1,
-            cpus_per_task=1,
-            gpus_per_task=0,
-            tasks_per_node=backend.config.cpus_per_node,
+            cpus=1,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",

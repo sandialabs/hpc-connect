@@ -1,9 +1,16 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
+import argparse
 import importlib.resources
+import json
 import logging
-import math
 import os
+import re
 import shutil
 import subprocess
+from typing import Any
 
 from ..hookspec import hookimpl
 from ..types import HPCBackend
@@ -17,12 +24,17 @@ class SlurmProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
         self.jobid = self.submit(script)
-        logger.debug(f"Submitted batch with jobid={self.jobid}")
+        self.clusters: str | None = None
+        f = os.path.basename(script)
+        logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
     def submit(self, script) -> str:
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
+        ns = self.parse_script_args(script)
+        if ns.clusters:
+            self.clusters = ns.clusters
         args = [sbatch, script]
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
@@ -32,11 +44,22 @@ class SlurmProcess(HPCProcess):
             parts = result[i:].split()
             if len(parts) > 3 and parts[3]:
                 return parts[3]
-        logger.error("Failed to find jobid!")
-        logger.error(f"    The following output was received from {sbatch}:")
+        logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
         for line in result.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
         raise HPCSubmissionFailedError
+
+    @staticmethod
+    def parse_script_args(script: str) -> argparse.Namespace:
+        args = []
+        with open(script, "r") as file:
+            for line in file:
+                if match := re.search("^#SBATCH\s+(.*)$", line):
+                    args.append(match.group(1).strip())
+        p = argparse.ArgumentParser()
+        p.add_argument("-M", "--cluster", "--clusters", dest="clusters")
+        ns, _ = p.parse_known_args(args)
+        return ns
 
     @property
     def returncode(self) -> int | None:
@@ -50,7 +73,10 @@ class SlurmProcess(HPCProcess):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise RuntimeError("queue not found on PATH")
-        out = subprocess.check_output([squeue, "--noheader", "-o", "%i %t"], encoding="utf-8")
+        args = [squeue, "--noheader", "-o", "%i %t"]
+        if self.clusters:
+            args.append(f"--clusters={self.clusters}")
+        out = subprocess.check_output(args, encoding="utf-8")
         lines = [line.strip() for line in out.splitlines() if line.split()]
         for line in lines:
             # a line should be something like "16004759 PD"
@@ -66,8 +92,8 @@ class SlurmProcess(HPCProcess):
         return self.returncode
 
     def cancel(self) -> None:
-        logger.debug(f"cancelling batch {self.jobid}")
-        subprocess.run(["scancel", self.jobid, "--cluster=all"])
+        logger.warning(f"cancelling slurm job {self.jobid}")
+        subprocess.run(["scancel", self.jobid, "--clusters=all"])
         self.returncode = 1
 
 
@@ -88,22 +114,10 @@ class SlurmBackend(HPCBackend):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise ValueError("queue not found on PATH")
-        if val := os.getenv("SLURM_NTASKS_PER_NODE"):
-            # must be on an allocated node
-            self.config.cpus_per_node = int(val)  # assumes 1 task per cpu
-            self.config.node_count = int(os.environ["SLURM_NNODES"])
-            gpu_count = int(os.environ.get("SLURM_GPUS", 0))
-            self.config.gpus_per_node = math.ceil(gpu_count / self.config.node_count)
+        if sinfo := read_einfo():
+            self.config.set_resource_spec([sinfo])
         elif sinfo := read_sinfo():
-            cores_per_socket: int = sinfo["cores_per_socket"]
-            gpus_per_socket: int = sinfo.get("gpus_per_socket", 0)
-            sockets_per_node: int = sinfo["sockets_per_node"]
-            if "HPC_CONNNECT_CPUS_PER_NODE" not in os.environ:
-                self.config.cpus_per_node = cores_per_socket * sockets_per_node
-            if "HPC_CONNNECT_GPUS_PER_NODE" not in os.environ:
-                self.config.gpus_per_node = gpus_per_socket * sockets_per_node
-            if "HPC_CONNECT_NODE_COUNT" not in os.environ:
-                self.config.node_count = sinfo["node_count"]
+            self.config.set_resource_spec([sinfo])
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
@@ -123,13 +137,12 @@ class SlurmBackend(HPCBackend):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> SlurmProcess:
+        cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,
             args,
@@ -139,17 +152,15 @@ class SlurmBackend(HPCBackend):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         assert script is not None
         return SlurmProcess(script)
 
 
-def read_sinfo() -> dict[str, int] | None:
+def read_sinfo() -> dict[str, Any] | None:
     if sinfo := shutil.which("sinfo"):
         opts = [
             "%X",  # Number of sockets per node
@@ -157,6 +168,7 @@ def read_sinfo() -> dict[str, int] | None:
             "%Z",  # Number of threads per core
             "%c",  # Number of CPUs per node
             "%D",  # Number of nodes
+            "%G",  # General resources
         ]
         format = " ".join(opts)
         args = [sinfo, "-o", format]
@@ -171,24 +183,56 @@ def read_sinfo() -> dict[str, int] | None:
                     continue
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
-                spn, cps, _, cpn, nc = [integer(_) for _ in parts]
+                spn, cps, _, cpn, nc, *gres = [safe_loads(_) for _ in parts]
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{output}")
-            info = {
-                "sockets_per_node": spn,
-                "cores_per_socket": cps,
-                "cpu_count": spn * cps * nc,
-                "node_count": nc,
-            }
+            info = {"name": "node", "type": None, "count": nc}
+            resources = info.setdefault("resources", [])
+            resources.append({"name": "socket", "type": None, "count": spn})
+            resources.append({"name": "cpu", "type": None, "count": cps * spn})
+            for res in gres:
+                if not res:
+                    continue
+                parts = res.split(":")
+                resource: dict[str, Any] = {
+                    "name": parts[0],
+                    "type": None,
+                    "count": safe_loads(parts[-1]),
+                }
+                if len(parts) > 2:
+                    resource["type"] = ":".join(parts[1:-1])
+                resources.append(resource)
             return info
     return None
 
 
-def integer(arg: str) -> int:
+def read_einfo() -> dict[str, Any] | None:
+    """Read information from slurm allocation environment"""
+    if "SLURM_JOBID" not in os.environ:
+        return None
+    node_count = safe_loads(os.environ["SLURM_JOB_NUM_NODES"])
+    info = {"name": "node", "type": None, "count": node_count}
+    resources = info.setdefault("resources", [])
+
+    cpus_per_node = safe_loads(os.environ["SLURM_CPUS_ON_NODE"])
+    resources.append({"name": "cpu", "type": None, "count": cpus_per_node})
+
+    gpus_per_node = safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0
+    resources.append({"name": "gpu", "type": None, "count": gpus_per_node})
+
+    return info
+
+
+def safe_loads(arg: str) -> Any:
+    if arg == "(null)":
+        return None
     if arg.endswith("+"):
-        return int(arg[:-1])
-    return int(arg)
+        return safe_loads(arg[:-1])
+    try:
+        return json.loads(arg)
+    except json.JSONDecodeError:
+        return arg
 
 
 @hookimpl

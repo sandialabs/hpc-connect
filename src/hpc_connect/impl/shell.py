@@ -1,8 +1,14 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import importlib
+import logging
 import os
 import shutil
 import subprocess
 import weakref
+from typing import Any
 from typing import TextIO
 
 import psutil
@@ -11,6 +17,8 @@ from ..hookspec import hookimpl
 from ..types import HPCBackend
 from ..types import HPCProcess
 from ..util import time_in_seconds
+
+logger = logging.getLogger("hpc_connect")
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -57,6 +65,7 @@ class ShellProcess(HPCProcess):
 
     def cancel(self) -> None:
         """Kill a process tree (including grandchildren)"""
+        logger.warning(f"cancelling shell batch with pid {self.proc.pid}")
         try:
             parent = psutil.Process(self.proc.pid)
         except psutil.NoSuchProcess:
@@ -104,13 +113,12 @@ class ShellBackend(HPCBackend):
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
         nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        **kwargs: Any,
     ) -> HPCProcess:
+        cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,
             args,
@@ -120,11 +128,9 @@ class ShellBackend(HPCBackend):
             variables=variables,
             output=output,
             error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
             nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
         )
         assert script is not None
         return ShellProcess(script, output=output, error=error)

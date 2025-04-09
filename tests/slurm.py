@@ -1,5 +1,10 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import io
 import os
+import tempfile
 from contextlib import contextmanager
 
 import hpc_connect
@@ -25,10 +30,7 @@ def test_basic():
             "my-job",
             ["ls"],
             fh,
-            tasks=1,
-            cpus_per_task=1,
-            gpus_per_task=0,
-            tasks_per_node=backend.config.cpus_per_node,
+            cpus=1,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",
@@ -36,11 +38,8 @@ def test_basic():
             variables={"MY_VAR": "SPAM"},
         )
         text = fh.getvalue()
-    print(text)
     assert "#!/bin/sh" in text
     assert "#SBATCH --nodes=1" in text
-    assert f"#SBATCH --ntasks-per-node={backend.config.cpus_per_node}" in text
-    assert "#SBATCH --cpus-per-task=1" in text
     assert "#SBATCH --time=00:00:01" in text
     assert "#SBATCH --job-name=my-job" in text
     assert "#SBATCH --error=my-err.txt" in text
@@ -48,3 +47,21 @@ def test_basic():
     assert "export MY_VAR=SPAM" in text
     assert "printenv || true" in text
     assert "ls" in text
+
+
+def test_parse_script_args():
+    with tempfile.NamedTemporaryFile("w") as fh:
+        fh.write("""\
+#!/bin/sh
+#SBATCH --nodes=1
+#SBATCH --time=00:00:01
+#SBATCH --job-name=my-job
+#SBATCH --error=my-err.txt
+#SBATCH --output=my-out.txt
+#SBATCH --clusters=flight,eclipse
+export MY_VAR=SPAM
+printenv || true
+ls""")
+        fh.seek(0)
+        ns = hpc_connect.impl.slurm.SlurmProcess.parse_script_args(fh.name)
+        assert ns.clusters == "flight,eclipse"

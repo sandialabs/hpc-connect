@@ -1,9 +1,14 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+
 import importlib.resources
 import logging
 import math
 import multiprocessing
 import multiprocessing.synchronize
 import os
+import subprocess
 import time
 from concurrent.futures import CancelledError
 from typing import Any
@@ -19,6 +24,7 @@ from ..hookspec import hookimpl
 from ..types import HPCBackend
 from ..types import HPCProcess
 from ..types import HPCSubmissionFailedError
+from ..util import time_in_seconds
 
 logger = logging.getLogger("hpc_connect")
 
@@ -43,7 +49,7 @@ class FluxProcess(HPCProcess):
         def set_jobid(fut: FluxExecutorFuture):
             try:
                 self.jobid = fut.jobid()
-                logger.info(f"submitted job {self.jobid} for {self.name}")
+                logger.debug(f"submitted job {self.jobid} for {self.name}")
             except CancelledError:
                 self.returncode = 1
             except Exception as e:
@@ -64,13 +70,13 @@ class FluxProcess(HPCProcess):
         return self.returncode
 
     def cancel(self) -> None:
-        logger.info(f"Canceling job {self.jobid}.")
+        logger.warning(f"Canceling flux job {self.jobid}")
         try:
             flux.job.cancel(self.fh, self.jobid)
         except OSError:
-            logger.debug(f"Job {self.jobid} is inactive, cannot cancel.")
+            logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
         except Exception:
-            logger.error(f"Failed to cancel job {self.jobid}.")
+            logger.error(f"Failed to cancel job {self.jobid}")
         self.returncode = 1
 
 
@@ -114,6 +120,40 @@ class FluxMultiProcess(HPCProcess):
         return max(stat)  # type: ignore
 
 
+def parse_resource_info(output: str) -> dict[str, int] | None:
+    """Parses the output from `flux resource info` and returns a dictionary of resource values.
+
+    The expected output format is "1 Nodes, 32 Cores, 1 GPUs".
+
+    Returns:
+        dict: A dictionary containing the resource values with the following keys:
+            - nodes (int): The number of nodes.
+            - cpu (int): The number of CPU cores.
+            - gpu (int): The number of GPU devices.
+    """
+    parts = output.split(", ")
+    vals = [int(p.split()[0]) for p in parts]
+    if len(vals) != 3:
+        return None
+    return {"nodes": vals[0], "cpu": vals[1], "gpu": vals[2]}
+
+
+def read_resource_info() -> dict[str, Any] | None:
+    try:
+        output = subprocess.check_output(["flux", "resource", "info"], encoding="utf-8")
+    except subprocess.CalledProcessError:
+        return None
+    if totals := parse_resource_info(output):
+        # assume homogenous resources
+        nodes = totals["nodes"]
+        info: dict = {"name": "node", "type": None, "count": nodes}
+        resources = info.setdefault("resources", [])
+        resources.append({"name": "cpu", "type": None, "count": int(totals["cpu"] / nodes)})
+        resources.append({"name": "gpu", "type": None, "count": int(totals["gpu"] / nodes)})
+        return info
+    return None
+
+
 class FluxBackend(HPCBackend):
     """Setup and submit jobs to the Flux scheduler"""
 
@@ -124,9 +164,8 @@ class FluxBackend(HPCBackend):
         super().__init__()
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
-
-    #    def __del__(self) -> None:
-    #        self.shutdown()
+        if info := read_resource_info():
+            self.config.set_resource_spec([info])
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -142,58 +181,6 @@ class FluxBackend(HPCBackend):
             return os.environ["HPCC_FLUX_SUBMIT_TEMPLATE"]
         return str(importlib.resources.files("hpc_connect").joinpath("templates/flux.sh.in"))
 
-    def submit(
-        self,
-        name: str,
-        args: list[str],
-        scriptname: str | None = None,
-        qtime: float | None = None,
-        submit_flags: list[str] | None = None,
-        variables: dict[str, str | None] | None = None,
-        output: str | None = None,
-        error: str | None = None,
-        #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
-        nodes: int | None = None,
-        exclusive: bool = True,
-    ) -> FluxProcess:
-        # the Flux submission script is not used, but we write it for inspection, if needed
-        script = self.write_submission_script(
-            name,
-            args,
-            scriptname,
-            qtime=qtime,
-            submit_flags=submit_flags,
-            variables=variables,
-            output=output,
-            error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
-            nodes=nodes,
-        )
-        assert script is not None
-        jobspec = self.create_jobspec(
-            name,
-            script,
-            qtime=qtime,
-            variables=variables,
-            output=output,
-            error=error,
-            tasks=tasks,
-            cpus_per_task=cpus_per_task,
-            gpus_per_task=gpus_per_task,
-            tasks_per_node=tasks_per_node,
-            nodes=nodes,
-            exclusive=exclusive,
-        )
-        fut = self.flux.submit(jobspec)  # type: ignore
-        return FluxProcess(name, future=fut)
-
     def create_jobspec(
         self,
         name: str,
@@ -203,10 +190,8 @@ class FluxBackend(HPCBackend):
         output: str | None = None,
         error: str | None = None,
         #
-        tasks: int | None = None,
-        cpus_per_task: int | None = None,
-        gpus_per_task: int | None = None,
-        tasks_per_node: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
         nodes: int | None = None,
         exclusive: bool = True,
     ) -> Jobspec:
@@ -216,17 +201,16 @@ class FluxBackend(HPCBackend):
         copies of ``script`` that flux should launch.
 
         """
-        tasks = tasks or 1
-        cores_per_task = tasks * (cpus_per_task or 1)
-        gpus_per_task = tasks * (gpus_per_task or 0)
-        jobspec = JobspecV1.from_command(
-            command=[script],
-            num_tasks=1,
-            num_nodes=nodes or self.config.nodes_required(cores_per_task),
-            cores_per_task=cores_per_task,
-            gpus_per_task=gpus_per_task,
-            exclusive=exclusive,
-        )
+        kwds: dict[str, Any] = {"command": [script], "num_tasks": 1, "exclusive": exclusive}
+        if nodes is not None:
+            kwds["num_nodes"] = nodes
+            if cpus is None:
+                cpus = nodes * self.config.cpus_per_node
+            if gpus is None:
+                gpus = nodes * self.config.gpus_per_node
+        kwds["cores_per_task"] = cpus or 1
+        kwds["gpus_per_task"] = gpus or 0
+        jobspec = JobspecV1.from_command(**kwds)
         jobspec.setattr("system.job.name", name)
         jobspec.stdout = output or "job-ouput.txt"
         jobspec.stderr = error or output or "job-error.txt"
@@ -252,6 +236,52 @@ class FluxBackend(HPCBackend):
                 self.flux.shutdown(wait=False, cancel_futures=True)
                 self.flux = None
 
+    def submit(
+        self,
+        name: str,
+        args: list[str],
+        scriptname: str | None = None,
+        qtime: float | None = None,
+        submit_flags: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        exclusive: bool = True,
+        **kwargs: Any,
+    ) -> FluxProcess:
+        cpus = cpus or kwargs.get("tasks")
+        script = self.write_submission_script(
+            name,
+            args,
+            scriptname,
+            qtime=qtime,
+            submit_flags=submit_flags,
+            variables=variables,
+            output=output,
+            error=error,
+            nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
+        )
+        assert script is not None
+        jobspec = self.create_jobspec(
+            name,
+            script,
+            qtime=qtime,
+            variables=variables,
+            output=output,
+            error=error,
+            nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
+            exclusive=exclusive,
+        )
+        fut = self.flux.submit(jobspec)  # type: ignore
+        return FluxProcess(name, future=fut)
+
     def submitn(
         self,
         name: list[str],
@@ -262,12 +292,10 @@ class FluxBackend(HPCBackend):
         variables: list[dict[str, str | None]] | None = None,
         output: list[str] | None = None,
         error: list[str] | None = None,
-        #
-        tasks: list[int] | None = None,
-        cpus_per_task: list[int] | None = None,
-        gpus_per_task: list[int] | None = None,
-        tasks_per_node: list[int] | None = None,
         nodes: list[int] | None = None,
+        cpus: list[int] | None = None,
+        gpus: list[int] | None = None,
+        **kwargs: Any,
     ) -> FluxMultiProcess:
         if not os.getenv("HPC_CONNECT_ENABLE_FLUX_SUBMITN"):
             raise NotImplementedError(
@@ -277,8 +305,12 @@ class FluxBackend(HPCBackend):
                 "canary on some file systems.  Set the HPC_CONNECT_ENABLE_FLUX_SUBMITN "
                 "environment variable to bypass this check"
             )
+        cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
+        submission_delay: float = 0.0
+        if t := os.getenv("HPC_CONNECT_FLUX_SUBMITN_DELAY"):
+            submission_delay = time_in_seconds(t)
         with self.lock:
             for i in range(len(name)):
                 proc = self.submit(
@@ -289,16 +321,47 @@ class FluxBackend(HPCBackend):
                     submit_flags=select(submit_flags, i),
                     variables=select(variables, i),
                     output=select(output, i, f"flux-out-{i}"),
-                    error=select(output, i, f"flux-err-{i}"),
-                    tasks=select(tasks, i),
-                    cpus_per_task=select(cpus_per_task, i, 1),
-                    gpus_per_task=select(gpus_per_task, i, 0),
-                    tasks_per_node=select(tasks_per_node, i),
+                    error=select(error, i, f"flux-err-{i}"),
                     nodes=select(nodes, i),
+                    cpus=select(cpus, i),
+                    gpus=select(gpus, i),
                     exclusive=False,
                 )
+                if submission_delay:
+                    time.sleep(submission_delay)
                 procs.append(proc)
         return procs
+
+    def format_submission_data(
+        self,
+        name: str,
+        args: list[str],
+        qtime: float | None = None,
+        submit_flags: list[str] | None = None,
+        variables: dict[str, str | None] | None = None,
+        output: str | None = None,
+        error: str | None = None,
+        #
+        nodes: int | None = None,
+        cpus: int | None = None,
+        gpus: int | None = None,
+    ) -> dict[str, Any]:
+        data = super().format_submission_data(
+            name,
+            args,
+            qtime=qtime,
+            submit_flags=submit_flags,
+            variables=variables,
+            output=output,
+            error=error,
+            nodes=nodes,
+            cpus=cpus,
+            gpus=gpus,
+        )
+        data["nslots"] = data["cpus"]
+        data["cores_per_slot"] = 1
+        data["gpus_per_slot"] = 1 if gpus else 0
+        return data
 
 
 def select(arg: Any, i: int, default: Any = None) -> Any:
