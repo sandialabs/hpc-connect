@@ -5,6 +5,9 @@
 import importlib.metadata as im
 import logging
 import os
+import subprocess
+from typing import Any
+from typing import Sequence
 from typing import Type
 
 import pluggy
@@ -12,10 +15,8 @@ import pluggy
 from . import hookspec
 from .impl import builtin
 from .types import HPCBackend
-from .types import HPCLauncher
 from .types import HPCProcess
 from .types import HPCSubmissionFailedError
-from .types import LaunchParser
 
 logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
@@ -81,12 +82,7 @@ def backends() -> dict[str, Type[HPCBackend]]:
     return {_.name: _ for _ in manager.hook.hpc_connect_backend()}
 
 
-def get_launcher(arg: str, config_file: str | None = None) -> HPCLauncher:
-    for type in manager.hook.hpc_connect_launcher():
-        if type.matches(arg):
-            return type(config_file=config_file)
-    raise ValueError(f"No matching launcher for {arg!r}")
+def launch(args: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    from . import _launch
 
-
-def launchers() -> dict[str, HPCLauncher]:
-    return {_.name: _ for _ in manager.hook.hpc_connect_launcher()}
+    return _launch.launch(args, **kwargs)
