@@ -1,7 +1,18 @@
 import os
+import yaml
 from contextlib import contextmanager
 import hpc_connect
 
+
+@contextmanager
+def working_dir(dirname):
+    save_cwd = os.getcwd()
+    os.makedirs(dirname, exist_ok=True)
+    try:
+        os.chdir(dirname)
+        yield
+    finally:
+        os.chdir(save_cwd)
 
 @contextmanager
 def envmods(**kwargs):
@@ -28,7 +39,38 @@ def test_envar_config(capfd):
         assert captured.out.strip() == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
 
 
+def test_file_config(tmpdir, capfd):
+
+    with working_dir(str(tmpdir)):
+        with open("hpc_connect.yaml", "w") as fh:
+            yaml.dump({"hpc_connect": {"launch": {"exec": "srun", "numproc_flag": "-np"}}}, fh)
+        with envmods(HPCC_CONFIG_FILE="hpc_connect.yaml"):
+            hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
+            captured = capfd.readouterr()
+            assert captured.out.strip() == f"{mock_bin}/srun -np 4 -flag file executable --option"
+
+        with open("hpc_connect.yaml", "w") as fh:
+            yaml.dump({"hpc_connect": {"launch": {"exec": "mpiexec", "numproc_flag": "-np", "default_flags": "--map-by ppr:%(np)d:cores"}}}, fh)
+        with envmods(HPCC_CONFIG_FILE="hpc_connect.yaml"):
+            hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
+            captured = capfd.readouterr()
+            assert captured.out.strip() == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+
+        with open("hpc_connect.yaml", "w") as fh:
+            yaml.dump({"hpc_connect": {"launch": {"exec": "mpiexec", "numproc_flag": "-np", "mappings": {"-flag": "-xflag"}}}}, fh)
+        with envmods(HPCC_CONFIG_FILE="hpc_connect.yaml"):
+            hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
+            captured = capfd.readouterr()
+            assert captured.out.strip() == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
+
+
 def test_default(capfd):
+    hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
+    captured = capfd.readouterr()
+    assert captured.out.strip() == f"{mock_bin}/mpiexec -n 4 -flag file executable --option"
+
+
+def test_mappings(capfd):
     hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
     captured = capfd.readouterr()
     assert captured.out.strip() == f"{mock_bin}/mpiexec -n 4 -flag file executable --option"

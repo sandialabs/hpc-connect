@@ -1,3 +1,4 @@
+import json
 import os
 import shlex
 import shutil
@@ -20,13 +21,19 @@ class LaunchArgs:
 
 class LaunchConfig:
     def __init__(self) -> None:
-        self.config: dict[str, Any] = {"exec": "mpiexec", "default_flags": [], "numproc_flag": "-n"}
-        if x := os.getenv("HPCC_LAUNCH_EXEC"):
-            self.config["exec"] = x
-        if x := os.getenv("HPCC_LAUNCH_DEFAULT_FLAGS"):
-            self.config["default_flags"] = shlex.split(x)
-        if x := os.getenv("HPCC_LAUNCH_NUMPROC_FLAG"):
-            self.config["numproc_flag"] = x
+        self.config: dict[str, Any] = {
+            "exec": "mpiexec",
+            "default_flags": [],
+            "numproc_flag": "-n",
+            "mappings": {},
+        }
+        self.read_from_file()
+        # Environment variables override file variables
+        self.read_from_env()
+        if "-n" not in self.config["mappings"]:
+            self.config["mappings"]["-n"] = self.config["numproc_flag"]
+
+    def read_from_file(self) -> None:
         file: str
         if "HPCC_CONFIG_FILE" in os.environ:
             file = os.environ["HPCC_CONFIG_FILE"]
@@ -34,16 +41,30 @@ class LaunchConfig:
             file = os.path.join(os.environ["XDG_CONFIG_HOME"], "hpc_connect/config.yaml")
         else:
             file = os.path.expanduser("~/.config/hpc_connect/config.yaml")
-        if os.path.exists(file):
-            with open(file) as fh:
-                config = yaml.safe_load(fh)
-            launch_config = config["hpc_connect"].get("launch", {})
-            if "exec" in launch_config:
-                self.config["exec"] = launch_config["exec"]
-            if "default_flags" in launch_config:
-                self.config["default_flags"] = shlex.split(launch_config["default_flags"])
-            if "numproc_flag" in launch_config:
-                self.config["numproc_flag"] = launch_config["numproc_flag"]
+        if not os.path.exists(file):
+            return
+
+        with open(file) as fh:
+            config = yaml.safe_load(fh)
+        fc = config["hpc_connect"].get("launch", {})
+        if "exec" in fc:
+            self.config["exec"] = fc["exec"]
+        if "default_flags" in fc:
+            self.config["default_flags"] = shlex.split(fc["default_flags"])
+        if "numproc_flag" in fc:
+            self.config["numproc_flag"] = fc["numproc_flag"]
+        if "mappings" in fc:
+            self.config["mappings"].update(fc["mappings"])
+
+    def read_from_env(self) -> None:
+        if x := os.getenv("HPCC_LAUNCH_EXEC"):
+            self.config["exec"] = x
+        if x := os.getenv("HPCC_LAUNCH_DEFAULT_FLAGS"):
+            self.config["default_flags"] = shlex.split(x)
+        if x := os.getenv("HPCC_LAUNCH_NUMPROC_FLAG"):
+            self.config["numproc_flag"] = x
+        if x := os.getenv("HPCC_LAUNCH_MAPPINGS"):
+            self.config["mappings"].update(json.loads(x))
 
     @property
     def exec(self) -> str:
@@ -59,6 +80,10 @@ class LaunchConfig:
     @property
     def numproc_flag(self) -> str:
         return self.config["numproc_flag"]
+
+    @property
+    def mappings(self) -> dict[str, str]:
+        return self.config["mappings"]
 
 
 def inspect_args(args: Sequence[str], config: LaunchConfig | None = None) -> LaunchArgs:
@@ -83,10 +108,12 @@ def inspect_args(args: Sequence[str], config: LaunchConfig | None = None) -> Lau
         if shutil.which(arg):
             command_seen = True
         if not command_seen:
+            if arg in config.mappings:
+                arg = config.mappings[arg]
             if arg in numproc_flags:
                 s = next(iter_args)
                 processes = int(s)
-                spec.extend([config.numproc_flag, s])
+                spec.extend([arg, s])
             elif arg.startswith(numproc_long_flags):
                 _, _, s = arg.partition("=")
                 processes = int(s)
