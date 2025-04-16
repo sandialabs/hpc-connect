@@ -74,3 +74,26 @@ def test_mappings(capfd):
     hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
     captured = capfd.readouterr()
     assert captured.out.strip() == f"{mock_bin}/mpiexec -n 4 -flag file executable --option"
+
+
+def test_mpmd():
+    from hpc_connect import _launch
+    config = _launch.LaunchConfig()
+    parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
+    argv = ["-n", "4", "-flag", "file", "ls", ":", "-n", "5", "ls", "-la"]
+    args = parser.parse_args(argv)
+    cmd = _launch.join_args(args, config=config)
+    assert " ".join(cmd) == f"{mock_bin}/mpiexec -n 4 -flag file ls : -n 5 ls -la"
+
+
+def test_srun_mpmd(tmpdir):
+    from hpc_connect import _launch
+    with working_dir(str(tmpdir)):
+        config = _launch.LaunchConfig(exec="srun")
+        parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
+        argv = ["-n", "4", "ls", ":", "-n", "5", "ls", "-la"]
+        args = parser.parse_args(argv)
+        cmd = _launch.join_args(args, config=config)
+        assert " ".join(cmd) == f"{mock_bin}/srun -n9 --multi-prog launch-multi-prog.conf"
+        with open("launch-multi-prog.conf") as fh:
+            assert fh.read().strip() == "0-3 ls\n4-8 ls -la"
