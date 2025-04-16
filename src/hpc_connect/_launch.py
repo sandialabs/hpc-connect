@@ -66,6 +66,11 @@ class ArgumentParser:
                 command_seen = True
             if not command_seen:
                 if new := self.mapped(arg):
+                    if new.startswith("SUPPRESS="):
+                        continue
+                    elif new == "SUPPRESS":
+                        next(iter_args)
+                        continue
                     arg = new
                 if arg == self.numproc_flag:
                     s = next(iter_args)
