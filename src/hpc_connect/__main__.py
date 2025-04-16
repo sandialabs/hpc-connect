@@ -1,7 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
+import argparse
 import os
 import sys
 
@@ -18,10 +18,18 @@ def main(argv: list[str] | None = None) -> int:
 
 def launch_main(argv: list[str] | None = None) -> None:
     from . import _launch
+    argv = argv or sys.argv[1:]
+    p = argparse.ArgumentParser(add_help=False, usage="%(prog)s [--help] ...", formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("-h", "--help", default=False, action="help", help="Show this message and exit.  Use -H to display the backends help page.")
+    p.epilog = _launch.__doc__
+    p.parse_known_args(argv)
+
+    if "-H" in argv:
+        argv[argv.index("-H")] = "-h"
 
     config = _launch.LaunchConfig()
     parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
-    args = parser.parse_args(argv or sys.argv[1:])
+    args = parser.parse_args(argv)
     cmd = _launch.join_args(args, config=config)
     os.execvp(cmd[0], cmd)
 

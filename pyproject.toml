@@ -4,7 +4,7 @@ dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2", "psutil", "yaml"]
+dependencies = ["pluggy", "jinja2", "psutil", "PyYAML"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch_main"

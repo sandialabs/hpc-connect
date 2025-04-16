@@ -1,3 +1,49 @@
+"""
+Overview
+--------
+
+`hpc-launch` is a lightweight and configurable wrapper around program launchers like `mpiexec` or
+`srun`. `hpc-launch` provides a single interface to multiple backends, simplifying the process of
+launching applications in an HPC environment. `hpc-launch` passes all command line arguments to the
+backend implementation.
+
+Configuration
+-------------
+
+The default behavior of `hpc-launch` can be changed by providing a yaml configuration file.  The
+default configuration is:
+
+.. code-block:: yaml
+
+   hpc_connect:
+     launch:
+       exec: mpiexec  # the launch backend.
+       numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
+       default_flags: []  # Flags to pass to the backend before any other arguments.
+       mappings: {}  # Mapping of flag provided on the command line to flag passed to the backend
+
+The configuration file is read at the first of:
+
+1. ./hpc_connect.yaml
+2. $HPCC_CONFIG_FILE
+3. $XDG_CONFIG_HOME/hpc_connect/config.yaml
+4. ~/.config/hpc_connect/config.yaml
+
+Configuration settings can also be modified through the following environment variables:
+
+* HPCC_LAUNCH_EXEC
+* HPCC_LAUNCH_NUMPROC_FLAG
+* HPCC_LAUNCH_DEFAULT_FLAGS
+* HPCC_LAUNCH_MAPPINGS
+
+Argument parsing
+----------------
+
+`hpc-launch` does not interpret or process any arguments passed to the backend, except for
+arguments matching the `numproc_flag` configuration, which specifies the flag that indicates the
+number of processors to be launched.
+
+"""
 import dataclasses
 import json
 import logging
@@ -116,7 +162,9 @@ class LaunchConfig:
 
     def read_from_file(self) -> None:
         file: str
-        if "HPCC_CONFIG_FILE" in os.environ:
+        if os.path.exists("hpc_connect.yaml"):
+            file = os.path.abspath("hpc_connect.yaml")
+        elif "HPCC_CONFIG_FILE" in os.environ:
             file = os.environ["HPCC_CONFIG_FILE"]
         elif "XDG_CONFIG_HOME" in os.environ:
             file = os.path.join(os.environ["XDG_CONFIG_HOME"], "hpc_connect/config.yaml")
