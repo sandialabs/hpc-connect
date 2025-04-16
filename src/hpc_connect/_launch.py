@@ -20,7 +20,7 @@ default configuration is:
        exec: mpiexec  # the launch backend.
        numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
        default_flags: []  # Flags to pass to the backend before any other arguments.
-       mappings: {}  # Mapping of flag provided on the command line to flag passed to the backend
+       mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
 
 The configuration file is read at the first of:
 
