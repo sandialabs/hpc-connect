@@ -89,9 +89,6 @@ class LaunchConfig:
 def inspect_args(args: Sequence[str], config: LaunchConfig | None = None) -> LaunchArgs:
     """Inspect arguments to launch to infer number of processors requested"""
     config = config or LaunchConfig()
-    numproc_flags = {"-n", "--n", "-np", "--np"}
-    numproc_flags.add(config.numproc_flag)
-    numproc_long_flags = ("--n=", "--np=")
 
     la = LaunchArgs()
 
@@ -110,14 +107,10 @@ def inspect_args(args: Sequence[str], config: LaunchConfig | None = None) -> Lau
         if not command_seen:
             if arg in config.mappings:
                 arg = config.mappings[arg]
-            if arg in numproc_flags:
+            if arg == config.numproc_flag:
                 s = next(iter_args)
                 processes = int(s)
                 spec.extend([arg, s])
-            elif arg.startswith(numproc_long_flags):
-                _, _, s = arg.partition("=")
-                processes = int(s)
-                spec.append(arg)
             else:
                 spec.append(arg)
         elif arg == ":":
