@@ -39,7 +39,16 @@ class ArgumentParser:
         self.mappings: dict[str, str] = mappings or {}
         self.numproc_flag = numproc_flag
         if "-n" not in self.mappings:
+            # always map -n to numproc_flag
             self.mappings["-n"] = self.numproc_flag
+
+    def mapped(self, arg: str) -> str | None:
+        if arg in self.mappings:
+            return self.mappings[arg]
+        # check for the case of long opt: arg=
+        for pat, repl in self.mappings.items():
+            if arg.startswith(f"{pat}="):
+                return arg.replace(pat, repl)
 
     def parse_args(self, args: Sequence[str]) -> Namespace:
         """Inspect arguments to launch to infer number of processors requested"""
@@ -56,12 +65,16 @@ class ArgumentParser:
             if shutil.which(arg):
                 command_seen = True
             if not command_seen:
-                if arg in self.mappings:
-                    arg = self.mappings[arg]
+                if new := self.mapped(arg):
+                    arg = new
                 if arg == self.numproc_flag:
                     s = next(iter_args)
                     processes = int(s)
                     spec.extend([arg, s])
+                elif arg.startswith(f"{self.numproc_flag}="):
+                    i = len(self.numproc_flag) + 1
+                    processes = int(arg[i:])
+                    spec.append(arg)
                 else:
                     spec.append(arg)
             elif arg == ":":

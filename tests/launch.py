@@ -97,3 +97,14 @@ def test_srun_mpmd(tmpdir):
         assert " ".join(cmd) == f"{mock_bin}/srun -n9 --multi-prog launch-multi-prog.conf"
         with open("launch-multi-prog.conf") as fh:
             assert fh.read().strip() == "0-3 ls\n4-8 ls -la"
+
+
+def test_mapped(tmpdir):
+    from hpc_connect import _launch
+    with working_dir(str(tmpdir)):
+        config = _launch.LaunchConfig(mappings={"--x": "--y"}, numproc_flag="-np")
+        parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
+        argv = ["--x", "4", "--x=5", "-n=7", "ls"]
+        args = parser.parse_args(argv)
+        cmd = _launch.join_args(args, config=config)
+        assert " ".join(cmd) == f"{mock_bin}/mpiexec --y 4 --y=5 -np=7 ls"
