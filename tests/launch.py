@@ -119,3 +119,14 @@ def test_mapped_suppressed(tmpdir):
         args = parser.parse_args(argv)
         cmd = _launch.join_args(args, config=config)
         assert " ".join(cmd) == f"{mock_bin}/mpiexec -np=7 ls"
+
+
+def test_count_procs(tmpdir):
+    from hpc_connect import _launch
+    with working_dir(str(tmpdir)):
+        config = _launch.LaunchConfig()
+        parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
+        argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
+        args = parser.parse_args(argv)
+        assert args.processes[0] == 4
+        assert args.processes[1] == 5
