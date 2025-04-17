@@ -2,6 +2,7 @@ import os
 import yaml
 from contextlib import contextmanager
 import hpc_connect
+from hpc_connect.config import load as load_config
 
 
 @contextmanager
@@ -18,6 +19,9 @@ def working_dir(dirname):
 def envmods(**kwargs):
     try:
         save_env = os.environ.copy()
+        for key in os.environ:
+            if key.startswith("HPCC_"):
+                os.environ.pop(key)
         os.environ.update(kwargs)
         yield
     finally:
@@ -25,6 +29,26 @@ def envmods(**kwargs):
         os.environ.update(save_env)
 
 mock_bin = os.path.join(os.path.dirname(__file__), "mock")
+
+
+class LaunchConfig:
+    def __init__(self, **kwargs):
+        self.data = load_config()
+        for key, val in kwargs.items():
+            self.data["launch"][key] = val
+    @property
+    def mappings(self):
+        return self.data["launch"]["mappings"]
+    @property
+    def numproc_flag(self):
+        return self.data["launch"]["numproc_flag"]
+    @property
+    def default_flags(self):
+        return self.data["launch"]["default_flags"]
+    @property
+    def exec(self):
+        return self.data["launch"]["exec"]
+
 
 
 def test_envar_config(capfd):
@@ -78,23 +102,23 @@ def test_mappings(capfd):
 
 def test_mpmd():
     from hpc_connect import _launch
-    config = _launch.LaunchConfig()
+    config = LaunchConfig()
     parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
     argv = ["-n", "4", "-flag", "file", "ls", ":", "-n", "5", "ls", "-la"]
     args = parser.parse_args(argv)
-    cmd = _launch.join_args(args, config=config)
-    assert " ".join(cmd) == f"{mock_bin}/mpiexec -n 4 -flag file ls : -n 5 ls -la"
+    cmd = _launch.join_args(args, config=config.data)
+    assert " ".join(cmd) == "mpiexec -n 4 -flag file ls : -n 5 ls -la"
 
 
 def test_srun_mpmd(tmpdir):
     from hpc_connect import _launch
     with working_dir(str(tmpdir)):
-        config = _launch.LaunchConfig(exec="srun")
+        config = LaunchConfig(exec="srun")
         parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
         argv = ["-n", "4", "ls", ":", "-n", "5", "ls", "-la"]
         args = parser.parse_args(argv)
-        cmd = _launch.join_args(args, config=config)
-        assert " ".join(cmd) == f"{mock_bin}/srun -n9 --multi-prog launch-multi-prog.conf"
+        cmd = _launch.join_args(args, config=config.data)
+        assert " ".join(cmd) == "srun -n9 --multi-prog launch-multi-prog.conf"
         with open("launch-multi-prog.conf") as fh:
             assert fh.read().strip() == "0-3 ls\n4-8 ls -la"
 
@@ -102,29 +126,29 @@ def test_srun_mpmd(tmpdir):
 def test_mapped(tmpdir):
     from hpc_connect import _launch
     with working_dir(str(tmpdir)):
-        config = _launch.LaunchConfig(mappings={"--x": "--y"}, numproc_flag="-np")
+        config = LaunchConfig(mappings={"--x": "--y"}, numproc_flag="-np")
         parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
         argv = ["--x", "4", "--x=5", "-n=7", "ls"]
         args = parser.parse_args(argv)
-        cmd = _launch.join_args(args, config=config)
-        assert " ".join(cmd) == f"{mock_bin}/mpiexec --y 4 --y=5 -np=7 ls"
+        cmd = _launch.join_args(args, config=config.data)
+        assert " ".join(cmd) == "mpiexec --y 4 --y=5 -np=7 ls"
 
 
 def test_mapped_suppressed(tmpdir):
     from hpc_connect import _launch
     with working_dir(str(tmpdir)):
-        config = _launch.LaunchConfig(mappings={"--x": "SUPPRESS"}, numproc_flag="-np")
+        config = LaunchConfig(mappings={"--x": "SUPPRESS"}, numproc_flag="-np")
         parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
         argv = ["--x", "4", "--x=5", "-n=7", "ls"]
         args = parser.parse_args(argv)
-        cmd = _launch.join_args(args, config=config)
-        assert " ".join(cmd) == f"{mock_bin}/mpiexec -np=7 ls"
+        cmd = _launch.join_args(args, config=config.data)
+        assert " ".join(cmd) == "mpiexec -np=7 ls"
 
 
 def test_count_procs(tmpdir):
     from hpc_connect import _launch
     with working_dir(str(tmpdir)):
-        config = _launch.LaunchConfig()
+        config = LaunchConfig()
         parser = _launch.ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)

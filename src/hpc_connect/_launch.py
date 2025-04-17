@@ -44,11 +44,8 @@ arguments matching the `numproc_flag` configuration, which specifies the flag th
 number of processors to be launched.
 
 """
-import dataclasses
-import json
+
 import logging
-import os
-import shlex
 import shutil
 import subprocess
 from typing import Any
@@ -57,9 +54,9 @@ from typing import Sequence
 
 logger = logging.getLogger("hpc_connect")
 
-import yaml
 
 from . import pluginmanager
+from .config import load as load_config
 
 
 class Namespace:
@@ -95,6 +92,7 @@ class ArgumentParser:
         for pat, repl in self.mappings.items():
             if arg.startswith(f"{pat}="):
                 return arg.replace(pat, repl)
+        return None
 
     def parse_args(self, args: Sequence[str]) -> Namespace:
         """Inspect arguments to launch to infer number of processors requested"""
@@ -142,72 +140,26 @@ class ArgumentParser:
         return namespace
 
 
-@dataclasses.dataclass
-class LaunchConfig:
-    exec: str = "mpiexec"
-    default_flags: list[str] = dataclasses.field(default_factory=list)
-    numproc_flag: str = "-n"
-    mappings: dict[str, str] = dataclasses.field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        self.read_from_file()
-        # Environment variables override file variables
-        self.read_from_env()
-
-        path = shutil.which(self.exec)
-        if path is None:
-            logger.warning(f"{self.exec}: executable not found")
-        else:
-            self.exec = path
-
-    def read_from_file(self) -> None:
-        file: str
-        if os.path.exists("hpc_connect.yaml"):
-            file = os.path.abspath("hpc_connect.yaml")
-        elif "HPCC_CONFIG_FILE" in os.environ:
-            file = os.environ["HPCC_CONFIG_FILE"]
-        elif "XDG_CONFIG_HOME" in os.environ:
-            file = os.path.join(os.environ["XDG_CONFIG_HOME"], "hpc_connect/config.yaml")
-        else:
-            file = os.path.expanduser("~/.config/hpc_connect/config.yaml")
-
-        if not os.path.exists(file):
-            return
-
-        with open(file) as fh:
-            config = yaml.safe_load(fh)
-        fc = config["hpc_connect"].get("launch", {})
-        if "exec" in fc:
-            self.exec = fc["exec"]
-        if "default_flags" in fc:
-            self.default_flags = shlex.split(fc["default_flags"])
-        if "numproc_flag" in fc:
-            self.numproc_flag = fc["numproc_flag"]
-        if "mappings" in fc:
-            self.mappings.update(fc["mappings"])
-
-    def read_from_env(self) -> None:
-        if x := os.getenv("HPCC_LAUNCH_EXEC"):
-            self.exec = x
-        if x := os.getenv("HPCC_LAUNCH_DEFAULT_FLAGS"):
-            self.default_flags = shlex.split(x)
-        if x := os.getenv("HPCC_LAUNCH_NUMPROC_FLAG"):
-            self.numproc_flag = x
-        if x := os.getenv("HPCC_LAUNCH_MAPPINGS"):
-            self.mappings.update(json.loads(x))
-
-
-def join_args(args: Namespace, config: LaunchConfig | None = None) -> list[str]:
-    config = config or LaunchConfig()
+def join_args(args: Namespace, config: dict | None = None) -> list[str]:
+    config = config or load_config()
     cmd = pluginmanager.manager.hook.hpc_connect_launch_join_args(
-        args=args, exec=config.exec, default_flags=config.default_flags
+        args=args, exec=config["launch"]["exec"], default_flags=config["launch"]["default_flags"]
     )
     return cmd
 
 
 def launch(args_in: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    config = LaunchConfig()
-    parser = ArgumentParser(mappings=config.mappings, numproc_flag=config.numproc_flag)
+    config = load_config()
+    puts(config)
+    parser = ArgumentParser(
+        mappings=config["launch"]["mappings"], numproc_flag=config["launch"]["numproc_flag"]
+    )
     args = parser.parse_args(args_in)
     cmd = join_args(args, config=config)
     return subprocess.run(cmd, **kwargs)
+
+
+def puts(arg):
+    import sys
+    sys.stderr.write(str(arg))
+    sys.stderr.write("\n")
