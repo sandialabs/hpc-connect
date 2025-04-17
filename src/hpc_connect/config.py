@@ -1,8 +1,8 @@
-import logging
 import copy
-from contextlib import contextmanager
+import logging
 import os
 import shlex
+from contextlib import contextmanager
 from typing import Any
 
 import yaml
@@ -158,6 +158,11 @@ def set(path: str, value: Any) -> None:
     # update new value
     data[parts[0]] = value
     _config[section] = section_data
+
+
+def restore_defaults() -> None:
+    global _config
+    _config = load()
 
 
 @contextmanager
