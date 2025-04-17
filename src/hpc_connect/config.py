@@ -1,4 +1,6 @@
 import logging
+import copy
+from contextlib import contextmanager
 import os
 import shlex
 from typing import Any
@@ -121,3 +123,49 @@ def find_config_file() -> str | None:
         if os.path.exists(file):
             return file
     return None
+
+
+_config = load()
+
+
+def get(path: str):
+    parts = path.split(":")
+    section = parts.pop(0)
+    value = _config[section]
+    while parts:
+        key = parts.pop(0)
+        # cannot use value.get(key, default) in case there is another part
+        # and default is not a dict
+        if key not in value:
+            return None
+        value = value[key]
+    return value
+
+
+def set(path: str, value: Any) -> None:
+    parts = path.split(":")
+    section = parts.pop(0)
+    section_data = _config[section]
+    data = section_data
+    while len(parts) > 1:
+        key = parts.pop(0)
+        new = data[key]
+        if isinstance(new, dict):
+            new = dict(new)
+            # reattach to parent object
+            data[key] = new
+        data = new
+    # update new value
+    data[parts[0]] = value
+    _config[section] = section_data
+
+
+@contextmanager
+def override():
+    global _config
+    save_config = copy.deepcopy(_config)
+    try:
+        _config = load()
+        yield
+    finally:
+        _config = save_config

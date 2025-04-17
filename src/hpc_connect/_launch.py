@@ -55,8 +55,8 @@ from typing import Sequence
 logger = logging.getLogger("hpc_connect")
 
 
+from . import config
 from . import pluginmanager
-from .config import load as load_config
 
 
 class Namespace:
@@ -140,19 +140,16 @@ class ArgumentParser:
         return namespace
 
 
-def join_args(args: Namespace, config: dict | None = None) -> list[str]:
-    config = config or load_config()
+def join_args(args: Namespace) -> list[str]:
     cmd = pluginmanager.manager.hook.hpc_connect_launch_join_args(
-        args=args, exec=config["launch"]["exec"], default_flags=config["launch"]["default_flags"]
+        args=args, exec=config.get("launch:exec"), default_flags=config.get("launch:default_flags")
     )
     return cmd
 
 
 def launch(args_in: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    config = load_config()
-    parser = ArgumentParser(
-        mappings=config["launch"]["mappings"], numproc_flag=config["launch"]["numproc_flag"]
-    )
+    f = lambda p: config.get(p)
+    parser = ArgumentParser(mappings=f("launch:mappings"), numproc_flag=f("launch:numproc_flag"))
     args = parser.parse_args(args_in)
-    cmd = join_args(args, config=config)
+    cmd = join_args(args)
     return subprocess.run(cmd, **kwargs)

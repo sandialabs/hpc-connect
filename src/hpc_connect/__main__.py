@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def launch_main(argv: list[str] | None = None) -> None:
     from . import _launch
-    from .config import load as load_config
+    from . import config
 
     argv = argv or sys.argv[1:]
     p = argparse.ArgumentParser(
@@ -39,12 +39,11 @@ def launch_main(argv: list[str] | None = None) -> None:
     if "-H" in argv:
         argv[argv.index("-H")] = "-h"
 
-    config = load_config()
     parser = _launch.ArgumentParser(
-        mappings=config["launch"]["mappings"], numproc_flag=config["launch"]["numproc_flag"]
+        mappings=config.get("launch:mappings"), numproc_flag=config.get("launch:numproc_flag")
     )
     args = parser.parse_args(argv)
-    cmd = _launch.join_args(args, config=config)
+    cmd = _launch.join_args(args)
     os.execvp(cmd[0], cmd)
 
 
