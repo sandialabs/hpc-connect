@@ -10,6 +10,7 @@ import yaml
 from .third_party.schema import Optional
 from .third_party.schema import Schema
 from .third_party.schema import Use
+from .util import collections
 
 logger = logging.getLogger("hpc_connect")
 
@@ -158,6 +159,18 @@ def set(path: str, value: Any) -> None:
     # update new value
     data[parts[0]] = value
     _config[section] = section_data
+
+
+def update(path: str, value: Any) -> None:
+    """Add the given configuration to the config."""
+    existing = get(path)
+    if existing is None:
+        new = value
+    elif isinstance(existing, (dict, list)):
+        new = collections.merge(existing, value)
+    else:
+        new = value
+    set(path, new)
 
 
 def restore_defaults() -> None:

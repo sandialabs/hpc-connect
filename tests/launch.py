@@ -1,6 +1,8 @@
 import os
-import yaml
 from contextlib import contextmanager
+
+import yaml
+
 import hpc_connect
 import hpc_connect._launch
 import hpc_connect.config
@@ -16,6 +18,7 @@ def working_dir(dirname):
     finally:
         os.chdir(save_cwd)
 
+
 @contextmanager
 def envmods(**kwargs):
     try:
@@ -28,6 +31,7 @@ def envmods(**kwargs):
     finally:
         os.environ.clear()
         os.environ.update(save_env)
+
 
 mock_bin = os.path.join(os.path.dirname(__file__), "mock")
 
@@ -48,14 +52,15 @@ def test_envar_config(capfd):
         with hpc_connect.config.override():
             hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
             captured = capfd.readouterr()
-            assert captured.out.strip() == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+            assert (
+                captured.out.strip()
+                == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+            )
 
 
 def test_file_config(tmpdir, capfd):
-
     with envmods(HPCC_CONFIG="hpc_connect.yaml"):
         with working_dir(str(tmpdir)):
-
             with open("hpc_connect.yaml", "w") as fh:
                 yaml.dump({"hpc_connect": {"launch": {"exec": "srun", "numproc_flag": "-np"}}}, fh)
             with hpc_connect.config.override():
@@ -64,18 +69,46 @@ def test_file_config(tmpdir, capfd):
                 assert captured.out.strip() == f"{mock_bin}/srun -np 4 -flag file executable --option"
 
             with open("hpc_connect.yaml", "w") as fh:
-                yaml.dump({"hpc_connect": {"launch": {"exec": "mpiexec", "numproc_flag": "-np", "default_flags": "--map-by ppr:%(np)d:cores"}}}, fh)
+                yaml.dump(
+                    {
+                        "hpc_connect": {
+                            "launch": {
+                                "exec": "mpiexec",
+                                "numproc_flag": "-np",
+                                "default_flags": "--map-by ppr:%(np)d:cores",
+                            }
+                        }
+                    },
+                    fh,
+                )
             with hpc_connect.config.override():
                 hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
                 captured = capfd.readouterr()
-                assert captured.out.strip() == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+                assert (
+                    captured.out.strip()
+                    == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+                )
 
             with open("hpc_connect.yaml", "w") as fh:
-                yaml.dump({"hpc_connect": {"launch": {"exec": "mpiexec", "numproc_flag": "-np", "mappings": {"-flag": "-xflag"}}}}, fh)
+                yaml.dump(
+                    {
+                        "hpc_connect": {
+                            "launch": {
+                                "exec": "mpiexec",
+                                "numproc_flag": "-np",
+                                "mappings": {"-flag": "-xflag"},
+                            }
+                        }
+                    },
+                    fh,
+                )
             with hpc_connect.config.override():
                 hpc_connect.launch(["-n", "4", "-flag", "file", "executable", "--option"])
                 captured = capfd.readouterr()
-                assert captured.out.strip() == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
+                assert (
+                    captured.out.strip()
+                    == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
+                )
 
 
 def test_default(capfd):
@@ -88,16 +121,21 @@ def test_default(capfd):
 def test_envar_mappings(capfd):
     with envmods(HPCC_LAUNCH_MAPPINGS="-spam:-ham,-eggs:-bacon"):
         with hpc_connect.config.override():
-            hpc_connect.launch(["-n", "4", "-spam", "ham", "-eggs", "bacon", "executable", "--option"])
+            hpc_connect.launch(
+                ["-n", "4", "-spam", "ham", "-eggs", "bacon", "executable", "--option"]
+            )
             captured = capfd.readouterr()
-            assert captured.out.strip() == f"{mock_bin}/mpiexec -n 4 -ham ham -bacon bacon executable --option"
+            assert (
+                captured.out.strip()
+                == f"{mock_bin}/mpiexec -n 4 -ham ham -bacon bacon executable --option"
+            )
 
 
 def test_mpmd():
     with hpc_connect.config.override():
         parser = hpc_connect._launch.ArgumentParser(
             mappings=hpc_connect.config.get("launch:mappings"),
-            numproc_flag=hpc_connect.config.get("launch:numproc_flag")
+            numproc_flag=hpc_connect.config.get("launch:numproc_flag"),
         )
         argv = ["-n", "4", "-flag", "file", "ls", ":", "-n", "5", "ls", "-la"]
         args = parser.parse_args(argv)
@@ -111,7 +149,7 @@ def test_srun_mpmd(tmpdir):
         with working_dir(str(tmpdir)):
             parser = hpc_connect._launch.ArgumentParser(
                 mappings=hpc_connect.config.get("launch:mappings"),
-                numproc_flag=hpc_connect.config.get("launch:numproc_flag")
+                numproc_flag=hpc_connect.config.get("launch:numproc_flag"),
             )
             argv = ["-n", "4", "ls", ":", "-n", "5", "ls", "-la"]
             args = parser.parse_args(argv)
@@ -128,7 +166,7 @@ def test_mapped(tmpdir):
         with working_dir(str(tmpdir)):
             parser = hpc_connect._launch.ArgumentParser(
                 mappings=hpc_connect.config.get("launch:mappings"),
-                numproc_flag=hpc_connect.config.get("launch:numproc_flag")
+                numproc_flag=hpc_connect.config.get("launch:numproc_flag"),
             )
             argv = ["--x", "4", "--x=5", "-n=7", "ls"]
             args = parser.parse_args(argv)
@@ -143,7 +181,7 @@ def test_mapped_suppressed(tmpdir):
         with working_dir(str(tmpdir)):
             parser = hpc_connect._launch.ArgumentParser(
                 mappings=hpc_connect.config.get("launch:mappings"),
-                numproc_flag=hpc_connect.config.get("launch:numproc_flag")
+                numproc_flag=hpc_connect.config.get("launch:numproc_flag"),
             )
             argv = ["--x", "4", "--x=5", "-n=7", "ls"]
             args = parser.parse_args(argv)
@@ -156,7 +194,7 @@ def test_count_procs(tmpdir):
         with working_dir(str(tmpdir)):
             parser = hpc_connect._launch.ArgumentParser(
                 mappings=hpc_connect.config.get("launch:mappings"),
-                numproc_flag=hpc_connect.config.get("launch:numproc_flag")
+                numproc_flag=hpc_connect.config.get("launch:numproc_flag"),
             )
             argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
             args = parser.parse_args(argv)
