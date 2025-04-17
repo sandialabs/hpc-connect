@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+from datetime import timedelta
 import importlib.resources
 import logging
 import math
@@ -185,7 +186,7 @@ class FluxBackend(HPCBackend):
         self,
         name: str,
         script: str,
-        qtime: float | None = None,
+        duration: float | timedelta | None = None,
         variables: dict[str, str | None] | None = None,
         output: str | None = None,
         error: str | None = None,
@@ -201,20 +202,14 @@ class FluxBackend(HPCBackend):
         copies of ``script`` that flux should launch.
 
         """
-        kwds: dict[str, Any] = {"command": [script], "num_tasks": 1, "exclusive": exclusive}
-        if nodes is not None:
-            kwds["num_nodes"] = nodes
-            if cpus is None:
-                cpus = nodes * self.config.cpus_per_node
-            if gpus is None:
-                gpus = nodes * self.config.gpus_per_node
-        kwds["cores_per_task"] = cpus or 1
-        kwds["gpus_per_task"] = gpus or 0
-        jobspec = JobspecV1.from_command(**kwds)
+        kwds: dict[str, Any] = {"command": [script], "exclusive": exclusive}
+        alloc = self.get_alloc_settings(cpus, gpus, nodes)
+        kwds.update(alloc)
+        jobspec = JobspecV1.from_nest_command(**kwds)
         jobspec.setattr("system.job.name", name)
         jobspec.stdout = output or "job-ouput.txt"
         jobspec.stderr = error or output or "job-error.txt"
-        jobspec.duration = time_limit_in_seconds(qtime, pad=60)
+        jobspec.duration = duration or 60.0 # duration is in seconds
         env = os.environ.copy()
         if variables:
             for key, val in variables.items():
@@ -224,6 +219,33 @@ class FluxBackend(HPCBackend):
                     env[key] = val
         jobspec.environment = env
         return jobspec
+
+    def get_alloc_settings(
+        self,
+        cpus: int | None = None,
+        gpus: int | None = None,
+        nodes: int | None = None,
+    ) -> dict[str, Any]:
+        alloc: dict[str, Any] = {}
+        if nodes is not None:
+            if cpus is None:
+                cpus = nodes*self.config.cpus_per_node
+            if gpus is None:
+                gpus = nodes*self.config.gpus_per_node
+        else:
+            cpus = cpus or 1
+            gpus = gpus or 0
+            nodes = self.config.nodes_required(max_cpus=cpus, max_gpus=gpus)
+        
+        alloc["num_nodes"] = nodes
+        alloc["num_slots"] = nodes
+        if nodes > 1:
+            cpus = max(1, math.ceil(cpus / nodes))
+            gpus = max(0, math.ceil(gpus / nodes))
+            
+        alloc["cores_per_slot"] = cpus
+        alloc["gpus_per_slot"] = gpus
+        return alloc
 
     def shutdown(self):
         with self.lock:
@@ -253,11 +275,12 @@ class FluxBackend(HPCBackend):
         **kwargs: Any,
     ) -> FluxProcess:
         cpus = cpus or kwargs.get("tasks")
+        duration = timedelta(seconds=time_limit_in_seconds(qtime, pad=60))
         script = self.write_submission_script(
             name,
             args,
             scriptname,
-            qtime=qtime,
+            qtime=max(1, duration.total_seconds()/60.0), # time limit in minutes in the script
             submit_flags=submit_flags,
             variables=variables,
             output=output,
@@ -270,7 +293,7 @@ class FluxBackend(HPCBackend):
         jobspec = self.create_jobspec(
             name,
             script,
-            qtime=qtime,
+            duration=duration,
             variables=variables,
             output=output,
             error=error,
@@ -297,14 +320,6 @@ class FluxBackend(HPCBackend):
         gpus: list[int] | None = None,
         **kwargs: Any,
     ) -> FluxMultiProcess:
-        if not os.getenv("HPC_CONNECT_ENABLE_FLUX_SUBMITN"):
-            raise NotImplementedError(
-                "canary seems to lock up when running submitn for all but trivial tests. "
-                "This will need to be debugged and fixed. The problem may be in our use of "
-                "JobspecV1.from_command *or* it could be an issue with file locking in "
-                "canary on some file systems.  Set the HPC_CONNECT_ENABLE_FLUX_SUBMITN "
-                "environment variable to bypass this check"
-            )
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         assert len(name) == len(args)
         procs = FluxMultiProcess(self.lock)
@@ -358,9 +373,8 @@ class FluxBackend(HPCBackend):
             cpus=cpus,
             gpus=gpus,
         )
-        data["nslots"] = data["cpus"]
-        data["cores_per_slot"] = 1
-        data["gpus_per_slot"] = 1 if gpus else 0
+        alloc = self.get_alloc_settings(cpus=cpus, gpus=gpus, nodes=nodes)
+        data.update(alloc)
         return data
 
 
