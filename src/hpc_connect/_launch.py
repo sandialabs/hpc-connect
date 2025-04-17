@@ -150,16 +150,9 @@ def join_args(args: Namespace, config: dict | None = None) -> list[str]:
 
 def launch(args_in: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
     config = load_config()
-    puts(config)
     parser = ArgumentParser(
         mappings=config["launch"]["mappings"], numproc_flag=config["launch"]["numproc_flag"]
     )
     args = parser.parse_args(args_in)
     cmd = join_args(args, config=config)
     return subprocess.run(cmd, **kwargs)
-
-
-def puts(arg):
-    import sys
-    sys.stderr.write(str(arg))
-    sys.stderr.write("\n")
