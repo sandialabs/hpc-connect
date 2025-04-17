@@ -9,7 +9,7 @@ from ..hookspec import hookimpl
 
 @hookimpl
 def hpc_connect_launch_join_args(
-    args: "Namespace", exec: str, default_flags: list[str]
+    args: "Namespace", exec: str, default_global_options: list[str], default_local_options: list[str]
 ) -> list[str] | None:
     """Count the total number of processes and write a srun.conf file to
     split the jobs across ranks
@@ -30,6 +30,8 @@ def hpc_connect_launch_join_args(
             np += 1
         i = argp(spec)
         fp.write(ranks)
+        for default_opt in default_local_options:
+            fp.write(f" {expand(default_opt, np=np)}")
         for arg in spec[i:]:
             fp.write(f" {expand(arg, np=p)}")
         fp.write("\n")
@@ -37,8 +39,8 @@ def hpc_connect_launch_join_args(
     with open(file, "w") as fh:
         fh.write(fp.getvalue())
     cmd = [os.fsdecode(exec)]
-    for default_arg in default_flags:
-        cmd.append(expand(default_arg, np=np))
+    for default_opt in default_global_options:
+        cmd.append(expand(default_opt, np=np))
     cmd.extend([f"-n{np}", "--multi-prog", file])
     return cmd
 

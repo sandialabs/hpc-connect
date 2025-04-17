@@ -19,7 +19,8 @@ default configuration is:
      launch:
        exec: mpiexec  # the launch backend.
        numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
-       default_flags: []  # Flags to pass to the backend before any other arguments.
+       default_local_options: []  # Flags to pass to the backend before any other arguments.
+       default_global_options: []  # Flags to pass to the backend before any other arguments.
        mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
 
 The configuration file is read at the first of:
@@ -33,7 +34,8 @@ Configuration settings can also be modified through the following environment va
 
 * HPCC_LAUNCH_EXEC
 * HPCC_LAUNCH_NUMPROC_FLAG
-* HPCC_LAUNCH_DEFAULT_FLAGS
+* HPCC_LAUNCH_DEFAULT_LOCAL_OPTIONS
+* HPCC_LAUNCH_DEFAULT_GLOBAL_OPTIONS
 * HPCC_LAUNCH_MAPPINGS
 
 Argument parsing
@@ -63,7 +65,6 @@ class Namespace:
     def __init__(self) -> None:
         self.specs: list[list[str]] = []
         self.processes: list[int | None] = []
-        self.default_flags: list[str] = []
 
     def __len__(self) -> int:
         return len(self.specs)
@@ -142,7 +143,10 @@ class ArgumentParser:
 
 def join_args(args: Namespace) -> list[str]:
     cmd = pluginmanager.manager.hook.hpc_connect_launch_join_args(
-        args=args, exec=config.get("launch:exec"), default_flags=config.get("launch:default_flags")
+        args=args,
+        exec=config.get("launch:exec"),
+        default_local_options=config.get("launch:default_local_options"),
+        default_global_options=config.get("launch:default_global_options"),
     )
     return cmd
 
