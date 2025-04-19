@@ -26,16 +26,6 @@ backend = hpc_connect.get_backend("shell")
 backend.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
 ```
 
-### Launcher
-
-```console
-$ hpc-launch --backend=mpi -n 4 echo 'Hello, world!'
-Hello, world!
-Hello, world!
-Hello, world!
-Hello, world!
-```
-
 ## User defined scheduler backend
 
 ```python
@@ -72,33 +62,9 @@ def hpc_connect_backend():
     return MyBackend
 ```
 
-## User defined launcher
+## Registering user defined backend
 
-```python
-from hpc_connect import HPCLauncher
-
-class MyLauncher(HPCLauncher):
-    name = "my-launcher"
-
-    def __init__(self, config_file: str | None = None) -> None:
-        # setup
-
-    @staticmethod
-    def matches(name: str | None) -> bool:
-        # logic to determine if this launcher matches ``name``
-
-    @property
-    def executable(self) -> str:
-        # return the string to the launcher's executable
-
-@hpc_connect.hookimpl
-def hpc_connect_launcher():
-    return MyLauncher
-```
-
-## Registering user defined launchers and schedulers
-
-Custom launchers and schedulers must be registered in your `pyproject.toml` file using the `hpc_connect` entry points. Here's an example configuration:
+Custom backends must be registered in your `pyproject.toml` file using the `hpc_connect` entry points. Here's an example configuration:
 
 ```toml
 [project]
@@ -108,3 +74,46 @@ version = "0.1.0"
 [project.entry_points.hpc_connect]
 my_hpc_connect = "my_module"
 ```
+
+
+## hpc-launch
+
+A command-line interface for launching parallel applications using various HPC launchers.
+
+### SYNOPSIS
+
+```console
+hpc-launch [mpi-options] <application> [application_options]
+```
+
+### Description
+
+`hpc-launch` is a CLI tool that forwards arguments to configured backend launchers such as `mpiexec`, `mpirun`, and `jsrun`. It provides a unified command structure for launching parallel applications, allowing users to execute their applications without needing to remember the specific syntax for each launcher.
+
+### Configuration
+
+The behavior of `hpc-launch` is determined by a configuration file in YAML format. The default configuration file contains the following structure:
+
+```yaml
+hpc_connect:
+  launch:
+    vendor: openmpi
+    exec: mpiexec
+    numproc_flag: -n
+    default_options: []
+    default_local_options: []
+    mappings: {}
+```
+
+#### Configuration Parameters
+
+- vendor: The MPI implementation vendor (e.g., openmpi, mpich).
+- exec: The command to execute the launcher (e.g., mpiexec, mpirun).
+- numproc_flag: The flag used to specify the number of processes (e.g., -n).
+- default_options: A list of default options passed to the launcher.
+- default_local_options: A list of options specific to local execution.
+- mappings: A dictionary for additional mappings or configurations, where command-line flags can be replaced with their corresponding values.
+
+### Examples
+
+hpc-launch translates the command given on the command line `hpc-launch [mpi-options] <application> [application options]`  to `<exec> <default_options> [mapped mpi-options] <application> [application options]`, where the mapped `mpi-options` are mapped according to the mappings in the configuration.  The default mapping is `-n: <numproc_flag>`.
