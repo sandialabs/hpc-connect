@@ -35,8 +35,8 @@ schema = Schema(
                 Optional("vendor"): str,
                 Optional("exec"): str,
                 Optional("numproc_flag"): str,
-                Optional("default_global_options"): Use(flag_splitter),
-                Optional("default_local_options"): Use(flag_splitter),
+                Optional("default_options"): Use(flag_splitter),
+                Optional("local_options"): Use(flag_splitter),
                 Optional("mappings"): dict_str_str,
             }
         }
@@ -50,8 +50,8 @@ def load() -> dict:
             "vendor": "unknown",
             "exec": "mpiexec",
             "numproc_flag": "-n",
-            "default_global_options": [],
-            "default_local_options": [],
+            "default_options": [],
+            "local_options": [],
             "mappings": {},
         },
     }
@@ -71,7 +71,7 @@ def read_from_file(config: dict) -> None:
     if "launch" in fc:
         for key in config["launch"]:
             if key in fc["launch"]:
-                if key in ("default_global_options", "default_local_options"):
+                if key in ("default_options", "local_options"):
                     config["launch"][key].extend(fc["launch"][key])
                 elif key == "mappings":
                     config["launch"][key].update(fc["launch"][key])
@@ -83,7 +83,7 @@ def read_from_env(config: dict) -> None:
     for key in config["launch"]:
         var = f"HPCC_LAUNCH_{key.upper()}"
         if val := os.getenv(var):
-            if key in ("default_global_options", "default_local_options"):
+            if key in ("default_options", "local_options"):
                 if val.startswith("!"):
                     config["launch"][key] = shlex.split(val[1:])
                 else:

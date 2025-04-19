@@ -46,7 +46,7 @@ def test_envar_config(capfd):
     env = {
         "HPCC_LAUNCH_EXEC": "mpiexec",
         "HPCC_LAUNCH_NUMPROC_FLAG": "-np",
-        "HPCC_LAUNCH_DEFAULT_LOCAL_OPTIONS": "--map-by ppr:%(np)d:cores",
+        "HPCC_LAUNCH_LOCAL_OPTIONS": "--map-by ppr:%(np)d:cores",
     }
     with envmods(**env):
         with hpc_connect.config.override():
@@ -75,7 +75,7 @@ def test_file_config(tmpdir, capfd):
                             "launch": {
                                 "exec": "mpiexec",
                                 "numproc_flag": "-np",
-                                "default_local_options": "--map-by ppr:%(np)d:cores",
+                                "local_options": "--map-by ppr:%(np)d:cores",
                             }
                         }
                     },

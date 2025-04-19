@@ -24,6 +24,6 @@ def hpc_connect_backend():
 
 @hookspec(firstresult=True)
 def hpc_connect_launch_join_args(
-    args: "Namespace", exec: str, default_global_options: list[str], default_local_options: list[str]
+    args: "Namespace", exec: str, global_options: list[str], local_options: list[str]
 ) -> list[str] | None:
     """Return the formatted command line"""
