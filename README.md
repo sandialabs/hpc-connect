@@ -318,7 +318,7 @@ srun -n9 --multi-prog launch-multi-prog.conf
 where
 
 ```console
-$ cat srun -n9 --multi-prog launch-multi-prog.conf
+$ cat launch-multi-prog.conf
 0-3 app-1 app-1-options
 4-8 app-2 app-2-options
 ```
