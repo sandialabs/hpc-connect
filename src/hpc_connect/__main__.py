@@ -1,9 +1,8 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-
+import argparse
 import os
-import subprocess
 import sys
 
 import hpc_connect
@@ -14,40 +13,38 @@ def main(argv: list[str] | None = None) -> int:
     print("HPC Connect backends:")
     for backend_t in hpc_connect.backends().values():
         print(f"- {backend_t.name}")
-    print()
-    print("HPC Connect launchers:")
-    for launcher_t in hpc_connect.launchers().values():
-        print(f"- {launcher_t.name}")
     return 0
 
 
-def launch(argv: list[str] | None = None) -> None:
-    parser = hpc_connect.LaunchParser(prog="hpc-launch")
+def launch_main(argv: list[str] | None = None) -> None:
+    from . import _launch
+    from . import config
 
-    pre, prog_args = parser.preparse(argv or sys.argv[1:])
+    argv = argv or sys.argv[1:]
+    p = argparse.ArgumentParser(
+        add_help=False,
+        usage="%(prog)s [--help] ...",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument(
+        "-h",
+        "--help",
+        default=False,
+        action="help",
+        help="Show this message and exit.  Use -H to display the backends help page.",
+    )
+    p.epilog = _launch.__doc__
+    p.parse_known_args(argv)
 
-    if pre.help:
-        print(pre)
-        if pre.backend is None and "HPC_CONNECT_LAUNCHER" not in os.environ:
-            parser.print_help()
-            sys.exit(0)
-        else:
-            prog_args.insert(0, "-h")
+    if "-H" in argv:
+        argv[argv.index("-H")] = "-h"
 
-    name: str = "mpi"
-    if pre.backend:
-        name = pre.backend
-    elif "HPC_CONNECT_LAUNCHER" in os.environ:
-        name = os.environ["HPC_CONNECT_LAUNCHER"]
-    elif "HPC_CONNECT_PREFERRED_LAUNCHER" in os.environ:
-        name = os.environ["HPC_CONNECT_PREFERRED_LAUNCHER"]
-
-    launcher = hpc_connect.get_launcher(name, config_file=pre.config_file)
-    ns = launcher.inspect_args(prog_args)
-    args = launcher.format_program_args(ns)
-    exe = os.fsdecode(launcher.executable)
-    completed_process = subprocess.run([exe, *args])
-    sys.exit(completed_process.returncode)
+    parser = _launch.ArgumentParser(
+        mappings=config.get("launch:mappings"), numproc_flag=config.get("launch:numproc_flag")
+    )
+    args = parser.parse_args(argv)
+    cmd = _launch.join_args(args)
+    os.execvp(cmd[0], cmd)
 
 
 if __name__ == "__main__":

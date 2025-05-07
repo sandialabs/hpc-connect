@@ -4,10 +4,10 @@ dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2", "psutil"]
+dependencies = ["pluggy", "jinja2", "psutil", "PyYAML"]
 
 [project.scripts]
-hpc-launch = "hpc_connect.__main__:launch"
+hpc-launch = "hpc_connect.__main__:launch_main"
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest"]
@@ -30,7 +30,7 @@ ignore = "W009"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 99
+line-length = 102
 
 [tool.ruff.format]
 quote-style = "double"
@@ -76,4 +76,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "flux"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yaml"
 ignore_missing_imports = true
