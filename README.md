@@ -13,7 +13,7 @@
 You can install `hpc_connect` using pip:
 
 ```bash
-python3 -m pip install "hpc-connect git+ssh://git@cee-gitlab.sandia.gov/ascic-test-infra/hpc-connect"
+python3 -m pip install hpc-connect
 ```
 
 ## Usage
