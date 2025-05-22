@@ -23,8 +23,8 @@ logger = logging.getLogger("hpc_connect")
 class SlurmProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
-        self.jobid = self.submit(script)
         self.clusters: str | None = None
+        self.jobid = self.submit(script)
         f = os.path.basename(script)
         logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
