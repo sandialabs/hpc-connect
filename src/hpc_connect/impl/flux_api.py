@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datetime import timedelta
 import importlib.resources
 import logging
 import math
@@ -12,6 +11,7 @@ import os
 import subprocess
 import time
 from concurrent.futures import CancelledError
+from datetime import timedelta
 from typing import Any
 
 import flux  # type: ignore
@@ -37,7 +37,7 @@ class FluxProcess(HPCProcess):
         self.fh = Flux()
         self.name = name
         self.fut: FluxExecutorFuture = future
-        self.jobid: int | None = None
+        self._jobid: int | None = None
         self._rc: int | None = None
 
         def set_returncode(fut: FluxExecutorFuture):
@@ -58,6 +58,14 @@ class FluxProcess(HPCProcess):
 
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)
+
+    @property
+    def jobid(self) -> int | None:
+        return self._jobid
+
+    @jobid.setter
+    def jobid(self, arg: int) -> None:
+        self._jobid = arg
 
     @property
     def returncode(self) -> int | None:
@@ -209,7 +217,7 @@ class FluxBackend(HPCBackend):
         jobspec.setattr("system.job.name", name)
         jobspec.stdout = output or "job-ouput.txt"
         jobspec.stderr = error or output or "job-error.txt"
-        jobspec.duration = duration or 60.0 # duration is in seconds
+        jobspec.duration = duration or 60.0  # duration is in seconds
         env = os.environ.copy()
         if variables:
             for key, val in variables.items():
@@ -229,20 +237,20 @@ class FluxBackend(HPCBackend):
         alloc: dict[str, Any] = {}
         if nodes is not None:
             if cpus is None:
-                cpus = nodes*self.config.cpus_per_node
+                cpus = nodes * self.config.cpus_per_node
             if gpus is None:
-                gpus = nodes*self.config.gpus_per_node
+                gpus = nodes * self.config.gpus_per_node
         else:
             cpus = cpus or 1
             gpus = gpus or 0
             nodes = self.config.nodes_required(max_cpus=cpus, max_gpus=gpus)
-        
+
         alloc["num_nodes"] = nodes
         alloc["num_slots"] = nodes
         if nodes > 1:
             cpus = max(1, math.ceil(cpus / nodes))
             gpus = max(0, math.ceil(gpus / nodes))
-            
+
         alloc["cores_per_slot"] = cpus
         alloc["gpus_per_slot"] = gpus
         return alloc
@@ -280,7 +288,7 @@ class FluxBackend(HPCBackend):
             name,
             args,
             scriptname,
-            qtime=max(1, duration.total_seconds()/60.0), # time limit in minutes in the script
+            qtime=max(1, duration.total_seconds() / 60.0),  # time limit in minutes in the script
             submit_flags=submit_flags,
             variables=variables,
             output=output,

@@ -20,7 +20,7 @@ logger = logging.getLogger("hpc_connect")
 class PBSProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
-        self.jobid = self.submit(script)
+        self._jobid = self.submit(script)
         logger.debug(f"Submitted batch with jobid={self.jobid}")
 
     def submit(self, script: str) -> str:
@@ -31,6 +31,9 @@ class PBSProcess(HPCProcess):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
+        dirname, basename = os.path.split(script)
+        with open(os.path.join(dirname, os.path.splitext(basename)[0] + "-submit.out"), "w") as fh:
+            fh.write(result)
         parts = result.split()
         if len(parts) == 1 and parts[0]:
             return parts[0]
@@ -39,6 +42,10 @@ class PBSProcess(HPCProcess):
         for line in result.split("\n"):
             logger.error(f"    {line}")
         raise HPCSubmissionFailedError
+
+    @property
+    def jobid(self) -> str:
+        return self._jobid
 
     @property
     def returncode(self) -> int | None:

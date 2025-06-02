@@ -24,9 +24,13 @@ class SlurmProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
         self.clusters: str | None = None
-        self.jobid = self.submit(script)
+        self._jobid = self.submit(script)
         f = os.path.basename(script)
         logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
+
+    @property
+    def jobid(self) -> str:
+        return self._jobid
 
     def submit(self, script) -> str:
         sbatch = shutil.which("sbatch")
@@ -39,6 +43,9 @@ class SlurmProcess(HPCProcess):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
+        dirname, basename = os.path.split(script)
+        with open(os.path.join(dirname, os.path.splitext(basename)[0] + "-submit.out"), "w") as fh:
+            fh.write(result)
         i = result.find("Submitted batch job")
         if i >= 0:
             parts = result[i:].split()
