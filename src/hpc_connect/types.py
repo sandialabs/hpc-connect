@@ -22,6 +22,10 @@ from .util import time_in_seconds
 
 class HPCProcess(Protocol):
     @property
+    def jobid(self) -> Any:
+        return "<none>"
+
+    @property
     def returncode(self) -> int | None:
         raise NotImplementedError
 
