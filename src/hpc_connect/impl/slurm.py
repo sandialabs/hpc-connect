@@ -45,9 +45,9 @@ class SlurmProcess(HPCProcess):
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
         dirname, basename = os.path.split(script)
-        with open(os.path.join(dirname, os.path.splitext(basename)[0] + "-meta.out"), "w") as fh:
+        with open(os.path.join(dirname, "sbatch.meta.json"), "w") as fh:
             date = datetime.datetime.now().strftime("%c")
-            meta = {"stdout/stderr": result, "date": date, "args": " ".join(args)}
+            meta = {"args": " ".join(args), "date": date, "stdout/stderr": result}
             json.dump({"meta": meta}, fh, indent=2)
         i = result.find("Submitted batch job")
         if i >= 0:
