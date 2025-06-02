@@ -26,7 +26,8 @@ class SlurmProcess(HPCProcess):
         self._rc: int | None = None
         self.clusters: str | None = None
         self._jobid = self.submit(script)
-        f = os.path.basename(script)
+        self.script = script
+        f = os.path.basename(self.script)
         logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
     @property
@@ -44,16 +45,17 @@ class SlurmProcess(HPCProcess):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
-        dirname, basename = os.path.split(script)
-        with open(os.path.join(dirname, "sbatch.meta.json"), "w") as fh:
-            date = datetime.datetime.now().strftime("%c")
-            meta = {"args": " ".join(args), "date": date, "stdout/stderr": result}
-            json.dump({"meta": meta}, fh, indent=2)
+        dirname, _ = os.path.split(script)
         i = result.find("Submitted batch job")
         if i >= 0:
             parts = result[i:].split()
             if len(parts) > 3 and parts[3]:
-                return parts[3]
+                jobid = parts[3]
+                with open(os.path.join(dirname, "sbatch.json"), "w") as fh:
+                    date = datetime.datetime.now().strftime("%c")
+                    meta = {"args": " ".join(args), "date": date, "stdout/stderr": result}
+                    json.dump({"meta": meta}, fh, indent=2)
+                return jobid
         logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
         for line in result.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
@@ -79,26 +81,56 @@ class SlurmProcess(HPCProcess):
     def returncode(self, arg: int) -> None:
         self._rc = arg
 
+    @staticmethod
+    def split_parsable_output(out: str) -> dict[str, dict[str, Any]]:
+        """Parse the output of the `sacct` command into a dictionary.
+
+        Parameters:
+        ----------
+        out : str
+          sacct output as emitted with the -b and -p flags of the form:
+            "JobId|State|ExitCode|\n<job_id>|<state>|<exit_code>|"
+
+        """
+        table: dict[str, dict[str, Any]] = {}
+        lines = out.strip().split("\n")
+        for line in lines:
+            if entries := line.split("|"):
+                jobid, state, exit_code, *_ = entries
+                state = state.split()[0].rstrip("+")
+                signal: int = 0
+                returncode: int
+                if ":" in exit_code:
+                    returncode, signal = [int(_) for _ in exit_code.split(":")]
+                else:
+                    returncode = int(exit_code)
+                table[jobid.strip()] = {"state": state, "returncode": returncode, "signal": signal}
+        return table
+
     def poll(self) -> int | None:
-        squeue = shutil.which("squeue")
-        if squeue is None:
-            raise RuntimeError("queue not found on PATH")
-        args = [squeue, "--noheader", "-o", "%i %t"]
+        sacct = shutil.which("sacct")
+        if sacct is None:
+            raise RuntimeError("sacct not found on PATH")
+        args = [sacct, "-j", self.jobid, "-b", "-p"]
         if self.clusters:
             args.append(f"--clusters={self.clusters}")
         out = subprocess.check_output(args, encoding="utf-8")
-        lines = [line.strip() for line in out.splitlines() if line.split()]
-        for line in lines:
-            # a line should be something like "16004759 PD"
-            try:
-                id, state = line.split()
-            except ValueError:
-                continue
-            if id == self.jobid:
-                # the job is still running
-                return None
-        # job not found in squeue, assume it is done
-        self.returncode = 0
+        table = self.split_parsable_output(out)
+        if self.jobid not in table:
+            raise RuntimeError(f"Failed to find information for job {self.jobid}!")
+        jobinfo = table[self.jobid]
+        state = jobinfo["state"].upper()
+        if state in ("RUNNING", "PENDING"):
+            return None
+        self.returncode = max(jobinfo["returncode"], jobinfo["signal"])
+        if state != "COMPLETED":
+            logger.error(f"==> hpc_connect: batch {self.jobid} finished with error state {state}")
+            # save information for querying the job:
+            f = os.path.join(os.path.dirname(self.script), f"{self.jobid}-info.json")
+            with open(f, "w") as fh:
+                subprocess.run([sacct, "-j", self.jobid, "--json"], stdout=fh)
+            if sig := jobinfo["signal"]:
+                logger.error(f"==> hpc_connect: batch {self.jobid} was killed by signal {sig}")
         return self.returncode
 
     def cancel(self) -> None:
