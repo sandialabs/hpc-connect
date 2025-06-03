@@ -83,7 +83,7 @@ class SlurmProcess(HPCProcess):
         squeue = shutil.which("squeue")
         if squeue is None:
             raise RuntimeError("queue not found on PATH")
-        args = [squeue, "--noheader", "-o", "%i %t"]
+        args = [squeue, "--noheader", "-o", "%i %T"]
         if self.clusters:
             args.append(f"--clusters={self.clusters}")
         out = subprocess.check_output(args, encoding="utf-8")
