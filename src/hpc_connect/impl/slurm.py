@@ -94,7 +94,7 @@ class SlurmProcess(HPCProcess):
         """
         table: dict[str, dict[str, Any]] = {}
         lines = out.strip().split("\n")
-        for line in lines[1:]:
+        for line in lines:
             if entries := line.split("|"):
                 jobid, state, exit_code, *_ = entries
                 state = state.split()[0].rstrip("+")
