@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from typing import Any
 
 from ..hookspec import hookimpl
@@ -25,15 +26,17 @@ class SlurmProcess(HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
         self.clusters: str | None = None
+        self.script = os.path.abspath(script)
+        self.script_dir = os.path.dirname(self.script)
         self._jobid = self.submit(script)
-        f = os.path.basename(script)
+        f = os.path.basename(self.script)
         logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
     @property
     def jobid(self) -> str:
         return self._jobid
 
-    def submit(self, script) -> str:
+    def submit(self, script: str) -> str:
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
@@ -41,21 +44,16 @@ class SlurmProcess(HPCProcess):
         if ns.clusters:
             self.clusters = ns.clusters
         args = [sbatch, script]
-        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        out, _ = p.communicate()
-        result = str(out.decode("utf-8")).strip()
-        dirname, basename = os.path.split(script)
-        with open(os.path.join(dirname, "sbatch.meta.json"), "w") as fh:
+        out = subprocess.check_output(args, encoding="utf-8")
+        with open(os.path.join(self.script_dir, "submit.meta.json"), "w") as fh:
             date = datetime.datetime.now().strftime("%c")
-            meta = {"args": " ".join(args), "date": date, "stdout/stderr": result}
+            meta = {"args": " ".join(args), "date": date, "stdout/stderr": out}
             json.dump({"meta": meta}, fh, indent=2)
-        i = result.find("Submitted batch job")
-        if i >= 0:
-            parts = result[i:].split()
-            if len(parts) > 3 and parts[3]:
-                return parts[3]
+        if match := re.search("Submitted batch job (.*)$", out):
+            jobid = match.group(1).strip()
+            return jobid
         logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
-        for line in result.split("\n"):
+        for line in out.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
         raise HPCSubmissionFailedError
 
@@ -80,25 +78,45 @@ class SlurmProcess(HPCProcess):
         self._rc = arg
 
     def poll(self) -> int | None:
-        squeue = shutil.which("squeue")
-        if squeue is None:
-            raise RuntimeError("queue not found on PATH")
-        args = [squeue, "--noheader", "-o", "%i %T"]
-        if self.clusters:
-            args.append(f"--clusters={self.clusters}")
-        out = subprocess.check_output(args, encoding="utf-8")
-        lines = [line.strip() for line in out.splitlines() if line.split()]
-        for line in lines:
-            # a line should be something like "16004759 PD"
-            try:
-                id, state = line.split()
-            except ValueError:
-                continue
-            if id == self.jobid:
-                # the job is still running
+        sacct = shutil.which("sacct")
+        if sacct is None:
+            raise RuntimeError("sacct not found on PATH")
+        max_tries: int = 20
+        acct_data: dict[str, dict[str, Any]] = {}
+        for _ in range(max_tries):
+            args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
+            out = subprocess.check_output(args, encoding="utf-8")
+            lines = [line.strip() for line in out.splitlines() if line.split()]
+            if lines:
+                for line in lines:
+                    jobid, state, exit_code = [_.strip() for _ in line.split("|") if _.split()]
+                    try:
+                        returncode, signal = [int(_) for _ in exit_code.split(":")]
+                    except ValueError:
+                        returncode = int(exit_code)
+                        signal = 0
+                    acct_data[jobid] = {
+                        "state": state.split()[0].rstrip("+"),
+                        "returncode": returncode,
+                        "signal": signal,
+                    }
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError(f"{' '.join(args)!r} did not return any accounting data")
+
+        if jobinfo := acct_data.get(self.jobid):
+            if jobinfo["state"].upper() in ("PENDING", "RUNNING"):
                 return None
-        # job not found in squeue, assume it is done
-        self.returncode = 0
+            self.returncode = max(jobinfo["returncode"], jobinfo["signal"])
+            if jobinfo["signal"]:
+                logger.error(f"Job {self.jobid} failed with signal {jobinfo['signal']}")
+                f = os.path.join(self.script_dir, f"{self.jobid}.acct.json")
+                with open(f, "w") as fh:
+                    args = [sacct, "-j", self.jobid, "--json"]
+                    subprocess.run(args, stdout=fh, encoding="utf-8")
+        else:
+            raise RuntimeError(f"Accounting data for job {self.jobid} not returned by sacct")
         return self.returncode
 
     def cancel(self) -> None:
@@ -121,9 +139,9 @@ class SlurmBackend(HPCBackend):
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
-        squeue = shutil.which("squeue")
-        if squeue is None:
-            raise ValueError("queue not found on PATH")
+        sacct = shutil.which("sacct")
+        if sacct is None:
+            raise ValueError("sacct not found on PATH")
         if sinfo := read_einfo():
             self.config.set_resource_spec([sinfo])
         elif sinfo := read_sinfo():
