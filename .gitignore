@@ -19,3 +19,7 @@ docs/build
 # spack develop build artifacts
 build/
 build-linux*
+
+
+venv
+dist
