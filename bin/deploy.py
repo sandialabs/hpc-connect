@@ -19,8 +19,8 @@ def main():
     p = subparsers.add_parser("build", help="Build wheels")
     p.add_argument("-l", action="store_true", default=False, help="Keep local")
     p = subparsers.add_parser("deploy", help="Upload to pypi index")
-    p.add_argument("-u", required=True, help="twine username")
-    p.add_argument("-p", required=True, help="twine password")
+    p.add_argument("-u", help="twine username")
+    p.add_argument("-p", help="twine password")
     args = parser.parse_args()
     if args.command == "build":
         return build_and_test(local=args.l)
@@ -62,12 +62,18 @@ def test() -> None:
     logger.info("Done testing")
 
 
-def deploy(*, twine_username: str, twine_password: str) -> None:
+def deploy(*, twine_username: str | None = None, twine_password: str | None = None) -> None:
     assert os.path.exists("./dist"), "build wheels first"
     logger.info("Deploying")
     with virtual_env() as env:
-        os.environ["TWINE_USERNAME"] = twine_username
-        os.environ["TWINE_PASSWORD"] = twine_password
+        if twine_username is not None:
+            os.environ["TWINE_USERNAME"] = twine_username
+        if "TWINE_USERNAME" not in os.environ:
+            raise MissingEnvironmentVariableError("TWINE_USERNAME")
+        if twine_password is not None:
+            os.environ["TWINE_PASSWORD"] = twine_password
+        if "TWINE_PASSWORD" not in os.environ:
+            raise MissingEnvironmentVariableError("TWINE_PASSWORD")
         subprocess.run([env.bin.python3, "-m", "pip", "install", "twine"], check=True)
         wheels = glob.glob("./dist/*.whl")
         cmd = [
@@ -88,23 +94,24 @@ class Prefix(str):
 
 
 @contextmanager
-def virtual_env() -> Generator[Prefix, None, None]:
+def virtual_env(preserve: bool = False) -> Generator[Prefix, None, None]:
     save_env = os.environ.copy()
-    if os.path.exists("venv"):
-        shutil.rmtree("venv")
-    subprocess.run([sys.executable, "-m", "venv", "venv"], check=True)
-    save_env.pop("VIRTUAL_ENV", None)
-    save_env.pop("VIRTUAL_ENV_PROMPT", None)
-    save_env.pop("PYTHONHOME", None)
-    venv = os.path.abspath("./venv")
-    os.environ["VIRTUAL_ENV"] = venv
-    os.environ["PATH"] = f"{venv}/bin:{os.environ['PATH']}"
-    os.environ["PIP_INDEX"] = "https://nexus.web.sandia.gov/repository/pypi-proxy/pypi"
-    os.environ["PIP_INDEX_URL"] = "https://nexus.web.sandia.gov/repository/pypi-proxy/simple"
-    os.environ["PIP_TRUSTED_HOST"] = "nexus.web.sandia.gov"
-    yield Prefix(venv)
-    os.environ.clear()
-    os.environ.update(save_env)
+    try:
+        if os.path.exists("venv"):
+            shutil.rmtree("venv")
+        subprocess.run([sys.executable, "-m", "venv", "venv", "--system-site-packages"], check=True)
+        save_env.pop("VIRTUAL_ENV", None)
+        save_env.pop("VIRTUAL_ENV_PROMPT", None)
+        save_env.pop("PYTHONHOME", None)
+        venv = os.path.abspath("./venv")
+        os.environ["VIRTUAL_ENV"] = venv
+        os.environ["PATH"] = f"{venv}/bin:{os.environ['PATH']}"
+        yield Prefix(venv)
+    finally:
+        os.environ.clear()
+        os.environ.update(save_env)
+        if not preserve:
+            shutil.rmtree("venv")
 
 
 @contextmanager
@@ -127,6 +134,9 @@ def merge(name, local: bool = False):
         git("checkout", cwb)
     git("merge", "--no-ff", name, "-m", f"Merge remote-traching branch {name!r} into {cwb}")
 
+
+class MissingEnvironmentVariableError(Exception):
+    pass
 
 if __name__ == "__main__":
     sys.exit(main())
