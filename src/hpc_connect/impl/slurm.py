@@ -44,16 +44,18 @@ class SlurmProcess(HPCProcess):
         if ns.clusters:
             self.clusters = ns.clusters
         args = [sbatch, script]
-        out = subprocess.check_output(args, encoding="utf-8")
+        proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
         with open(os.path.join(self.script_dir, "submit.meta.json"), "w") as fh:
             date = datetime.datetime.now().strftime("%c")
-            meta = {"args": " ".join(args), "date": date, "stdout/stderr": out}
+            meta = {"args": " ".join(args), "date": date, "stdout/stderr": proc.stdout}
             json.dump({"meta": meta}, fh, indent=2)
-        if match := re.search("Submitted batch job (.*)$", out):
+        if match := re.search("Submitted batch job (.*)$", proc.stdout):
             jobid = match.group(1).strip()
             return jobid
         logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
-        for line in out.split("\n"):
+        for line in proc.stdout.split("\n"):
+            logger.log(logging.ERROR, f"    {line}")
+        for line in proc.stderr.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
         raise HPCSubmissionFailedError
 
@@ -85,8 +87,8 @@ class SlurmProcess(HPCProcess):
         acct_data: dict[str, dict[str, Any]] = {}
         for _ in range(max_tries):
             args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
-            out = subprocess.check_output(args, encoding="utf-8")
-            lines = [line.strip() for line in out.splitlines() if line.split()]
+            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
+            lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
             if lines:
                 for line in lines:
                     jobid, state, exit_code = [_.strip() for _ in line.split("|") if _.split()]
@@ -201,11 +203,11 @@ def read_sinfo() -> dict[str, Any] | None:
         format = " ".join(opts)
         args = [sinfo, "-o", format]
         try:
-            output = subprocess.check_output(args, encoding="utf-8")
+            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
         except subprocess.CalledProcessError:
             return None
         else:
-            for line in output.split("\n"):
+            for line in proc.stdout.split("\n"):
                 parts = line.split()
                 if not parts:
                     continue
@@ -214,7 +216,7 @@ def read_sinfo() -> dict[str, Any] | None:
                 spn, cps, _, cpn, nc, *gres = [safe_loads(_) for _ in parts]
                 break
             else:
-                raise ValueError(f"Unable to read sinfo output:\n{output}")
+                raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
             info = {"name": "node", "type": None, "count": nc}
             resources = info.setdefault("resources", [])
             resources.append({"name": "socket", "type": None, "count": spn})

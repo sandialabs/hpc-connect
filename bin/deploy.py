@@ -138,5 +138,6 @@ def merge(name, local: bool = False):
 class MissingEnvironmentVariableError(Exception):
     pass
 
+
 if __name__ == "__main__":
     sys.exit(main())
