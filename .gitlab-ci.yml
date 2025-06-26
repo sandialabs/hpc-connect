@@ -16,7 +16,7 @@ deploy:build:
   - cee.build
   stage: build
   rules:
-  - if: CI_DEPLOY_TO_PYPI
+  - if: $CI_DEPLOY_TO_PYPI
     when: always
   before_script:
   - $CEE_PYTHON3 -m venv venv
@@ -36,7 +36,7 @@ deploy:deploy:
   needs:
   - deploy:build
   rules:
-  - if: CI_DEPLOY_TO_PYPI
+  - if: $CI_DEPLOY_TO_PYPI
     when: always
   before_script:
   - $CEE_PYTHON3 -m venv venv
