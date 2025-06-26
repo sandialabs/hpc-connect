@@ -5,7 +5,6 @@ stages:
 variables:
   GIT_SSL_NO_VERIFY: 'true'
   PYPI_PACKAGE_NAME: hpc-connect
-  PYPI_URL: https://upload.pypi.org/legacy/
   CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
   PIP_INDEX: https://nexus.web.sandia.gov/repository/pypi-proxy/pypi
   PIP_INDEX_URL: https://nexus.web.sandia.gov/repository/pypi-proxy/simple
@@ -44,4 +43,4 @@ deploy:deploy:
   - python3 -m pip install --upgrade pip
   - python3 -m pip install twine
   script:
-  - twine upload --repository-url $PYPI_URL --username $PYPI_USERNAME --password $PYPI_PASSWORD dist/*
+  - twine upload dist/*
