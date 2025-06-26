@@ -1,0 +1,47 @@
+stages:
+- build
+- deploy
+
+variables:
+  GIT_SSL_NO_VERIFY: 'true'
+  PYPI_PACKAGE_NAME: hpc-connect
+  PYPI_URL: https://upload.pypi.org/legacy/
+  CEE_PYTHON3: /usr/local/anaconda/3-2024.02/bin/python3
+  PIP_INDEX: https://nexus.web.sandia.gov/repository/pypi-proxy/pypi
+  PIP_INDEX_URL: https://nexus.web.sandia.gov/repository/pypi-proxy/simple
+  PIP_TRUSTED_HOST: nexus.web.sandia.gov
+
+deploy:build:
+  tags:
+  - cee.build
+  stage: build
+  rules:
+  - if: CI_DEPLOY_TO_PYPI
+    when: always
+  before_script:
+  - $CEE_PYTHON3 -m venv venv
+  - source venv/bin/activate
+  - python3 -m pip install --upgrade pip
+  - python3 -m pip install setuptools wheel build
+  script:
+  - python3 -m build --wheel
+  artifacts:
+    paths:
+    - dist/*.whl
+
+deploy:deploy:
+  tags:
+  - cee.build
+  stage: deploy
+  needs:
+  - deploy:build
+  rules:
+  - if: CI_DEPLOY_TO_PYPI
+    when: always
+  before_script:
+  - $CEE_PYTHON3 -m venv venv
+  - source venv/bin/activate
+  - python3 -m pip install --upgrade pip
+  - python3 -m pip install twine
+  script:
+  - twine upload --repository-url $PYPI_URL --username $PYPI_USERNAME --password $PYPI_PASSWORD dist/*
