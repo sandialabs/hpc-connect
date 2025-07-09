@@ -88,6 +88,8 @@ class SlurmProcess(HPCProcess):
         acct_data: dict[str, dict[str, Any]] = {}
         for _ in range(max_tries):
             args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
+            if self.clusters:
+                args.append(f"--clusters={self.clusters}")
             proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
             lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
             if lines:
