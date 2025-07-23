@@ -1,67 +1,84 @@
-"""
-Overview
---------
-
-`hpc-launch` is a lightweight and configurable wrapper around program launchers like `mpiexec` or
-`srun`. `hpc-launch` provides a single interface to multiple backends, simplifying the process of
-launching applications in an HPC environment. `hpc-launch` passes all command line arguments to the
-backend implementation.
-
-Configuration
--------------
-
-The default behavior of `hpc-launch` can be changed by providing a yaml configuration file.  The
-default configuration is:
-
-.. code-block:: yaml
-
-   hpc_connect:
-     launch:
-       exec: mpiexec  # the launch backend.
-       numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
-       local_options: []  # Flags to pass to the backend before any other arguments.
-       default_options: []  # Flags to pass to the backend before any other arguments.
-       mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
-
-The configuration file is read at the first of:
-
-1. ./hpc_connect.yaml
-2. $HPCC_CONFIG_FILE
-3. $XDG_CONFIG_HOME/hpc_connect/config.yaml
-4. ~/.config/hpc_connect/config.yaml
-
-Configuration settings can also be modified through the following environment variables:
-
-* HPCC_LAUNCH_EXEC
-* HPCC_LAUNCH_NUMPROC_FLAG
-* HPCC_LAUNCH_LOCAL_OPTIONS
-* HPCC_LAUNCH_DEFAULT_OPTIONS
-* HPCC_LAUNCH_MAPPINGS
-
-Argument parsing
-----------------
-
-`hpc-launch` does not interpret or process any arguments passed to the backend, except for
-arguments matching the `numproc_flag` configuration, which specifies the flag that indicates the
-number of processors to be launched.
-
-"""
-
-import logging
+import os
+import shlex
 import shutil
 import subprocess
 from typing import Any
 from typing import Generator
 from typing import Sequence
 
-logger = logging.getLogger("hpc_connect")
+from ..config import Config
 
 
-from . import config
-from . import pluginmanager
+class HPCLauncher:
+    def __init__(self, config: Config | None = None) -> None:
+        self.config = config or Config()
+
+    def __call__(
+        self, args: list[str], echo: bool = False, **kwargs: Any
+    ) -> subprocess.CompletedProcess:
+        cmd = self.prepare_command_line(args)
+        if echo:
+            print(shlex.join(cmd))
+        return subprocess.run(cmd, **kwargs)
+
+    @staticmethod
+    def matches(arg: str) -> bool:
+        return True
+
+    @property
+    def exec(self) -> str:
+        return self.config.get("launch:exec")
+
+    @property
+    def mappings(self) -> dict[str, str]:
+        return self.config.get("launch:mappings") or {}
+
+    @property
+    def numproc_flag(self) -> str:
+        return self.config.get("launch:numproc_flag")
+
+    def prepare_command_line(self, args: list[str]) -> list[str]:
+        parser = ArgumentParser(mappings=self.mappings, numproc_flag=self.numproc_flag)
+        launchspecs = parser.parse_args(args)
+        return self.join_specs(launchspecs)
+
+    def join_specs(
+        self,
+        launchspecs: "LaunchSpecs",
+        local_flags: list[str] | None = None,
+        global_flags: list[str] | None = None,
+        post_flags: list[str] | None = None,
+    ) -> list[str]:
+        local_flags = list(local_flags or [])
+        local_flags.extend(self.config.get("launch:local_flags"))
+        global_flags = list(global_flags or [])
+        global_flags.extend(self.config.get("launch:default_flags"))
+        post_flags = list(post_flags or [])
+        post_flags.extend(self.config.get("launch:post_flags"))
+
+        cmd = [os.fsdecode(self.exec)]
+        np = sum(p for p in launchspecs.processes if p)
+        required_resources = self.config.compute_required_resources(ranks=np)
+        for opt in global_flags:
+            cmd.append(self.expand(opt, **required_resources))
+        for p, spec in launchspecs:
+            for opt in local_flags:
+                cmd.append(self.expand(opt, np=p))
+            for opt in post_flags:
+                cmd.append(self.expand(opt, np=p))
+            for arg in spec:
+                cmd.append(self.expand(arg, np=p))
+            cmd.append(":")
+        if cmd[-1] == ":":
+            cmd.pop()
+        return cmd
+
+    @staticmethod
+    def expand(arg: str, **kwargs: Any) -> str:
+        return arg % kwargs
 
 
-class Namespace:
+class LaunchSpecs:
     def __init__(self) -> None:
         self.specs: list[list[str]] = []
         self.processes: list[int | None] = []
@@ -95,9 +112,9 @@ class ArgumentParser:
                 return arg.replace(pat, repl)
         return None
 
-    def parse_args(self, args: Sequence[str]) -> Namespace:
+    def parse_args(self, args: Sequence[str]) -> LaunchSpecs:
         """Inspect arguments to launch to infer number of processors requested"""
-        namespace = Namespace()
+        launchspecs = LaunchSpecs()
         spec: list[str] = []
         processes: int | None = None
         command_seen: bool = False
@@ -129,31 +146,13 @@ class ArgumentParser:
                     spec.append(arg)
             elif arg == ":":
                 # MPMD: end of this segment
-                namespace.add(spec, processes)
+                launchspecs.add(spec, processes)
                 spec.clear()
                 command_seen, processes = False, None
             else:
                 spec.append(arg)
 
         if spec:
-            namespace.add(spec, processes)
+            launchspecs.add(spec, processes)
 
-        return namespace
-
-
-def join_args(args: Namespace) -> list[str]:
-    cmd = pluginmanager.manager.hook.hpc_connect_launch_join_args(
-        args=args,
-        exec=config.get("launch:exec"),
-        local_options=config.get("launch:local_options"),
-        global_options=config.get("launch:default_options"),
-    )
-    return cmd
-
-
-def launch(args_in: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    f = lambda p: config.get(p)
-    parser = ArgumentParser(mappings=f("launch:mappings"), numproc_flag=f("launch:numproc_flag"))
-    args = parser.parse_args(args_in)
-    cmd = join_args(args)
-    return subprocess.run(cmd, **kwargs)
+        return launchspecs

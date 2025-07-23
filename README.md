@@ -22,59 +22,9 @@ python3 -m pip install hpc-connect
 
 ```python
 import hpc_connect
-backend = hpc_connect.get_backend("shell")
-backend.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
+submission_manager = hpc_connect.get_submission_manager("shell")
+submission_manager.submit("hello-world", ["echo 'Hello, world!'"], cpus=1)
 ```
-
-## User defined scheduler backend
-
-```python
-from hpc_connect import HPCBackend
-
-class MyBackend(HPCBackend):
-
-    name = "my-backend"
-
-    @staticmethod
-    def matches(name: str | None) -> bool:
-        # logic to determine if this backend matches ``name``
-
-    def submit(
-        self,
-        name: str,
-        args: list[str],
-        scriptname: str | None = None,
-        qtime: float | None = None,
-        submit_flags: list[str] | None = None,
-        variables: dict[str, str | None] | None = None,
-        output: str | None = None,
-        error: str | None = None,
-        nodes: int | None = None,
-        cpus: int | None = None,
-        gpus: int | None = None,
-        **kwargs: Any,
-    ) -> HPCProcess: ...
-        # submit script ``script`` and return the HPCProcess
-
-
-@hpc_connect.hookimpl
-def hpc_connect_backend():
-    return MyBackend
-```
-
-## Registering user defined backend
-
-Custom backends must be registered in your `pyproject.toml` file using the `hpc_connect` entry points. Here's an example configuration:
-
-```toml
-[project]
-name = "my_project"
-version = "0.1.0"
-
-[project.entry_points.hpc_connect]
-my_hpc_connect = "my_module"
-```
-
 
 ## hpc-launch
 
@@ -114,8 +64,9 @@ hpc_connect:
     vendor: openmpi
     exec: mpiexec
     numproc_flag: -n
-    default_options: []
-    default_local_options: []
+    default_flags: []
+    local_flags: []
+    post_flags: []
     mappings: {}
 ```
 
@@ -124,8 +75,9 @@ hpc_connect:
 - vendor: The MPI implementation vendor (e.g., openmpi, mpich).
 - exec: The command to execute the launcher (e.g., mpiexec, mpirun).
 - numproc_flag: The flag used to specify the number of processes (e.g., -n).
-- default_options: A list of default options passed to the launcher.
-- default_local_options: A list of options specific to local execution.
+- default_flags: A list of default options passed to the launcher.
+- local_flags: A list of options specific to local execution.
+- post_flags: A list of options that are added to the command line after all other launcher args
 - mappings: A dictionary for additional mappings or configurations, where command-line flags can be replaced with their corresponding values.
 
 Configuration variables can also be specified through environment variables named `HPCC_LAUNCH_NAME` where `NAME` is any one of the configuration variables given above.  Variables defined in the environment take precedent over variables defined in the configuration file.
@@ -172,7 +124,7 @@ hpc_connect:
     vendor: mpich
     exec: mpiexec
     numproc_flag: -np
-    default_options: --bind-to none
+    default_flags: --bind-to none
 ```
 
 the command line
@@ -224,7 +176,7 @@ hpc_connect:
     vendor: mpich
     exec: mpiexec
     numproc_flag: -np
-    default_options: --bind-to core --map-by ppr:%(np)d:numa
+    default_flags: --bind-to core --map-by ppr:%(np)d:numa
 ```
 
 the command line
@@ -276,8 +228,8 @@ hpc_connect:
     vendor: mpich
     exec: mpiexec
     numproc_flag: -np
-    default_options: --bind-to core --map-by ppr:%(np)d:numa
-    local_options: -H localhost
+    default_flags: --bind-to core --map-by ppr:%(np)d:numa
+    local_flags: -H localhost
 ```
 
 the command line

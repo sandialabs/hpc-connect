@@ -13,10 +13,10 @@ from typing import TextIO
 
 import psutil
 
-from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
+from ..config import Config
 from ..util import time_in_seconds
+from .base import HPCProcess
+from .base import HPCSubmissionManager
 
 logger = logging.getLogger("hpc_connect")
 
@@ -85,11 +85,11 @@ class ShellProcess(HPCProcess):
                 pass
 
 
-class ShellBackend(HPCBackend):
+class ShellSubmissionManager(HPCSubmissionManager):
     name = "shell"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Config | None = None):
+        super().__init__(config=config)
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
@@ -138,8 +138,3 @@ class ShellBackend(HPCBackend):
     @property
     def submission_template(self) -> str:
         return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
-
-
-@hookimpl
-def hpc_connect_backend():
-    return ShellBackend

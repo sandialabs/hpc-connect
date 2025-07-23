@@ -14,10 +14,10 @@ import subprocess
 import time
 from typing import Any
 
-from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
-from ..types import HPCSubmissionFailedError
+from ..config import Config
+from .base import HPCProcess
+from .base import HPCSubmissionFailedError
+from .base import HPCSubmissionManager
 
 logger = logging.getLogger("hpc_connect")
 
@@ -127,7 +127,7 @@ class SlurmProcess(HPCProcess):
         self.returncode = 1
 
 
-class SlurmBackend(HPCBackend):
+class SlurmSubmissionManager(HPCSubmissionManager):
     """Setup and submit jobs to the slurm scheduler"""
 
     name = "slurm"
@@ -136,18 +136,19 @@ class SlurmBackend(HPCBackend):
     def matches(name: str | None) -> bool:
         return name is not None and name.lower() in ("slurm", "sbatch")
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, config: Config | None = None) -> None:
+        super().__init__(config=config)
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
         sacct = shutil.which("sacct")
         if sacct is None:
             raise ValueError("sacct not found on PATH")
-        if sinfo := read_einfo():
-            self.config.set_resource_spec([sinfo])
-        elif sinfo := read_sinfo():
-            self.config.set_resource_spec([sinfo])
+        if self.config.get("machine:resources") is None:
+            if sinfo := read_einfo():
+                self.config.set("machine:resources", [sinfo], scope="defaults")
+            elif sinfo := read_sinfo():
+                self.config.set("machine:resources", [sinfo], scope="defaults")
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
@@ -156,6 +157,13 @@ class SlurmBackend(HPCBackend):
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
         return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
+
+    def prepare_command_line(self, args: list[str]) -> list[str]:
+        sbatch = shutil.which("sbatch")
+        if sbatch is None:
+            raise ValueError("sbatch not found on PATH")
+        default_flags = self.config.get("submit:default_flags")
+        return [sbatch, *default_flags, *args]
 
     def submit(
         self,
@@ -217,10 +225,29 @@ def read_sinfo() -> dict[str, Any] | None:
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
-            info = {"name": "node", "type": None, "count": nc}
-            resources = info.setdefault("resources", [])
-            resources.append({"name": "socket", "type": None, "count": spn})
-            resources.append({"name": "cpu", "type": None, "count": cps * spn})
+            info: dict = {
+                "name": "node",
+                "type": None,
+                "count": nc,
+                "resources": [
+                    {
+                        "name": "socket",
+                        "count": spn,
+                        "resources": [
+                            {
+                                "name": "cpu",
+                                "type": None,
+                                "count": cps * spn,
+                            },
+                            {
+                                "name": "gpu",
+                                "type": None,
+                                "count": 0,
+                            },
+                        ],
+                    }
+                ],
+            }
             for res in gres:
                 if not res:
                     continue
@@ -232,7 +259,7 @@ def read_sinfo() -> dict[str, Any] | None:
                 }
                 if len(parts) > 2:
                     resource["type"] = ":".join(parts[1:-1])
-                resources.append(resource)
+                info["resources"].append(resource)
             return info
     return None
 
@@ -263,8 +290,3 @@ def safe_loads(arg: str) -> Any:
         return json.loads(arg)
     except json.JSONDecodeError:
         return arg
-
-
-@hookimpl
-def hpc_connect_backend():
-    return SlurmBackend

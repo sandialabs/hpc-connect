@@ -11,10 +11,9 @@ import shutil
 import subprocess
 from typing import Any
 
-from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
-from ..types import HPCSubmissionFailedError
+from .base import HPCProcess
+from .base import HPCSubmissionFailedError
+from .base import HPCSubmissionManager
 
 logger = logging.getLogger("hpc_connect")
 
@@ -92,7 +91,7 @@ class PBSProcess(HPCProcess):
         self.returncode = 1
 
 
-class PBSBackend(HPCBackend):
+class PBSSubmissionManager(HPCSubmissionManager):
     """Setup and submit jobs to the PBS scheduler"""
 
     name = "pbs"
@@ -118,6 +117,13 @@ class PBSBackend(HPCBackend):
         if "HPCC_PBS_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_PBS_SUBMIT_TEMPLATE"]
         return str(importlib.resources.files("hpc_connect").joinpath("templates/pbs.sh.in"))
+
+    def prepare_command_line(self, args: list[str]) -> list[str]:
+        qsub = shutil.which("qsub")
+        if qsub is None:
+            raise ValueError("qsub not found on PATH")
+        default_flags = self.config.get("submit:default_flags")
+        return [qsub, *default_flags, *args]
 
     def submit(
         self,
@@ -150,8 +156,3 @@ class PBSBackend(HPCBackend):
         )
         assert script is not None
         return PBSProcess(script)
-
-
-@hookimpl
-def hpc_connect_backend():
-    return PBSBackend
