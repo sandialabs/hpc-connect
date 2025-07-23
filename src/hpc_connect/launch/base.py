@@ -7,6 +7,7 @@ from typing import Generator
 from typing import Sequence
 
 from ..config import Config
+from ..hookspec import hookimpl
 
 
 class HPCLauncher:
@@ -156,3 +157,8 @@ class ArgumentParser:
             launchspecs.add(spec, processes)
 
         return launchspecs
+
+
+@hookimpl(trylast=True)
+def hpc_connect_launcher(config: Config) -> HPCLauncher:
+    return HPCLauncher(config=config)

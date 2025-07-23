@@ -11,6 +11,8 @@ import shutil
 import subprocess
 from typing import Any
 
+from ..config import Config
+from ..hookspec import hookimpl
 from .base import HPCProcess
 from .base import HPCSubmissionFailedError
 from .base import HPCSubmissionManager
@@ -100,8 +102,8 @@ class PBSSubmissionManager(HPCSubmissionManager):
     def matches(name: str | None) -> bool:
         return name is not None and name.lower() in ("pbs", "qsub")
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Config | None = None) -> None:
+        super().__init__(config=config)
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
@@ -156,3 +158,10 @@ class PBSSubmissionManager(HPCSubmissionManager):
         )
         assert script is not None
         return PBSProcess(script)
+
+
+@hookimpl
+def hpc_connect_get_scheduler(config) -> HPCSubmissionManager | None:
+    if PBSSubmissionManager.matches(config.get("submit:backend")):
+        return PBSSubmissionManager(config=config)
+    return None

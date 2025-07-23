@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 from ..config import Config
+from ..hookspec import hookimpl
 from .base import HPCProcess
 from .base import HPCSubmissionFailedError
 from .base import HPCSubmissionManager
@@ -290,3 +291,10 @@ def safe_loads(arg: str) -> Any:
         return json.loads(arg)
     except json.JSONDecodeError:
         return arg
+
+
+@hookimpl
+def hpc_connect_get_scheduler(config) -> HPCSubmissionManager | None:
+    if SlurmSubmissionManager.matches(config.get("submit:backend")):
+        return SlurmSubmissionManager(config=config)
+    return None

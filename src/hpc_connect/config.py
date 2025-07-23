@@ -13,8 +13,10 @@ from functools import cached_property
 from typing import IO
 from typing import Any
 
+import pluggy
 import yaml
 
+from .pluginmanager import HPCConnectPluginManager
 from .third_party.schema import Optional
 from .third_party.schema import Or
 from .third_party.schema import Schema
@@ -157,6 +159,7 @@ config_defaults = {
 
 class Config:
     def __init__(self) -> None:
+        self.pluginmanager: pluggy.PluginManager = HPCConnectPluginManager()
         self.scopes: dict[str, ConfigScope] = {
             "defaults": ConfigScope("defaults", None, config_defaults)
         }

@@ -14,6 +14,7 @@ from typing import TextIO
 import psutil
 
 from ..config import Config
+from ..hookspec import hookimpl
 from ..util import time_in_seconds
 from .base import HPCProcess
 from .base import HPCSubmissionManager
@@ -138,3 +139,10 @@ class ShellSubmissionManager(HPCSubmissionManager):
     @property
     def submission_template(self) -> str:
         return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
+
+
+@hookimpl
+def hpc_connect_get_scheduler(config) -> HPCSubmissionManager | None:
+    if ShellSubmissionManager.matches(config.get("submit:backend")):
+        return ShellSubmissionManager(config=config)
+    return None

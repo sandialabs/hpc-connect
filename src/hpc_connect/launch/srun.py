@@ -3,6 +3,7 @@ import os
 import shutil
 
 from ..config import Config
+from ..hookspec import hookimpl
 from ..submit import slurm
 from .base import HPCLauncher
 from .base import LaunchSpecs
@@ -79,3 +80,10 @@ class SrunLauncher(HPCLauncher):
             if shutil.which(arg):
                 return i
         return -1
+
+
+@hookimpl
+def hpc_connect_launcher(config: Config) -> HPCLauncher | None:
+    if SrunLauncher.matches(config.get("launch:exec")):
+        return SrunLauncher(config=config)
+    return None
