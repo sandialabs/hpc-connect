@@ -13,7 +13,6 @@ add_help = False
 
 
 def setup_parser(parser: argparse.ArgumentParser) -> None:
-    from .. import launch
 
     parser.usage = "%(prog)s [-h] [--help] ..."
     parser.add_argument(

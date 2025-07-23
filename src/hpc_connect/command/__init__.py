@@ -65,6 +65,9 @@ _commands: dict[str, ModuleType] = {}
 def main(argv: list[str] | None = None) -> int:
     parser = make_parser()
     args, extra_args = parser.parse_known_args(argv or sys.argv[1:])
+    if args.info:
+        print(__doc__)
+        return 0
     args.extra_args = extra_args
 
     module = _commands[args.command]
@@ -75,10 +78,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--info", action="store_true", help="Show additional information and exit.")
     parser.add_argument(
         "-c",
         dest="config_mods",
