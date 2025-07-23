@@ -418,6 +418,17 @@ class Config:
             # available nodes
             raise ValueError("ranks_per_socket requires ranks also be defined")
 
+        reqd_resources: dict[str, int] = {
+            "np": 0,
+            "ranks": 0,
+            "ranks_per_socket": 0,
+            "nodes": 0,
+            "sockets": 0,
+        }
+
+        if not ranks and not ranks_per_socket:
+            return reqd_resources
+
         nodes: int
         if ranks is None and ranks_per_socket is None:
             ranks = ranks_per_socket = 1
@@ -429,17 +440,13 @@ class Config:
             assert ranks is not None
             assert ranks_per_socket is not None
             nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-
         sockets = int(math.ceil(ranks / ranks_per_socket))
-
-        resources_required: dict[str, int] = {
-            "np": ranks,
-            "ranks": ranks,
-            "ranks_per_socket": ranks_per_socket,
-            "nodes": nodes,
-            "sockets": sockets,
-        }
-        return resources_required
+        reqd_resources["np"] = ranks
+        reqd_resources["ranks"] = ranks
+        reqd_resources["ranks_per_socket"] = ranks_per_socket
+        reqd_resources["nodes"] = nodes
+        reqd_resources["sockets"] = sockets
+        return reqd_resources
 
     def dump(self, stream: IO[Any], scope: str | None = None, **kwargs: Any) -> None:
         from .submit import factory
