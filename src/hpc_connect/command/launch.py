@@ -20,7 +20,7 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
         "-h",
         default=False,
         action="help",
-        help="Show this message and exit.",
+        help="Show this message and exit.  For the backend's help, run 'hpcc launch --help'",
     )
     parser.add_argument(
         "--dryrun",
@@ -28,8 +28,6 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
         default=False,
         help="Print command line to shell but do not execute",
     )
-    parser.formatter_class = argparse.RawDescriptionHelpFormatter
-    parser.epilog = launch.__doc__
 
 
 def execute(config: Config, args: argparse.Namespace) -> None:

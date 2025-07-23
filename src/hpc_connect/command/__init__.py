@@ -1,3 +1,55 @@
+"""
+Overview
+--------
+
+`hpcc` is a lightweight and configurable wrapper around HPC schedulers and program launchers like
+`mpiexec` or `srun`. `hpcc` provides a single interface to multiple backends, simplifying the
+process of running jobs in an HPC environment.  backend implementation.
+
+Configuration
+-------------
+
+The default behavior of `hpcc` can be changed by providing a yaml configuration file.  The default
+configuration is:
+
+.. code-block:: yaml
+
+   hpc_connect:
+     config:
+       debug: false
+     launch:
+       exec: mpiexec  # the launch backend.
+       numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
+       local_flags: []  # Flags to pass to the backend before any other arguments.
+       default_flags: []  # Flags to pass to the backend before any other arguments.
+       post_flags: []  # Flags to pass to the backend after all arguments.
+       mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
+    submit:
+      backend: null
+      default_flags: []
+
+Configurations are read from:
+
+1. Local configuration: ./hpc_connect.yaml
+2. Global configuration [1]: ~/.config/hpc_connect/config.yaml
+3. Site configuration [2]: sys.prefix/etc/hpc_connect/config.yaml
+
+[1] The global configuration will be read from the HPC_CONNECT_GLOBAL_CONFIG environment variable, if set
+[2] The site configuration will be read from the HPC_CONNECT_SITE_CONFIG environment variable, if set
+
+Configuration settings can also be modified through the following environment variables:
+
+* HPCC_LAUNCH_EXEC
+* HPCC_LAUNCH_NUMPROC_FLAG
+* HPCC_LAUNCH_LOCAL_FLAGS
+* HPCC_LAUNCH_DEFAULT_FLAGS
+* HPCC_LAUNCH_POST_FLAGS
+* HPCC_LAUNCH_MAPPINGS
+* HPCC_SUBMIT_BACKEND
+* HPCC_SUBMIT_DEFAULT_FLAGS
+
+"""
+
 import argparse
 import sys
 from types import ModuleType
@@ -23,7 +75,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
     parser.add_argument(
         "-c",
         dest="config_mods",
