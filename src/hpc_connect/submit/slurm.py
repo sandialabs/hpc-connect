@@ -294,7 +294,7 @@ def safe_loads(arg: str) -> Any:
 
 
 @hookimpl
-def hpc_connect_get_scheduler(config) -> HPCSubmissionManager | None:
+def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
     if SlurmSubmissionManager.matches(config.get("submit:backend")):
         return SlurmSubmissionManager(config=config)
     return None

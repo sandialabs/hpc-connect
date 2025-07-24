@@ -46,7 +46,7 @@ else:
 
 
 @hookimpl
-def hpc_connect_get_scheduler(config) -> HPCSubmissionManager | None:
+def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
     if FluxSubmissionManager.matches(config.get("submit:backend")):
         return FluxSubmissionManager(config=config)
     return None
