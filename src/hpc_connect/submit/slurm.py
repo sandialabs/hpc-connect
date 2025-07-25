@@ -226,7 +226,7 @@ def read_sinfo() -> dict[str, Any] | None:
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
-            info: dict = {
+            info: dict[str, Any] = {
                 "name": "node",
                 "type": None,
                 "count": nc,
@@ -269,16 +269,29 @@ def read_einfo() -> dict[str, Any] | None:
     """Read information from slurm allocation environment"""
     if "SLURM_JOBID" not in os.environ:
         return None
-    node_count = safe_loads(os.environ["SLURM_JOB_NUM_NODES"])
-    info = {"name": "node", "type": None, "count": node_count}
-    resources = info.setdefault("resources", [])
-
-    cpus_per_node = safe_loads(os.environ["SLURM_CPUS_ON_NODE"])
-    resources.append({"name": "cpu", "type": None, "count": cpus_per_node})
-
-    gpus_per_node = safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0
-    resources.append({"name": "gpu", "type": None, "count": gpus_per_node})
-
+    info: dict[str, Any] = {
+        "name": "node",
+        "type": None,
+        "count": safe_loads(os.environ["SLURM_JOB_NUM_NODES"]),
+        "resources": [
+            {
+                "name": "socket",
+                "count": 1,
+                "resources": [
+                    {
+                        "name": "cpu",
+                        "type": None,
+                        "count": safe_loads(os.environ["SLURM_CPUS_ON_NODE"]),
+                    },
+                    {
+                        "name": "gpu",
+                        "type": None,
+                        "count": safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0,
+                    },
+                ],
+            }
+        ],
+    }
     return info
 
 
