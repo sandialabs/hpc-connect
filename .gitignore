@@ -6,6 +6,7 @@ html.cov
 _test-cache
 __pycache__
 .mypy_cache
+.canary_cache
 src/*.egg-info/
 src/hpc_connect/version.py
 

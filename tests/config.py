@@ -12,12 +12,12 @@ def test_config_launch_basic(tmpdir):
         config.set("launch:exec", "my-mpiexec")
         assert config.get("launch:exec") == "my-mpiexec"
 
-        config.set("launch:local_flags", ["-a", "-b"])
-        assert config.get("launch:local_flags") == ["-a", "-b"]
-        config.add('launch:local_flags:["-c", "-d"]')
-        assert config.get("launch:local_flags") == ["-a", "-b", "-c", "-d"]
-        config.add('launch:local_flags:-e')
-        assert config.get("launch:local_flags") == ["-a", "-b", "-c", "-d", "-e"]
+        config.set("launch:local_options", ["-a", "-b"])
+        assert config.get("launch:local_options") == ["-a", "-b"]
+        config.add('launch:local_options:["-c", "-d"]')
+        assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d"]
+        config.add('launch:local_options:-e')
+        assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d", "-e"]
 
         config.set("launch:mappings", {"-a": "-b", "-c": "-d"})
         assert config.get("launch:mappings") == {"-a": "-b", "-c": "-d"}

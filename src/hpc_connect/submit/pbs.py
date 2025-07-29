@@ -124,8 +124,8 @@ class PBSSubmissionManager(HPCSubmissionManager):
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
-        default_flags = self.config.get("submit:default_flags")
-        return [qsub, *default_flags, *args]
+        default_options = self.config.get("submit:default_options")
+        return [qsub, *default_options, *args]
 
     def submit(
         self,

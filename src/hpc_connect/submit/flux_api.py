@@ -156,24 +156,20 @@ def read_resource_info() -> dict[str, Any] | None:
         # assume homogenous resources
         nodes = totals["nodes"]
         info: dict = {
-            "name": "node",
-            "type": None,
+            "type": "node",
             "count": nodes,
             "resources": [
                 {
-                    "name": "socket",
+                    "type": "socket",
                     "count": 1,
-                    "type": None,
                     "resources": [
                         {
-                            "name": "cpu",
+                            "type": "cpu",
                             "count": int(totals["cpu"] / nodes),
-                            "type": None,
                         },
                         {
-                            "name": "gpu",
+                            "type": "gpu",
                             "count": int(totals["gpu"] / nodes),
-                            "type": None,
                         },
                     ],
                 }

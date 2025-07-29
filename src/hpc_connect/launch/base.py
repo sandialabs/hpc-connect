@@ -46,26 +46,26 @@ class HPCLauncher:
     def join_specs(
         self,
         launchspecs: "LaunchSpecs",
-        local_flags: list[str] | None = None,
-        global_flags: list[str] | None = None,
-        post_flags: list[str] | None = None,
+        local_options: list[str] | None = None,
+        global_options: list[str] | None = None,
+        post_options: list[str] | None = None,
     ) -> list[str]:
-        local_flags = list(local_flags or [])
-        local_flags.extend(self.config.get("launch:local_flags"))
-        global_flags = list(global_flags or [])
-        global_flags.extend(self.config.get("launch:default_flags"))
-        post_flags = list(post_flags or [])
-        post_flags.extend(self.config.get("launch:post_flags"))
+        local_options = list(local_options or [])
+        local_options.extend(self.config.get("launch:local_options"))
+        global_options = list(global_options or [])
+        global_options.extend(self.config.get("launch:default_options"))
+        post_options = list(post_options or [])
+        post_options.extend(self.config.get("launch:post_options"))
 
         cmd = [os.fsdecode(self.exec)]
         np = sum(p for p in launchspecs.processes if p)
         required_resources = self.config.compute_required_resources(ranks=np)
-        for opt in global_flags:
+        for opt in global_options:
             cmd.append(self.expand(opt, **required_resources))
         for p, spec in launchspecs:
-            for opt in local_flags:
+            for opt in local_options:
                 cmd.append(self.expand(opt, np=p))
-            for opt in post_flags:
+            for opt in post_options:
                 cmd.append(self.expand(opt, np=p))
             for arg in spec:
                 cmd.append(self.expand(arg, np=p))

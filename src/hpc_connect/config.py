@@ -60,21 +60,17 @@ def which(arg: str) -> str:
 
 
 resource_spec = {
-    "name": "node",
+    "type": "node",
     "count": int,
-    Optional("type"): Or(str, None),
-    Optional("partition"): Or(str, None),
     "resources": [
         {
-            "name": "socket",
+            "type": "socket",
             "count": int,
-            Optional("type"): Or(str, None),
             "resources": [
                 {
-                    "name": str,
+                    "type": str,
                     "count": int,
-                    Optional("type"): Or(str, None),
-                }
+                },
             ],
         },
     ],
@@ -89,7 +85,7 @@ schema = Schema(
             },
             Optional("submit"): {
                 "backend": Use(choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")),
-                Optional("default_flags"): Use(flag_splitter),
+                Optional("default_options"): Use(flag_splitter),
             },
             Optional("machine"): {
                 Optional("resources"): Or([resource_spec], None),
@@ -97,13 +93,15 @@ schema = Schema(
             Optional("launch"): {
                 Optional("exec"): Use(which),
                 Optional("numproc_flag"): str,
-                Optional("default_flags"): Use(flag_splitter),
-                Optional("local_flags"): Use(flag_splitter),
-                Optional("post_flags"): Use(flag_splitter),
+                Optional("default_options"): Use(flag_splitter),
+                Optional("local_options"): Use(flag_splitter),
+                Optional("post_options"): Use(flag_splitter),
                 Optional("mappings"): dict_str_str,
             },
         }
-    }
+    },
+    ignore_extra_keys=True,
+    description="HPC connect configuration schema",
 )
 
 
@@ -144,14 +142,14 @@ config_defaults = {
     },
     "submit": {
         "backend": None,
-        "default_flags": [],
+        "default_options": [],
     },
     "launch": {
         "exec": "mpiexec",
         "numproc_flag": "-n",
-        "default_flags": [],
-        "local_flags": [],
-        "post_flags": [],
+        "default_options": [],
+        "local_options": [],
+        "post_options": [],
         "mappings": {},
     },
 }
@@ -324,34 +322,34 @@ class Config:
         self.set("machine:resources", resource_specs, scope="defaults")
         return resource_specs
 
-    def count_per_rspec(self, rspec: dict[str, Any], name: str) -> int | None:
+    def count_per_rspec(self, rspec: dict[str, Any], type: str) -> int | None:
         for child in rspec["resources"]:
-            if child["name"] == name:
+            if child["type"] == type:
                 return child["count"]
         return None
 
-    def count_per_node(self, name: str) -> int:
+    def count_per_node(self, type: str) -> int:
         for rspec in self.resource_specs:
-            if rspec["name"] == "node":
-                count = self.count_per_rspec(rspec, name)
+            if rspec["type"] == "node":
+                count = self.count_per_rspec(rspec, type)
                 if count is not None:
                     return count
-        raise ValueError(f"Unable to determine count_per_node for {name!r}")
+        raise ValueError(f"Unable to determine count_per_node for {type!r}")
 
-    def count_per_socket(self, name: str) -> int:
+    def count_per_socket(self, type: str) -> int:
         for rspec1 in self.resource_specs:
-            if rspec1["name"] == "node":
+            if rspec1["type"] == "node":
                 for rspec2 in rspec1["resources"]:
-                    if rspec2["name"] == "socket":
-                        count = self.count_per_rspec(rspec2, name)
+                    if rspec2["type"] == "socket":
+                        count = self.count_per_rspec(rspec2, type)
                         if count is not None:
                             return count
-        raise ValueError(f"Unable to determine count_per_socket for {name!r}")
+        raise ValueError(f"Unable to determine count_per_socket for {type!r}")
 
     @cached_property
     def node_count(self) -> int:
         for resource in self.resource_specs:
-            if resource["name"] == "node":
+            if resource["type"] == "node":
                 return resource["count"]
         raise ValueError("Unable to determine node count")
 
@@ -581,23 +579,19 @@ def set_logging_level(levelname: str) -> None:
 def default_resource_spec() -> list[dict]:
     resource_spec: list[dict] = [
         {
-            "name": "node",
-            "type": None,
+            "type": "node",
             "count": 1,
-            "partition": None,
             "resources": [
                 {
-                    "name": "socket",
+                    "type": "socket",
                     "count": 1,
                     "resources": [
                         {
-                            "name": "cpu",
-                            "type": None,
+                            "type": "cpu",
                             "count": cpu_count(),
                         },
                         {
-                            "name": "gpu",
-                            "type": None,
+                            "type": "gpu",
                             "count": 0,
                         },
                     ],

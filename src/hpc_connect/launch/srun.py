@@ -27,23 +27,25 @@ class SrunLauncher(HPCLauncher):
     def join_specs(
         self,
         launchspecs: "LaunchSpecs",
-        local_flags: list[str] | None = None,
-        global_flags: list[str] | None = None,
-        post_flags: list[str] | None = None,
+        local_options: list[str] | None = None,
+        global_options: list[str] | None = None,
+        post_options: list[str] | None = None,
     ) -> list[str]:
         """Count the total number of processes and write a srun.conf file to
         split the jobs across ranks
 
         """
         if len(launchspecs) <= 1:
-            return super().join_specs(launchspecs, local_flags=local_flags, global_flags=global_flags)
+            return super().join_specs(
+                launchspecs, local_options=local_options, global_options=global_options
+            )
 
-        local_flags = list(local_flags or [])
-        local_flags.extend(self.config.get("launch:local_flags"))
-        global_flags = list(global_flags or [])
-        global_flags.extend(self.config.get("launch:default_flags"))
-        post_flags = list(post_flags or [])
-        post_flags.extend(self.config.get("launch:post_flags"))
+        local_options = list(local_options or [])
+        local_options.extend(self.config.get("launch:local_options"))
+        global_options = list(global_options or [])
+        global_options.extend(self.config.get("launch:default_options"))
+        post_options = list(post_options or [])
+        post_options.extend(self.config.get("launch:post_options"))
 
         np: int = 0
         fp = io.StringIO()
@@ -57,9 +59,9 @@ class SrunLauncher(HPCLauncher):
                 np += 1
             i = self.argp(spec)
             fp.write(ranks)
-            for opt in local_flags:
+            for opt in local_options:
                 fp.write(f" {self.expand(opt, np=np)}")
-            for opt in post_flags:
+            for opt in post_options:
                 fp.write(f" {self.expand(opt, np=np)}")
             for arg in spec[i:]:
                 fp.write(f" {self.expand(arg, np=p)}")
@@ -69,7 +71,7 @@ class SrunLauncher(HPCLauncher):
             fh.write(fp.getvalue())
         cmd = [os.fsdecode(self.exec)]
         required_resources = self.config.compute_required_resources(ranks=np)
-        for opt in global_flags:
+        for opt in global_options:
             cmd.append(self.expand(opt, **required_resources))
         cmd.extend([f"-n{np}", "--multi-prog", file])
         return cmd

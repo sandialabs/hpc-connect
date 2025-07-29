@@ -20,13 +20,13 @@ configuration is:
      launch:
        exec: mpiexec  # the launch backend.
        numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
-       local_flags: []  # Flags to pass to the backend before any other arguments.
-       default_flags: []  # Flags to pass to the backend before any other arguments.
-       post_flags: []  # Flags to pass to the backend after all arguments.
+       local_options: []  # Flags to pass to the backend before any other arguments.
+       default_options: []  # Flags to pass to the backend before any other arguments.
+       post_options: []  # Flags to pass to the backend after all arguments.
        mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
     submit:
       backend: null
-      default_flags: []
+      default_options: []
 
 Configurations are read from:
 
@@ -41,12 +41,12 @@ Configuration settings can also be modified through the following environment va
 
 * HPCC_LAUNCH_EXEC
 * HPCC_LAUNCH_NUMPROC_FLAG
-* HPCC_LAUNCH_LOCAL_FLAGS
-* HPCC_LAUNCH_DEFAULT_FLAGS
-* HPCC_LAUNCH_POST_FLAGS
+* HPCC_LAUNCH_LOCAL_OPTIONS
+* HPCC_LAUNCH_DEFAULT_OPTIONS
+* HPCC_LAUNCH_POST_OPTIONS
 * HPCC_LAUNCH_MAPPINGS
 * HPCC_SUBMIT_BACKEND
-* HPCC_SUBMIT_DEFAULT_FLAGS
+* HPCC_SUBMIT_DEFAULT_OPTIONS
 
 """
 

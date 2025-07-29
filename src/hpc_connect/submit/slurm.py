@@ -163,8 +163,8 @@ class SlurmSubmissionManager(HPCSubmissionManager):
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
-        default_flags = self.config.get("submit:default_flags")
-        return [sbatch, *default_flags, *args]
+        default_options = self.config.get("submit:default_options")
+        return [sbatch, *default_options, *args]
 
     def submit(
         self,
@@ -227,22 +227,19 @@ def read_sinfo() -> dict[str, Any] | None:
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
             info: dict[str, Any] = {
-                "name": "node",
-                "type": None,
+                "type": "node",
                 "count": nc,
                 "resources": [
                     {
-                        "name": "socket",
+                        "type": "socket",
                         "count": spn,
                         "resources": [
                             {
-                                "name": "cpu",
-                                "type": None,
+                                "type": "cpu",
                                 "count": cps * spn,
                             },
                             {
-                                "name": "gpu",
-                                "type": None,
+                                "type": "gpu",
                                 "count": 0,
                             },
                         ],
@@ -254,12 +251,11 @@ def read_sinfo() -> dict[str, Any] | None:
                     continue
                 parts = res.split(":")
                 resource: dict[str, Any] = {
-                    "name": parts[0],
-                    "type": None,
+                    "type": parts[0],
                     "count": safe_loads(parts[-1]),
                 }
                 if len(parts) > 2:
-                    resource["type"] = ":".join(parts[1:-1])
+                    resource["gres"] = ":".join(parts[1:-1])
                 info["resources"].append(resource)
             return info
     return None
