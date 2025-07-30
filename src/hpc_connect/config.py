@@ -312,12 +312,11 @@ class Config:
 
         if resource_specs := self.get("machine:resources"):
             return resource_specs
-        elif self.get("submit:backend") is not None:
-            try:
-                factory(config=self)
-            except Exception:
-                pass
-
+        if self.get("submit:backend"):
+            # backend may set resources
+            factory(config=self)
+        if resource_specs := self.get("machine:resources"):
+            return resource_specs
         resource_specs = default_resource_spec()
         self.set("machine:resources", resource_specs, scope="defaults")
         return resource_specs
@@ -456,7 +455,7 @@ class Config:
         if self.get("machine:resources") is None:
             if self.get("submit:backend"):
                 factory(self)
-            else:
+            if not self.get("machine:resources"):
                 self.set("machine:resources", default_resource_spec(), scope="defaults")
         data: dict[str, Any] = {}
         for section in self.scopes["defaults"]:
