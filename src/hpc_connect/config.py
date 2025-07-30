@@ -64,9 +64,9 @@ resource_spec = {
     "count": int,
     "resources": [
         {
-            "type": "socket",
+            "type": str,
             "count": int,
-            "resources": [
+            Optional("resources"): [
                 {
                     "type": str,
                     "count": int,
@@ -77,6 +77,14 @@ resource_spec = {
 }
 
 
+launch_spec = {
+    Optional("numproc_flag"): str,
+    Optional("default_options"): Use(flag_splitter),
+    Optional("local_options"): Use(flag_splitter),
+    Optional("pre_options"): Use(flag_splitter),
+    Optional("mappings"): dict_str_str,
+}
+
 schema = Schema(
     {
         "hpc_connect": {
@@ -84,19 +92,21 @@ schema = Schema(
                 Optional("debug"): bool,
             },
             Optional("submit"): {
-                "backend": Use(choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")),
+                Optional("backend"): Use(
+                    choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")
+                ),
                 Optional("default_options"): Use(flag_splitter),
+                Optional(str): {
+                    Optional("default_options"): Use(flag_splitter),
+                },
             },
             Optional("machine"): {
                 Optional("resources"): Or([resource_spec], None),
             },
             Optional("launch"): {
                 Optional("exec"): Use(which),
-                Optional("numproc_flag"): str,
-                Optional("default_options"): Use(flag_splitter),
-                Optional("local_options"): Use(flag_splitter),
-                Optional("post_options"): Use(flag_splitter),
-                Optional("mappings"): dict_str_str,
+                **launch_spec,
+                Optional(str): launch_spec,
             },
         }
     },
@@ -149,7 +159,7 @@ config_defaults = {
         "numproc_flag": "-n",
         "default_options": [],
         "local_options": [],
-        "post_options": [],
+        "pre_options": [],
         "mappings": {},
     },
 }
@@ -354,8 +364,11 @@ class Config:
 
     @cached_property
     def sockets_per_node(self) -> int:
-        count = self.count_per_node("socket")
-        return count or 1
+        try:
+            count = self.count_per_node("socket")
+            return count or 1
+        except ValueError:
+            return 1
 
     @cached_property
     def cpus_per_socket(self) -> int:
@@ -377,7 +390,12 @@ class Config:
 
     @cached_property
     def gpus_per_node(self) -> int:
-        return self.sockets_per_node * self.gpus_per_socket
+        if gpus_per_resource_type := self.gpus_per_socket:
+            return self.sockets_per_node * gpus_per_resource_type
+        try:
+            return self.count_per_node("gpu")
+        except ValueError:
+            return 0
 
     @cached_property
     def cpu_count(self) -> int:

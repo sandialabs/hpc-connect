@@ -29,7 +29,7 @@ class SrunLauncher(HPCLauncher):
         launchspecs: "LaunchSpecs",
         local_options: list[str] | None = None,
         global_options: list[str] | None = None,
-        post_options: list[str] | None = None,
+        pre_options: list[str] | None = None,
     ) -> list[str]:
         """Count the total number of processes and write a srun.conf file to
         split the jobs across ranks
@@ -44,8 +44,8 @@ class SrunLauncher(HPCLauncher):
         local_options.extend(self.config.get("launch:local_options"))
         global_options = list(global_options or [])
         global_options.extend(self.config.get("launch:default_options"))
-        post_options = list(post_options or [])
-        post_options.extend(self.config.get("launch:post_options"))
+        pre_options = list(pre_options or [])
+        pre_options.extend(self.config.get("launch:pre_options"))
 
         np: int = 0
         fp = io.StringIO()
@@ -61,7 +61,7 @@ class SrunLauncher(HPCLauncher):
             fp.write(ranks)
             for opt in local_options:
                 fp.write(f" {self.expand(opt, np=np)}")
-            for opt in post_options:
+            for opt in pre_options:
                 fp.write(f" {self.expand(opt, np=np)}")
             for arg in spec[i:]:
                 fp.write(f" {self.expand(arg, np=p)}")

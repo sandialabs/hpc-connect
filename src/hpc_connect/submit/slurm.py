@@ -163,8 +163,7 @@ class SlurmSubmissionManager(HPCSubmissionManager):
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
-        default_options = self.config.get("submit:default_options")
-        return [sbatch, *default_options, *args]
+        return [sbatch, *self.default_options, *args]
 
     def submit(
         self,
@@ -236,11 +235,7 @@ def read_sinfo() -> dict[str, Any] | None:
                         "resources": [
                             {
                                 "type": "cpu",
-                                "count": cps * spn,
-                            },
-                            {
-                                "type": "gpu",
-                                "count": 0,
+                                "count": cps,
                             },
                         ],
                     }

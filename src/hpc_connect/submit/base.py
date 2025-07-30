@@ -53,6 +53,17 @@ class HPCSubmissionManager(ABC):
     def supports_subscheduling(self) -> bool:
         return False
 
+    def get_from_config(self, key: str, default: Any = None) -> Any:
+        if value := self.config.get(f"submit:{self.name}:{key}"):
+            return value
+        else:
+            value = self.config.get(f"submit:{key}")
+            return default if value is None else value
+
+    @property
+    def default_options(self) -> list[str]:
+        return self.get_from_config("default_options") or []
+
     @property
     def polling_frequency(self) -> float:
         s = os.getenv("HPCC_POLLING_FREQUENCY") or 30.0  # 30s.

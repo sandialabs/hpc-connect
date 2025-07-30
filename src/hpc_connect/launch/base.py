@@ -26,17 +26,39 @@ class HPCLauncher:
     def matches(arg: str) -> bool:
         return True
 
+    def get_from_config(self, key: str, default: Any | None = None) -> Any:
+        myexec = self.exec
+        if value := self.config.get(f"launch:{myexec}:{key}"):
+            return value
+        elif value := self.config.get(f"launch:{os.path.basename(myexec)}:{key}"):
+            return value
+        else:
+            value = self.config.get(f"launch:{key}")
+            return default if value is None else value
+
     @property
     def exec(self) -> str:
         return self.config.get("launch:exec")
 
     @property
     def mappings(self) -> dict[str, str]:
-        return self.config.get("launch:mappings") or {}
+        return self.get_from_config("mappings") or {}
 
     @property
     def numproc_flag(self) -> str:
-        return self.config.get("launch:numproc_flag")
+        return self.get_from_config("numproc_flag", default="-n")
+
+    @property
+    def local_options(self) -> list[str]:
+        return self.get_from_config("local_options") or []
+
+    @property
+    def global_options(self) -> list[str]:
+        return self.get_from_config("default_options") or []
+
+    @property
+    def pre_options(self) -> list[str]:
+        return self.get_from_config("pre_options") or []
 
     def prepare_command_line(self, args: list[str]) -> list[str]:
         parser = ArgumentParser(mappings=self.mappings, numproc_flag=self.numproc_flag)
@@ -48,14 +70,14 @@ class HPCLauncher:
         launchspecs: "LaunchSpecs",
         local_options: list[str] | None = None,
         global_options: list[str] | None = None,
-        post_options: list[str] | None = None,
+        pre_options: list[str] | None = None,
     ) -> list[str]:
         local_options = list(local_options or [])
-        local_options.extend(self.config.get("launch:local_options"))
+        local_options.extend(self.local_options)
         global_options = list(global_options or [])
-        global_options.extend(self.config.get("launch:default_options"))
-        post_options = list(post_options or [])
-        post_options.extend(self.config.get("launch:post_options"))
+        global_options.extend(self.global_options)
+        pre_options = list(pre_options or [])
+        pre_options.extend(self.pre_options)
 
         cmd = [os.fsdecode(self.exec)]
         np = sum(p for p in launchspecs.processes if p)
@@ -65,7 +87,7 @@ class HPCLauncher:
         for p, spec in launchspecs:
             for opt in local_options:
                 cmd.append(self.expand(opt, np=p))
-            for opt in post_options:
+            for opt in pre_options:
                 cmd.append(self.expand(opt, np=p))
             for arg in spec:
                 cmd.append(self.expand(arg, np=p))
