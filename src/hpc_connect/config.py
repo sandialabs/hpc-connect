@@ -607,10 +607,6 @@ def default_resource_spec() -> list[dict]:
                             "type": "cpu",
                             "count": cpu_count(),
                         },
-                        {
-                            "type": "gpu",
-                            "count": 0,
-                        },
                     ],
                 },
             ],
