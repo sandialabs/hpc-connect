@@ -224,7 +224,7 @@ class Config:
         data = section_data
         while len(parts) > 1:
             key = parts.pop(0)
-            new = data[key]
+            new = data.get(key, {})
             if isinstance(new, dict):
                 new = dict(new)
                 # reattach to parent object
@@ -563,7 +563,6 @@ def process_config_path(path: str) -> list[str]:
     return result
 
 
-logger = logging.getLogger("hpc_connect")
 ch = logging.StreamHandler()
 ch.setFormatter(logging.Formatter("==> hpc_connect: %(message)s"))
 logger.addHandler(ch)

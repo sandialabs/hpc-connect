@@ -19,7 +19,7 @@ from ..util import time_in_seconds
 from .base import HPCProcess
 from .base import HPCSubmissionManager
 
-logger = logging.getLogger("hpc_connect")
+logger = logging.getLogger(__name__)
 
 
 def streamify(arg: str | None) -> TextIO | None:

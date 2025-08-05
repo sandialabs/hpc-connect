@@ -1,3 +1,4 @@
+import logging
 import os
 import shlex
 import shutil
@@ -19,7 +20,7 @@ class HPCLauncher:
     ) -> subprocess.CompletedProcess:
         cmd = self.prepare_command_line(args)
         if echo:
-            print(shlex.join(cmd))
+            logging.getLogger(__name__).log(100, f"Command line: {shlex.join(cmd)}")
         return subprocess.run(cmd, **kwargs)
 
     @staticmethod
@@ -35,6 +36,10 @@ class HPCLauncher:
         else:
             value = self.config.get(f"launch:{key}")
             return default if value is None else value
+
+    def set_config_var(self, key: str, value: Any, scope: str | None = None) -> None:
+        myexec = self.exec
+        self.config.set(f"launch:{os.path.basename(myexec)}:{key}", value, scope=scope)
 
     @property
     def exec(self) -> str:
@@ -87,10 +92,17 @@ class HPCLauncher:
         for p, spec in launchspecs:
             for opt in local_options:
                 cmd.append(self.expand(opt, np=p))
+            i = argp(spec)
+            if i == -1:
+                launch_opts, program_opts = [], spec
+            else:
+                launch_opts, program_opts = spec[:i], spec[i:]
+            for opt in launch_opts:
+                cmd.append(self.expand(opt, np=p))
             for opt in pre_options:
                 cmd.append(self.expand(opt, np=p))
-            for arg in spec:
-                cmd.append(self.expand(arg, np=p))
+            for opt in program_opts:
+                cmd.append(self.expand(opt, np=p))
             cmd.append(":")
         if cmd[-1] == ":":
             cmd.pop()
@@ -98,7 +110,7 @@ class HPCLauncher:
 
     @staticmethod
     def expand(arg: str, **kwargs: Any) -> str:
-        return arg % kwargs
+        return str(arg) % kwargs
 
 
 class LaunchSpecs:
@@ -108,6 +120,10 @@ class LaunchSpecs:
 
     def __len__(self) -> int:
         return len(self.specs)
+
+    def __repr__(self) -> str:
+        s = " : ".join(shlex.join(_) for _ in self.specs)
+        return f"LaunchSpecs({s})"
 
     def __iter__(self) -> Generator[tuple[int | None, list[str]], None, None]:
         for i, spec in enumerate(self.specs):
@@ -179,6 +195,13 @@ class ArgumentParser:
             launchspecs.add(spec, processes)
 
         return launchspecs
+
+
+def argp(args: list[str]) -> int:
+    for i, arg in enumerate(args):
+        if shutil.which(arg):
+            return i
+    return -1
 
 
 @hookimpl(trylast=True)

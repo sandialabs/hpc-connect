@@ -17,7 +17,7 @@ from .base import HPCProcess
 from .base import HPCSubmissionFailedError
 from .base import HPCSubmissionManager
 
-logger = logging.getLogger("hpc_connect")
+logger = logging.getLogger(__name__)
 
 
 class PBSProcess(HPCProcess):
