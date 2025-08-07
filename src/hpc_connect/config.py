@@ -564,7 +564,7 @@ def process_config_path(path: str) -> list[str]:
 
 
 ch = logging.StreamHandler()
-ch.setFormatter(logging.Formatter("==> hpc_connect: %(message)s"))
+ch.setFormatter(logging.Formatter("==> %(message)s"))
 logger.addHandler(ch)
 
 
