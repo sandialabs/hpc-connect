@@ -146,9 +146,7 @@ class SlurmSubmissionManager(HPCSubmissionManager):
         if sacct is None:
             raise ValueError("sacct not found on PATH")
         if self.config.get("machine:resources") is None:
-            if sinfo := read_einfo():
-                self.config.set("machine:resources", [sinfo], scope="defaults")
-            elif sinfo := read_sinfo():
+            if sinfo := read_sinfo():
                 self.config.set("machine:resources", [sinfo], scope="defaults")
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
@@ -254,36 +252,6 @@ def read_sinfo() -> dict[str, Any] | None:
                 info["resources"].append(resource)
             return info
     return None
-
-
-def read_einfo() -> dict[str, Any] | None:
-    """Read information from slurm allocation environment"""
-    if "SLURM_JOBID" not in os.environ:
-        return None
-    info: dict[str, Any] = {
-        "name": "node",
-        "type": None,
-        "count": safe_loads(os.environ["SLURM_JOB_NUM_NODES"]),
-        "resources": [
-            {
-                "name": "socket",
-                "count": 1,
-                "resources": [
-                    {
-                        "name": "cpu",
-                        "type": None,
-                        "count": safe_loads(os.environ["SLURM_CPUS_ON_NODE"]),
-                    },
-                    {
-                        "name": "gpu",
-                        "type": None,
-                        "count": safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0,
-                    },
-                ],
-            }
-        ],
-    }
-    return info
 
 
 def safe_loads(arg: str) -> Any:

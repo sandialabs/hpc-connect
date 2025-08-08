@@ -15,9 +15,7 @@ class SrunLauncher(HPCLauncher):
         if not self.exec.endswith("srun"):
             raise ValueError("SrunLauncher: expected exec = srun")
         if self.config.get("machine:resources") is None:
-            if sinfo := slurm.read_einfo():
-                self.config.set("machine:resources", [sinfo])
-            elif sinfo := slurm.read_sinfo():
+            if sinfo := slurm.read_sinfo():
                 self.config.set("machine:resources", [sinfo])
 
     @staticmethod
