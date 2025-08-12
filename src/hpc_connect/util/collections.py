@@ -26,9 +26,8 @@ def merge(dest, source):
     if source is None:
         return None
 
-    # Source list is prepended (for precedence)
     if they_are(list):
-        dest[:] = source + [x for x in dest if x not in source]
+        dest[:] = dest + [x for x in source if x not in dest]
         return dest
 
     # Source dict is merged into dest.

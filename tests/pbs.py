@@ -23,7 +23,7 @@ def tmp_environ():
 
 
 def test_basic():
-    backend = hpc_connect.impl.pbs.PBSBackend()
+    backend = hpc_connect.submit.pbs.PBSSubmissionManager()
     with io.StringIO() as fh:
         backend.write_submission_script(
             "my-job",

@@ -4,7 +4,6 @@
 
 import getpass
 import importlib
-import math
 import os
 from abc import ABC
 from abc import abstractmethod
@@ -13,11 +12,11 @@ from typing import Any
 from typing import Protocol
 from typing import TextIO
 
-from .util import cpu_count
-from .util import make_template_env
-from .util import sanitize_path
-from .util import set_executable
-from .util import time_in_seconds
+from ..config import Config
+from ..util import make_template_env
+from ..util import sanitize_path
+from ..util import set_executable
+from ..util import time_in_seconds
 
 
 class HPCProcess(Protocol):
@@ -40,73 +39,11 @@ class HPCProcess(Protocol):
         raise NotImplementedError
 
 
-class HPCConfig:
-    def __init__(self) -> None:
-        self.resources: list[dict] = [
-            {
-                "name": "node",
-                "type": None,
-                "count": 1,
-                "partition": None,
-                "resources": [
-                    {
-                        "name": "cpu",
-                        "type": None,
-                        "count": cpu_count(),
-                    },
-                ],
-            }
-        ]
-
-    def set_resource_spec(self, arg: list[dict]) -> None:
-        self.resources.clear()
-        self.resources.extend(arg)
-
-    def get_per_node(self, name: str) -> int | None:
-        for resource in self.resources:
-            if resource["name"] == "node":
-                for child in resource["resources"]:
-                    if child["name"] == name:
-                        return child["count"]
-        return None
-
-    @property
-    def cpus_per_node(self) -> int:
-        return self.get_per_node("cpu") or 1
-
-    @property
-    def gpus_per_node(self) -> int:
-        return self.get_per_node("gpu") or 0
-
-    @property
-    def node_count(self) -> int:
-        for resource in self.resources:
-            if resource["name"] == "node":
-                return resource["count"]
-        raise ValueError("Unable to determine node count")
-
-    @property
-    def cpu_count(self) -> int:
-        return self.node_count * self.cpus_per_node
-
-    @property
-    def gpu_count(self) -> int:
-        return self.node_count * self.gpus_per_node
-
-    def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
-        """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
-        rank"""
-        nodes = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
-        if self.gpus_per_node:
-            nodes = max(nodes, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
-        return nodes
-
-
-class HPCBackend(ABC):
+class HPCSubmissionManager(ABC):
     name = "<backend>"
 
-    def __init__(self) -> None:
-        self.config = HPCConfig()
+    def __init__(self, config: Config | None = None) -> None:
+        self.config = config or Config()
 
     @staticmethod
     @abstractmethod
@@ -116,10 +53,24 @@ class HPCBackend(ABC):
     def supports_subscheduling(self) -> bool:
         return False
 
+    def get_from_config(self, key: str, default: Any = None) -> Any:
+        if value := self.config.get(f"submit:{self.name}:{key}"):
+            return value
+        else:
+            value = self.config.get(f"submit:{key}")
+            return default if value is None else value
+
+    @property
+    def default_options(self) -> list[str]:
+        return self.get_from_config("default_options") or []
+
     @property
     def polling_frequency(self) -> float:
         s = os.getenv("HPCC_POLLING_FREQUENCY") or 30.0  # 30s.
         return time_in_seconds(s)
+
+    def prepare_command_line(self, args: list[str]) -> list[str]:
+        raise NotImplementedError
 
     @abstractmethod
     def submit(

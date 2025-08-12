@@ -1,16 +1,19 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
 import pluggy
 
-from . import hookspec
-from .impl import builtin
 
+class HPCConnectPluginManager(pluggy.PluginManager):
+    def __init__(self):
+        from . import hookspec
+        from . import launch
+        from . import submit
 
-def factory() -> pluggy.PluginManager:
-    manager = pluggy.PluginManager("hpc_connect")
-    manager.add_hookspecs(hookspec)
-    for module in builtin:
-        manager.register(module)
-    manager.load_setuptools_entrypoints("hpc_connect")
-    return manager
-
-
-manager = factory()
+        super().__init__("hpc_connect")
+        self.add_hookspecs(hookspec)
+        for module in submit.plugins:
+            self.register(module)
+        for module in launch.plugins:
+            self.register(module)
+        self.load_setuptools_entrypoints("hpc_connect")

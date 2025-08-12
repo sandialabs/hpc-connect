@@ -21,11 +21,11 @@ from flux.job import FluxExecutorFuture  # type: ignore
 from flux.job import Jobspec  # type: ignore
 from flux.job import JobspecV1  # type: ignore
 
-from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
-from ..types import HPCSubmissionFailedError
+from ..config import Config
 from ..util import time_in_seconds
+from .base import HPCProcess
+from .base import HPCSubmissionFailedError
+from .base import HPCSubmissionManager
 
 logger = logging.getLogger("hpc_connect")
 
@@ -155,26 +155,43 @@ def read_resource_info() -> dict[str, Any] | None:
     if totals := parse_resource_info(output):
         # assume homogenous resources
         nodes = totals["nodes"]
-        info: dict = {"name": "node", "type": None, "count": nodes}
-        resources = info.setdefault("resources", [])
-        resources.append({"name": "cpu", "type": None, "count": int(totals["cpu"] / nodes)})
-        resources.append({"name": "gpu", "type": None, "count": int(totals["gpu"] / nodes)})
+        info: dict = {
+            "type": "node",
+            "count": nodes,
+            "resources": [
+                {
+                    "type": "socket",
+                    "count": 1,
+                    "resources": [
+                        {
+                            "type": "cpu",
+                            "count": int(totals["cpu"] / nodes),
+                        },
+                        {
+                            "type": "gpu",
+                            "count": int(totals["gpu"] / nodes),
+                        },
+                    ],
+                }
+            ],
+        }
         return info
     return None
 
 
-class FluxBackend(HPCBackend):
+class FluxSubmissionManager(HPCSubmissionManager):
     """Setup and submit jobs to the Flux scheduler"""
 
     name = "flux"
     lock: multiprocessing.synchronize.RLock = multiprocessing.RLock()
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, config: Config | None = None) -> None:
+        super().__init__(config=config)
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
-        if info := read_resource_info():
-            self.config.set_resource_spec([info])
+        if self.config.get("machine:resources") is None:
+            if info := read_resource_info():
+                self.config.set("machine:resources", [info], scope="defaults")
 
     @property
     def supports_subscheduling(self) -> bool:
@@ -398,8 +415,3 @@ def time_limit_in_seconds(qtime: float | None, pad: int = 0) -> int:
     if pad > 0:
         limit += pad
     return limit
-
-
-@hookimpl
-def hpc_connect_backend():
-    return FluxBackend

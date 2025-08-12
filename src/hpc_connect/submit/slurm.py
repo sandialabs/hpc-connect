@@ -14,12 +14,13 @@ import subprocess
 import time
 from typing import Any
 
+from ..config import Config
 from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
-from ..types import HPCSubmissionFailedError
+from .base import HPCProcess
+from .base import HPCSubmissionFailedError
+from .base import HPCSubmissionManager
 
-logger = logging.getLogger("hpc_connect")
+logger = logging.getLogger(__name__)
 
 
 class SlurmProcess(HPCProcess):
@@ -87,6 +88,8 @@ class SlurmProcess(HPCProcess):
         acct_data: dict[str, dict[str, Any]] = {}
         for _ in range(max_tries):
             args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
+            if self.clusters:
+                args.append(f"--clusters={self.clusters}")
             proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
             lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
             if lines:
@@ -127,7 +130,7 @@ class SlurmProcess(HPCProcess):
         self.returncode = 1
 
 
-class SlurmBackend(HPCBackend):
+class SlurmSubmissionManager(HPCSubmissionManager):
     """Setup and submit jobs to the slurm scheduler"""
 
     name = "slurm"
@@ -136,18 +139,17 @@ class SlurmBackend(HPCBackend):
     def matches(name: str | None) -> bool:
         return name is not None and name.lower() in ("slurm", "sbatch")
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, config: Config | None = None) -> None:
+        super().__init__(config=config)
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
         sacct = shutil.which("sacct")
         if sacct is None:
             raise ValueError("sacct not found on PATH")
-        if sinfo := read_einfo():
-            self.config.set_resource_spec([sinfo])
-        elif sinfo := read_sinfo():
-            self.config.set_resource_spec([sinfo])
+        if self.config.get("machine:resources") is None:
+            if sinfo := read_sinfo():
+                self.config.set("machine:resources", [sinfo], scope="defaults")
         else:
             logger.warning("Unable to determine system configuration from sinfo, using default")
 
@@ -156,6 +158,12 @@ class SlurmBackend(HPCBackend):
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
         return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
+
+    def prepare_command_line(self, args: list[str]) -> list[str]:
+        sbatch = shutil.which("sbatch")
+        if sbatch is None:
+            raise ValueError("sbatch not found on PATH")
+        return [sbatch, *self.default_options, *args]
 
     def submit(
         self,
@@ -217,41 +225,35 @@ def read_sinfo() -> dict[str, Any] | None:
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
-            info = {"name": "node", "type": None, "count": nc}
-            resources = info.setdefault("resources", [])
-            resources.append({"name": "socket", "type": None, "count": spn})
-            resources.append({"name": "cpu", "type": None, "count": cps * spn})
+            info: dict[str, Any] = {
+                "type": "node",
+                "count": nc,
+                "resources": [
+                    {
+                        "type": "socket",
+                        "count": spn,
+                        "resources": [
+                            {
+                                "type": "cpu",
+                                "count": cps,
+                            },
+                        ],
+                    }
+                ],
+            }
             for res in gres:
                 if not res:
                     continue
                 parts = res.split(":")
                 resource: dict[str, Any] = {
-                    "name": parts[0],
-                    "type": None,
+                    "type": parts[0],
                     "count": safe_loads(parts[-1]),
                 }
                 if len(parts) > 2:
-                    resource["type"] = ":".join(parts[1:-1])
-                resources.append(resource)
+                    resource["gres"] = ":".join(parts[1:-1])
+                info["resources"].append(resource)
             return info
     return None
-
-
-def read_einfo() -> dict[str, Any] | None:
-    """Read information from slurm allocation environment"""
-    if "SLURM_JOBID" not in os.environ:
-        return None
-    node_count = safe_loads(os.environ["SLURM_JOB_NUM_NODES"])
-    info = {"name": "node", "type": None, "count": node_count}
-    resources = info.setdefault("resources", [])
-
-    cpus_per_node = safe_loads(os.environ["SLURM_CPUS_ON_NODE"])
-    resources.append({"name": "cpu", "type": None, "count": cpus_per_node})
-
-    gpus_per_node = safe_loads(os.getenv("SLURM_GPUS_ON_NODE", "null")) or 0
-    resources.append({"name": "gpu", "type": None, "count": gpus_per_node})
-
-    return info
 
 
 def safe_loads(arg: str) -> Any:
@@ -266,5 +268,7 @@ def safe_loads(arg: str) -> Any:
 
 
 @hookimpl
-def hpc_connect_backend():
-    return SlurmBackend
+def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
+    if SlurmSubmissionManager.matches(config.get("submit:backend")):
+        return SlurmSubmissionManager(config=config)
+    return None

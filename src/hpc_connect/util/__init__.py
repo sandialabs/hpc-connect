@@ -42,3 +42,12 @@ def sanitize_path(path: str) -> str:
     dirname, basename = os.path.split(path)
     basename = re.sub(r"[^\w_. -]", "_", basename).strip("_")
     return os.path.join(dirname, basename)
+
+
+def safe_loads(arg):
+    import json
+
+    try:
+        return json.loads(arg)
+    except json.decoder.JSONDecodeError:
+        return arg

@@ -13,12 +13,13 @@ from typing import TextIO
 
 import psutil
 
+from ..config import Config
 from ..hookspec import hookimpl
-from ..types import HPCBackend
-from ..types import HPCProcess
 from ..util import time_in_seconds
+from .base import HPCProcess
+from .base import HPCSubmissionManager
 
-logger = logging.getLogger("hpc_connect")
+logger = logging.getLogger(__name__)
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -85,11 +86,11 @@ class ShellProcess(HPCProcess):
                 pass
 
 
-class ShellBackend(HPCBackend):
+class ShellSubmissionManager(HPCSubmissionManager):
     name = "shell"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Config | None = None):
+        super().__init__(config=config)
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
@@ -141,5 +142,7 @@ class ShellBackend(HPCBackend):
 
 
 @hookimpl
-def hpc_connect_backend():
-    return ShellBackend
+def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
+    if ShellSubmissionManager.matches(config.get("submit:backend")):
+        return ShellSubmissionManager(config=config)
+    return None
