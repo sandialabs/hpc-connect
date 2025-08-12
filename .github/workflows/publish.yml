@@ -32,6 +32,7 @@ jobs:
 
         - name: Build distribution
           run: |
+            export PROJECT_SOURCE_DIR=$(pwd)
             python -m build
 
         - name: Publish package distributions to PyPI
