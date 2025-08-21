@@ -90,7 +90,10 @@ class SlurmProcess(HPCProcess):
             args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
             if self.clusters:
                 args.append(f"--clusters={self.clusters}")
-            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
+            proc = subprocess.run(args, encoding="utf-8", capture_output=True)
+            if proc.returncode != 0:
+                logger.warning(f"sacct returned non-zero status {proc.returncode}")
+                continue
             lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
             if lines:
                 for line in lines:
