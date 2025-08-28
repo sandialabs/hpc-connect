@@ -563,7 +563,7 @@ def process_config_path(path: str) -> list[str]:
     return result
 
 
-ch = logging.StreamHandler()
+ch = logging.StreamHandler(sys.stdout)
 ch.setFormatter(logging.Formatter("==> %(message)s"))
 logger.addHandler(ch)
 
