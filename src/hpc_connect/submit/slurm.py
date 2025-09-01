@@ -94,7 +94,8 @@ class SlurmProcess(HPCProcess):
             if proc.returncode != 0:
                 logger.warning(f"sacct returned non-zero status {proc.returncode}")
                 continue
-            lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
+            out = proc.stdout
+            lines = [line.strip() for line in out.splitlines() if line.split()]
             if lines:
                 for line in lines:
                     jobid, state, exit_code = [_.strip() for _ in line.split("|") if _.split()]
@@ -111,7 +112,10 @@ class SlurmProcess(HPCProcess):
                 break
             time.sleep(0.5)
         else:
-            raise RuntimeError(f"{' '.join(args)!r} did not return any accounting data")
+            cmd, err = " ".join(args), proc.stderr or ""
+            raise RuntimeError(
+                f"$ {cmd}\n{out}\n{err}\n==> Error: could not determine state from accounting data"
+            )
 
         if jobinfo := acct_data.get(self.jobid):
             if jobinfo["state"].upper() in ("PENDING", "RUNNING"):
