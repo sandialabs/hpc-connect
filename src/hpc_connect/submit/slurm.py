@@ -50,7 +50,7 @@ class SlurmProcess(HPCProcess):
             date = datetime.datetime.now().strftime("%c")
             meta = {"args": " ".join(args), "date": date, "stdout/stderr": proc.stdout}
             json.dump({"meta": meta}, fh, indent=2)
-        if match := re.search("Submitted batch job (.*)$", proc.stdout):
+        if match := re.match(r"Submitted batch job (\S*)", proc.stdout):
             jobid = match.group(1).strip()
             return jobid
         logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
