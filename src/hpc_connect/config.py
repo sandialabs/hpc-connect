@@ -59,17 +59,35 @@ def which(arg: str) -> str:
     return arg
 
 
+# Resource spec have the following form:
+# machine:
+#   resources:
+#   - type: node
+#     count: node_count
+#     resources:
+#     - type: socket
+#       count: sockets_per_node
+#       resources:
+#       - type: resource_name (like cpus)
+#         count: type_per_socket
+#         additional_properties:  (optional)
+#         - type: slots
+#           count: 1
+
 resource_spec = {
     "type": "node",
     "count": int,
+    Optional("additional_properties"): Or(dict, None),
     "resources": [
         {
             "type": str,
             "count": int,
+            Optional("additional_properties"): Or(dict, None),
             Optional("resources"): [
                 {
                     "type": str,
                     "count": int,
+                    Optional("additional_properties"): Or(dict, None),
                 },
             ],
         },
@@ -335,6 +353,8 @@ class Config:
         for child in rspec["resources"]:
             if child["type"] == type:
                 return child["count"]
+            elif type.endswith("s") and child["type"] == type[:-1]:
+                return child["count"]
         return None
 
     def count_per_node(self, type: str) -> int:
@@ -343,7 +363,12 @@ class Config:
                 count = self.count_per_rspec(rspec, type)
                 if count is not None:
                     return count
-        raise ValueError(f"Unable to determine count_per_node for {type!r}")
+        try:
+            count_per_socket = self.count_per_socket(type)
+        except ValueError:
+            raise ValueError(f"Unable to determine count_per_node for {type!r}") from None
+        else:
+            return count_per_socket * self.sockets_per_node
 
     def count_per_socket(self, type: str) -> int:
         for rspec1 in self.resource_specs:
