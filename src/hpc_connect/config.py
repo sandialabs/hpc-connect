@@ -349,6 +349,16 @@ class Config:
         self.set("machine:resources", resource_specs, scope="defaults")
         return resource_specs
 
+    def resource_types(self) -> list[str]:
+        """Return the types of resources available"""
+        types: set[str] = set()
+        for rspec in self.resource_specs:
+            if rspec["type"] == "node":
+                for spec in rspec["resources"]:
+                    if spec["type"] == "socket":
+                        types.update([child["type"] for child in spec["resources"]])
+        return sorted(types)
+
     def count_per_rspec(self, rspec: dict[str, Any], type: str) -> int | None:
         for child in rspec["resources"]:
             if child["type"] == type:
