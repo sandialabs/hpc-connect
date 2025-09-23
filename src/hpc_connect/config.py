@@ -14,6 +14,7 @@ from typing import IO
 from typing import Any
 
 import pluggy
+import psutil
 import yaml
 
 from .pluginmanager import HPCConnectPluginManager
@@ -22,7 +23,6 @@ from .third_party.schema import Or
 from .third_party.schema import Schema
 from .third_party.schema import Use
 from .util import collections
-from .util import cpu_count
 from .util import safe_loads
 from .util.string import strip_quotes
 
@@ -410,7 +410,7 @@ class Config:
         try:
             return self.count_per_socket("cpu")
         except ValueError:
-            return cpu_count()
+            return psutil.cpu_count()
 
     @cached_property
     def gpus_per_socket(self) -> int:
@@ -639,7 +639,7 @@ def default_resource_spec() -> list[dict]:
                     "resources": [
                         {
                             "type": "cpu",
-                            "count": cpu_count(),
+                            "count": psutil.cpu_count(),
                         },
                     ],
                 },

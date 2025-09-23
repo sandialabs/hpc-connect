@@ -8,7 +8,8 @@ import stat
 from typing import Any
 from typing import Callable
 
-from .proc import cpu_count
+from psutil import cpu_count
+
 from .tengine import make_template_env
 from .time import hhmmss
 from .time import time_in_seconds
