@@ -1,13 +1,17 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "hpc-connect"
 dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2", "psutil", "PyYAML"]
+dependencies = ["pluggy", "jinja2", "psutil", "PyYAML", "schema"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"
@@ -16,9 +20,12 @@ hpcc = "hpc_connect.__main__:main"
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest"]
 
-[build-system]
-requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
-build-backend = "setuptools.build_meta"
+[project.entry-points."hpc_connect"]
+hpcc_flux = "hpcc_flux"
+hpcc_mpi = "hpcc_mpi"
+hpcc_pbs = "hpcc_pbs"
+hpcc_slurm = "hpcc_slurm"
+hpcc_subprocess = "hpcc_subprocess"
 
 [tool.setuptools.dynamic]
 version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}
@@ -78,6 +85,10 @@ directory = "html.cov"
 
 [[tool.mypy.overrides]]
 module = "psutil"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "schema"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

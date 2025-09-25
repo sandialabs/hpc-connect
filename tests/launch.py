@@ -167,7 +167,7 @@ def test_mapped_suppressed(tmpdir):
 
 def test_count_procs(tmpdir):
     with working_dir(str(tmpdir)):
-        from hpc_connect.launch.base import ArgumentParser
+        from hpc_connect.launch import ArgumentParser
         parser = ArgumentParser(mappings={}, numproc_flag="-n")
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)

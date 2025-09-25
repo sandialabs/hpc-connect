@@ -14,11 +14,10 @@ import subprocess
 import time
 from typing import Any
 
-from ..config import Config
-from ..hookspec import hookimpl
-from .base import HPCProcess
-from .base import HPCSubmissionFailedError
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionFailedError
+from hpc_connect.submit import HPCSubmissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +163,7 @@ class SlurmSubmissionManager(HPCSubmissionManager):
     def submission_template(self) -> str:
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
+        return str(importlib.resources.files("hpcc_slurm").joinpath("templates/submit.sh.in"))
 
     def prepare_command_line(self, args: list[str]) -> list[str]:
         sbatch = shutil.which("sbatch")
@@ -222,27 +221,35 @@ def read_sinfo() -> dict[str, Any] | None:
         except subprocess.CalledProcessError:
             return None
         else:
+            sockets_per_node: int
+            cpus_per_socket: int
+            cpus_per_node: int
+            node_count: int
             for line in proc.stdout.split("\n"):
                 parts = line.split()
                 if not parts:
                     continue
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
-                spn, cps, _, cpn, nc, *gres = [safe_loads(_) for _ in parts]
+                data = [safe_loads(part) for part in parts]
+                sockets_per_node, cpus_per_socket, _, cpus_per_node, node_count, *gres = data
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
+            if var := os.getenv("SLURM_JOB_NODELIST"):
+                nodelist = [_ for _ in var.split(",") if _.split()]
+                node_count = len(nodelist)
             info: dict[str, Any] = {
                 "type": "node",
-                "count": nc,
+                "count": node_count,
                 "resources": [
                     {
                         "type": "socket",
-                        "count": spn,
+                        "count": sockets_per_node,
                         "resources": [
                             {
                                 "type": "cpu",
-                                "count": cps,
+                                "count": cpus_per_socket,
                             },
                         ],
                     }
@@ -272,10 +279,3 @@ def safe_loads(arg: str) -> Any:
         return json.loads(arg)
     except json.JSONDecodeError:
         return arg
-
-
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if SlurmSubmissionManager.matches(config.get("submit:backend")):
-        return SlurmSubmissionManager(config=config)
-    return None

@@ -7,7 +7,7 @@ import os
 import tempfile
 from contextlib import contextmanager
 
-import hpc_connect
+import hpcc_slurm.submit
 
 
 @contextmanager
@@ -24,7 +24,7 @@ def tmp_environ():
 
 
 def test_basic():
-    backend = hpc_connect.submit.slurm.SlurmSubmissionManager()
+    backend = hpcc_slurm.submit.SlurmSubmissionManager()
     with io.StringIO() as fh:
         backend.write_submission_script(
             "my-job",
@@ -63,5 +63,5 @@ export MY_VAR=SPAM
 printenv || true
 ls""")
         fh.seek(0)
-        ns = hpc_connect.submit.slurm.SlurmProcess.parse_script_args(fh.name)
+        ns = hpcc_slurm.submit.SlurmProcess.parse_script_args(fh.name)
         assert ns.clusters == "flight,eclipse"
