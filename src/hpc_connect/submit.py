@@ -12,11 +12,11 @@ from typing import Any
 from typing import Protocol
 from typing import TextIO
 
-from ..config import Config
-from ..util import make_template_env
-from ..util import sanitize_path
-from ..util import set_executable
-from ..util import time_in_seconds
+from .config import Config
+from .util import make_template_env
+from .util import sanitize_path
+from .util import set_executable
+from .util import time_in_seconds
 
 
 class HPCProcess(Protocol):
@@ -204,3 +204,12 @@ def unique_scriptname() -> str:
 
 class HPCSubmissionFailedError(Exception):
     pass
+
+
+def factory(config: Config | None = None) -> HPCSubmissionManager:
+    config = config or Config()
+    submission_manager = config.pluginmanager.hook.hpc_connect_submission_manager(config=config)
+    if submission_manager is None:
+        backend = config.get("submit:backend")
+        raise ValueError(f"No matching submission manager for {backend!r}")
+    return submission_manager

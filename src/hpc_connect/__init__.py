@@ -5,6 +5,7 @@
 import os
 
 from . import config
+from .launch import HPCLauncher
 from .launch import factory as get_launcher
 from .submit import HPCProcess
 from .submit import HPCSubmissionFailedError

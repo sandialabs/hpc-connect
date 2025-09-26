@@ -21,11 +21,11 @@ from flux.job import FluxExecutorFuture  # type: ignore
 from flux.job import Jobspec  # type: ignore
 from flux.job import JobspecV1  # type: ignore
 
-from ..config import Config
-from ..util import time_in_seconds
-from .base import HPCProcess
-from .base import HPCSubmissionFailedError
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionFailedError
+from hpc_connect.submit import HPCSubmissionManager
+from hpc_connect.util import time_in_seconds
 
 logger = logging.getLogger("hpc_connect")
 
@@ -205,7 +205,7 @@ class FluxSubmissionManager(HPCSubmissionManager):
     def submission_template(self) -> str:
         if "HPCC_FLUX_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_FLUX_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/flux.sh.in"))
+        return str(importlib.resources.files("hpcc_flux").joinpath("templates/submit.sh.in"))
 
     def create_jobspec(
         self,

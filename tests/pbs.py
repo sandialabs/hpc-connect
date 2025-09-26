@@ -6,8 +6,6 @@ import io
 import os
 from contextlib import contextmanager
 
-import hpc_connect
-
 
 @contextmanager
 def tmp_environ():
@@ -23,7 +21,9 @@ def tmp_environ():
 
 
 def test_basic():
-    backend = hpc_connect.submit.pbs.PBSSubmissionManager()
+    import hpcc_pbs.submit
+
+    backend = hpcc_pbs.submit.PBSSubmissionManager()
     with io.StringIO() as fh:
         backend.write_submission_script(
             "my-job",

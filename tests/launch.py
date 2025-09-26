@@ -84,7 +84,9 @@ def test_file_config(tmpdir, capfd):
             launch(["-n", "4", "-flag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
-            assert out == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+            assert (
+                out == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
+            )
 
             with open("hpc_connect.yaml", "w") as fh:
                 yaml.dump(
@@ -115,9 +117,7 @@ def test_default(capfd):
 
 def test_envar_mappings(capfd):
     with envmods(HPCC_LAUNCH_MAPPINGS="-spam:-ham,-eggs:-bacon"):
-        launch(
-            ["-n", "4", "-spam", "ham", "-eggs", "bacon", "executable", "--option"]
-        )
+        launch(["-n", "4", "-spam", "ham", "-eggs", "bacon", "executable", "--option"])
         captured = capfd.readouterr()
         out = captured.out.strip()
         assert out == f"{mock_bin}/mpiexec -n 4 -ham ham -bacon bacon executable --option"
@@ -167,7 +167,8 @@ def test_mapped_suppressed(tmpdir):
 
 def test_count_procs(tmpdir):
     with working_dir(str(tmpdir)):
-        from hpc_connect.launch.base import ArgumentParser
+        from hpc_connect.launch import ArgumentParser
+
         parser = ArgumentParser(mappings={}, numproc_flag="-n")
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)

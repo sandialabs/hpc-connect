@@ -16,12 +16,12 @@ from typing import Any
 import pluggy
 import psutil
 import yaml
+from schema import Optional
+from schema import Or
+from schema import Schema
+from schema import Use
 
 from .pluginmanager import HPCConnectPluginManager
-from .third_party.schema import Optional
-from .third_party.schema import Or
-from .third_party.schema import Schema
-from .third_party.schema import Use
 from .util import collections
 from .util import safe_loads
 from .util.string import strip_quotes

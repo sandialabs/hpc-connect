@@ -16,7 +16,7 @@ def test_config_launch_basic(tmpdir):
         assert config.get("launch:local_options") == ["-a", "-b"]
         config.add('launch:local_options:["-c", "-d"]')
         assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d"]
-        config.add('launch:local_options:-e')
+        config.add("launch:local_options:-e")
         assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d", "-e"]
 
         config.set("launch:mappings", {"-a": "-b", "-c": "-d"})

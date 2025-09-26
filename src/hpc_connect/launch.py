@@ -7,8 +7,9 @@ from typing import Any
 from typing import Generator
 from typing import Sequence
 
-from ..config import Config
-from ..hookspec import hookimpl
+from .config import Config
+
+logger = logging.getLogger(__name__)
 
 
 class HPCLauncher:
@@ -20,12 +21,12 @@ class HPCLauncher:
     ) -> subprocess.CompletedProcess:
         cmd = self.prepare_command_line(args)
         if echo:
-            logging.getLogger(__name__).log(100, f"Command line: {shlex.join(cmd)}")
+            logger.log(100, f"Command line: {shlex.join(cmd)}")
         return subprocess.run(cmd, **kwargs)
 
     @staticmethod
     def matches(arg: str) -> bool:
-        return True
+        raise NotImplementedError
 
     def get_from_config(self, key: str, default: Any | None = None) -> Any:
         myexec = self.exec
@@ -204,6 +205,15 @@ def argp(args: list[str]) -> int:
     return -1
 
 
-@hookimpl(trylast=True)
-def hpc_connect_launcher(config: Config) -> HPCLauncher:
-    return HPCLauncher(config=config)
+def factory(config: Config | None = None) -> "HPCLauncher":
+    config = config or Config()
+    launcher = config.pluginmanager.hook.hpc_connect_launcher(config=config)
+    if launcher is None:
+        exec = config.get("launch:exec")
+        raise ValueError(f"No matching launcher manager for {exec!r}")
+    return launcher
+
+
+def launch(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
+    launcher = factory()
+    return launcher(args, **kwargs)

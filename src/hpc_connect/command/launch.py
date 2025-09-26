@@ -6,7 +6,7 @@ import os
 import shlex
 
 from ..config import Config
-from ..launch import factory as get_launcher
+from ..launch import factory as launch_factory
 
 description = "Wrapper to launch tool, such as mpiexec or srun"
 add_help = False
@@ -30,9 +30,9 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
 
 def execute(config: Config, args: argparse.Namespace) -> None:
     argv = list(args.extra_args)
-    launcher = get_launcher(config)
+    launcher = launch_factory(config)
     cmd = launcher.prepare_command_line(argv)
     if args.dryrun:
         print(shlex.join(cmd))
         return
-    os.execvp(cmd[0], cmd)
+    os.execvp(cmd[0], cmd)  # nosec B606

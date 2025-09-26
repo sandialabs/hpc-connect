@@ -11,11 +11,10 @@ import shutil
 import subprocess
 from typing import Any
 
-from ..config import Config
-from ..hookspec import hookimpl
-from .base import HPCProcess
-from .base import HPCSubmissionFailedError
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionFailedError
+from hpc_connect.submit import HPCSubmissionManager
 
 logger = logging.getLogger(__name__)
 
@@ -113,12 +112,17 @@ class PBSSubmissionManager(HPCSubmissionManager):
         qdel = shutil.which("qdel")
         if qdel is None:
             raise ValueError("qdel not found on PATH")
+        if self.config.get("machine:resources") is None:
+            if resources := read_pbsnodes():
+                self.config.set("machine:resources", resources, scope="defaults")
+        else:
+            logger.warning("Unable to determine system configuration from pbsnodes, using default")
 
     @property
     def submission_template(self) -> str:
         if "HPCC_PBS_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_PBS_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/pbs.sh.in"))
+        return str(importlib.resources.files("hpcc_pbs").joinpath("templates/submit.sh.in"))
 
     def prepare_command_line(self, args: list[str]) -> list[str]:
         qsub = shutil.which("qsub")
@@ -159,8 +163,41 @@ class PBSSubmissionManager(HPCSubmissionManager):
         return PBSProcess(script)
 
 
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if PBSSubmissionManager.matches(config.get("submit:backend")):
-        return PBSSubmissionManager(config=config)
+def read_pbsnodes() -> list[dict[str, Any]] | None:
+    if pbsnodes := shutil.which("pbsnodes"):
+        args = [pbsnodes, "-a", "-F", "json"]
+        allocated_nodes: list[str] | None = None
+        if var := os.getenv("PBS_NODEFILE"):
+            with open(var) as fh:
+                allocated_nodes = [line.strip() for line in fh if line.split()]
+        try:
+            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
+        except subprocess.CalledProcessError:
+            return None
+        else:
+            resources: list[dict[str, Any]] = []
+            data = json.loads(proc.stdout)
+            for nodename, nodeinfo in data["nodes"].items():
+                if allocated_nodes is not None and nodename not in allocated_nodes:
+                    continue
+                cpus_on_node = nodeinfo["pcpus"]
+                resource: dict[str, Any] = {
+                    "type": "node",
+                    "count": 1,
+                    "additional_properties": {"name": nodename},
+                    "resources": [
+                        {
+                            "type": "socket",
+                            "count": 1,
+                            "resources": [
+                                {
+                                    "type": "cpu",
+                                    "count": cpus_on_node,
+                                },
+                            ],
+                        },
+                    ],
+                }
+                resources.append(resource)
+            return resources
     return None
