@@ -10,7 +10,8 @@ sudo apt-get install -y python3-pip python3-venv libjson-glib-dev
 # Install canary
 python3 -m venv canary
 source canary/bin/activate
-python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary@$BRANCH_NAME"
+python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary"
+python3 -m pip install --no-deps "hpc-connect@git+https://git@github.com/sandialabs/hpc-connect@$BRANCH_NAME"
 canary fetch examples
 
 # Install flux-python plugin
