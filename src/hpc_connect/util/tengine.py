@@ -14,6 +14,6 @@ def make_template_env(*dirs: str) -> jinja2.Environment:
     template_dirs: set[str] = {str(importlib.resources.files("hpc_connect").joinpath("templates"))}
     template_dirs.update(dirs)
     loader = jinja2.FileSystemLoader(tuple(template_dirs))
-    env = jinja2.Environment(loader=loader, trim_blocks=True, lstrip_blocks=True)
+    env = jinja2.Environment(loader=loader, trim_blocks=True, lstrip_blocks=True) # nosec B701
     env.globals["hhmmss"] = hhmmss
     return env

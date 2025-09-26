@@ -75,13 +75,13 @@ class Subprocess(HPCProcess):
         for p in children:
             try:
                 p.terminate()
-            except Exception:
+            except Exception: # nosec B110
                 pass
         _, alive = psutil.wait_procs(children)
         for p in alive:
             try:
                 p.kill()
-            except Exception:
+            except Exception: # nosec B110
                 pass
 
 

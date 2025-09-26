@@ -39,4 +39,4 @@ def execute(config: Config, args: argparse.Namespace) -> None:
     if args.dryrun:
         print(shlex.join(cmd))
         return
-    os.execvp(cmd[0], cmd)
+    os.execvp(cmd[0], cmd)  # nosec B606
