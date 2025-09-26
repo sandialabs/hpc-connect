@@ -60,8 +60,11 @@ select = ["F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/hpc_connect/__init__.py" = ["F401", "F403", "F405"]
-"src/hpc_connect/launch/__init__.py" = ["F401", "F403", "F405"]
-"src/hpc_connect/submit/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_slurm/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_flux/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_flux/submit_hl.py" = ["F401", "F403", "F405"]
+"src/hpcc_subprocess/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_mpi/__init__.py" = ["F401", "F403", "F405"]
 "src/hpc_connect/util/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]

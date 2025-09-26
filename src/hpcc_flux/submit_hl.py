@@ -41,4 +41,4 @@ except ImportError:
             return name == "flux"
 
 else:
-    pass  # type: ignore
+    from .submit_api import FluxSubmissionManager  # type: ignore
