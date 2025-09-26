@@ -22,6 +22,7 @@ def tmp_environ():
 
 def test_basic():
     import hpcc_pbs.submit
+
     backend = hpcc_pbs.submit.PBSSubmissionManager()
     with io.StringIO() as fh:
         backend.write_submission_script(
