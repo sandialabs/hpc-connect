@@ -236,9 +236,8 @@ def read_sinfo() -> dict[str, Any] | None:
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
-            if var := os.getenv("SLURM_JOB_NODELIST"):
-                nodelist = [_ for _ in var.split(",") if _.split()]
-                node_count = len(nodelist)
+            if var := os.getenv("SLURM_NNODES"):
+                node_count = int(var)
             info: dict[str, Any] = {
                 "type": "node",
                 "count": node_count,
