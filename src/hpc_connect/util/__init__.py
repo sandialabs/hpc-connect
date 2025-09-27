@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+import json
+import json.decoder
 import os
 import re
 import stat
@@ -46,8 +48,6 @@ def sanitize_path(path: str) -> str:
 
 
 def safe_loads(arg):
-    import json
-
     try:
         return json.loads(arg)
     except json.decoder.JSONDecodeError:

@@ -222,7 +222,8 @@ def read_sinfo() -> dict[str, Any] | None:
             return None
         else:
             sockets_per_node: int
-            cpus_per_socket: int
+            cores_per_socket: int
+            threads_per_core: int
             cpus_per_node: int
             node_count: int
             for line in proc.stdout.split("\n"):
@@ -232,7 +233,12 @@ def read_sinfo() -> dict[str, Any] | None:
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
                 data = [safe_loads(part) for part in parts]
-                sockets_per_node, cpus_per_socket, _, cpus_per_node, node_count, *gres = data
+                sockets_per_node = data[0]
+                cores_per_socket = data[1]
+                threads_per_core = data[2]
+                cpus_per_node = data[3]
+                node_count = data[4]
+                gres = data[5:]
                 break
             else:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
@@ -248,7 +254,7 @@ def read_sinfo() -> dict[str, Any] | None:
                         "resources": [
                             {
                                 "type": "cpu",
-                                "count": cpus_per_socket,
+                                "count": cores_per_socket * threads_per_core,
                             },
                         ],
                     }

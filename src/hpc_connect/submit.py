@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import getpass
-import importlib
+import importlib.resources
 import os
 from abc import ABC
 from abc import abstractmethod

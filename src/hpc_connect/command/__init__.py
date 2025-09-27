@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     module = _commands[args.command]
     cfg = Config()
     cfg.set_main_options(args)
-    module.execute(cfg, args)
+    module.execute(cfg, args)  # ty: ignore[unresolved-attribute]
     return 0
 
 
@@ -96,8 +96,8 @@ def make_parser() -> argparse.ArgumentParser:
 
 def add_command(subparsers: argparse._SubParsersAction, module: ModuleType) -> None:
     name = module.__name__.split(".")[-1].lower()
-    parser = subparsers.add_parser(
-        name, add_help=getattr(module, "add_help", True), help=module.description
-    )
-    module.setup_parser(parser)
+    add_help = getattr(module, "add_help", True)
+    description = getattr(module, "description", None)
+    parser = subparsers.add_parser(name, add_help=add_help, help=description)
+    module.setup_parser(parser)  # ty: ignore[unresolved-attribute]
     _commands[name] = module

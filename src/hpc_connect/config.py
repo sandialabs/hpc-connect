@@ -493,7 +493,7 @@ class Config:
             assert ranks is not None
             assert ranks_per_socket is not None
             nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-        sockets = int(math.ceil(ranks / ranks_per_socket))
+        sockets = int(math.ceil(ranks / ranks_per_socket))  # ty: ignore[unsupported-operator]
         reqd_resources["np"] = ranks
         reqd_resources["ranks"] = ranks
         reqd_resources["ranks_per_socket"] = ranks_per_socket
