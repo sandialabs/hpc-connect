@@ -254,7 +254,10 @@ def read_sinfo() -> dict[str, Any] | None:
                         "resources": [
                             {
                                 "type": "cpu",
-                                "count": cores_per_socket * threads_per_core,
+                                "count": cores_per_socket,
+                                "additional_properties": {
+                                    "threads_per_core": threads_per_core,
+                                },
                             },
                         ],
                     }
