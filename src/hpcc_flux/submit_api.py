@@ -254,9 +254,9 @@ class FluxSubmissionManager(HPCSubmissionManager):
         alloc: dict[str, Any] = {}
         if nodes is not None:
             if cpus is None:
-                cpus = nodes * self.config.cpus_per_node
+                cpus = nodes * self.config.count_per_node("cpu")
             if gpus is None:
-                gpus = nodes * self.config.gpus_per_node
+                gpus = nodes * self.config.count_per_node("gpu", default=0)
         else:
             cpus = cpus or 1
             gpus = gpus or 0

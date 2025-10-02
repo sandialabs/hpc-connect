@@ -367,7 +367,7 @@ class Config:
                 return child["count"]
         return None
 
-    def count_per_node(self, type: str) -> int:
+    def count_per_node(self, type: str, default: int | None = None) -> int:
         for rspec in self.resource_specs:
             if rspec["type"] == "node":
                 count = self.count_per_rspec(rspec, type)
@@ -376,11 +376,13 @@ class Config:
         try:
             count_per_socket = self.count_per_socket(type)
         except ValueError:
+            if default is not None:
+                return default
             raise ValueError(f"Unable to determine count_per_node for {type!r}") from None
         else:
             return count_per_socket * self.sockets_per_node
 
-    def count_per_socket(self, type: str) -> int:
+    def count_per_socket(self, type: str, default: int | None = None) -> int:
         for rspec1 in self.resource_specs:
             if rspec1["type"] == "node":
                 for rspec2 in rspec1["resources"]:
@@ -388,6 +390,8 @@ class Config:
                         count = self.count_per_rspec(rspec2, type)
                         if count is not None:
                             return count
+        if default is not None:
+            return default
         raise ValueError(f"Unable to determine count_per_socket for {type!r}")
 
     @cached_property
@@ -405,47 +409,24 @@ class Config:
         except ValueError:
             return 1
 
-    @cached_property
-    def cpus_per_socket(self) -> int:
-        try:
-            return self.count_per_socket("cpu")
-        except ValueError:
-            return psutil.cpu_count()
-
-    @cached_property
-    def gpus_per_socket(self) -> int:
-        try:
-            return self.count_per_socket("gpu")
-        except ValueError:
-            return 0
-
-    @cached_property
-    def cpus_per_node(self) -> int:
-        return self.sockets_per_node * self.cpus_per_socket
-
-    @cached_property
-    def gpus_per_node(self) -> int:
-        if gpus_per_resource_type := self.gpus_per_socket:
-            return self.sockets_per_node * gpus_per_resource_type
-        try:
-            return self.count_per_node("gpu")
-        except ValueError:
-            return 0
-
-    @cached_property
-    def cpu_count(self) -> int:
-        return self.node_count * self.cpus_per_node
-
-    @cached_property
-    def gpu_count(self) -> int:
-        return self.node_count * self.gpus_per_node
-
-    def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
+    def nodes_required(self, **types: int) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
-        nodes = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
-        if self.gpus_per_node:
-            nodes = max(nodes, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
+        # backward compatible
+        if n := types.pop("max_cpus", None):
+            types["cpu"] = n
+        if n := types.pop("max_gpus", None):
+            types["gpu"] = n
+        nodes: int = 1
+        for type, count in types.items():
+            try:
+                count_per_node = self.count_per_node(type)
+            except ValueError:
+                continue
+            else:
+                if count_per_node == 0:
+                    continue
+            nodes = max(nodes, int(math.ceil(count / count_per_node)))
         return nodes
 
     def compute_required_resources(
@@ -487,8 +468,8 @@ class Config:
             ranks = ranks_per_socket = 1
             nodes = 1
         elif ranks is not None and ranks_per_socket is None:
-            ranks_per_socket = min(ranks, self.cpus_per_socket)
-            nodes = int(math.ceil(ranks / self.cpus_per_socket / self.sockets_per_node))
+            ranks_per_socket = min(ranks, self.count_per_socket("cpu"))
+            nodes = int(math.ceil(ranks / self.count_per_socket("cpu") / self.sockets_per_node))
         else:
             assert ranks is not None
             assert ranks_per_socket is not None
