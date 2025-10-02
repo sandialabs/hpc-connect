@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 from typing import TYPE_CHECKING
+from typing import Any
 
 import pluggy
 
@@ -24,4 +25,9 @@ def hpc_connect_submission_manager(config: "Config") -> "HPCSubmissionManager":
 @hookspec(firstresult=True)
 def hpc_connect_launcher(config: "Config") -> "HPCLauncher":
     """HPC scheduler implementation"""
+    raise NotImplementedError
+
+
+@hookspec(firstresult=True)
+def hpc_connect_discover_resources() -> list[dict[str, Any]]:
     raise NotImplementedError

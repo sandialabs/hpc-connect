@@ -5,8 +5,6 @@ import argparse
 import logging
 import math
 import os
-import shlex
-import shutil
 import sys
 from collections.abc import ValuesView
 from functools import cached_property
@@ -14,130 +12,36 @@ from typing import IO
 from typing import Any
 
 import pluggy
-import psutil
+import schema
 import yaml
-from schema import Optional
-from schema import Or
-from schema import Schema
-from schema import Use
 
 from .pluginmanager import HPCConnectPluginManager
+from .schemas import config_schema
+from .schemas import launch_schema
+from .schemas import machine_schema
+from .schemas import submit_schema
 from .util import collections
 from .util import safe_loads
 from .util.string import strip_quotes
 
 logger = logging.getLogger("hpc_connect")
 
-
-def flag_splitter(arg: list[str] | str) -> list[str]:
-    if isinstance(arg, str):
-        return shlex.split(arg)
-    elif not isinstance(arg, list) and not all(isinstance(str, _) for _ in arg):
-        raise ValueError("expected list[str]")
-    return arg
-
-
-def dict_str_str(arg: Any) -> bool:
-    f = isinstance
-    return f(arg, dict) and all([f(_, str) for k, v in arg.items() for _ in (k, v)])
-
-
-class choose_from:
-    def __init__(self, *choices: str | None):
-        self.choices = set(choices)
-
-    def __call__(self, arg: str | None) -> str | None:
-        if arg not in self.choices:
-            raise ValueError(f"Invalid choice {arg!r}, choose from {self.choices!r}")
-        return arg
-
-
-def which(arg: str) -> str:
-    if path := shutil.which(arg):
-        return path
-    logger.debug(f"{arg} not found on PATH")
-    return arg
-
-
-# Resource spec have the following form:
-# machine:
-#   resources:
-#   - type: node
-#     count: node_count
-#     resources:
-#     - type: socket
-#       count: sockets_per_node
-#       resources:
-#       - type: resource_name (like cpus)
-#         count: type_per_socket
-#         additional_properties:  (optional)
-#         - type: slots
-#           count: 1
-
-resource_spec = {
-    "type": "node",
-    "count": int,
-    Optional("additional_properties"): Or(dict, None),
-    "resources": [
-        {
-            "type": str,
-            "count": int,
-            Optional("additional_properties"): Or(dict, None),
-            Optional("resources"): [
-                {
-                    "type": str,
-                    "count": int,
-                    Optional("additional_properties"): Or(dict, None),
-                },
-            ],
-        },
-    ],
+section_schemas: dict[str, schema.Schema] = {
+    "config": config_schema,
+    "machine": machine_schema,
+    "submit": submit_schema,
+    "launch": launch_schema,
 }
-
-
-launch_spec = {
-    Optional("numproc_flag"): str,
-    Optional("default_options"): Use(flag_splitter),
-    Optional("local_options"): Use(flag_splitter),
-    Optional("pre_options"): Use(flag_splitter),
-    Optional("mappings"): dict_str_str,
-}
-
-schema = Schema(
-    {
-        "hpc_connect": {
-            Optional("config"): {
-                Optional("debug"): bool,
-            },
-            Optional("submit"): {
-                Optional("backend"): Use(
-                    choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")
-                ),
-                Optional("default_options"): Use(flag_splitter),
-                Optional(str): {
-                    Optional("default_options"): Use(flag_splitter),
-                },
-            },
-            Optional("machine"): {
-                Optional("resources"): Or([resource_spec], None),
-            },
-            Optional("launch"): {
-                Optional("exec"): Use(which),
-                **launch_spec,
-                Optional(str): launch_spec,
-            },
-        }
-    },
-    ignore_extra_keys=True,
-    description="HPC connect configuration schema",
-)
 
 
 class ConfigScope:
     def __init__(self, name: str, file: str | None, data: dict[str, Any]) -> None:
         self.name = name
         self.file = file
-        self.data = schema.validate({"hpc_connect": data})["hpc_connect"]
+        self.data: dict[str, Any] = {}
+        for section, data in data.items():
+            schema = section_schemas[section]
+            self.data[section] = schema.validate(data)
 
     def __repr__(self):
         file = self.file or "<none>"
@@ -151,6 +55,9 @@ class ConfigScope:
     def __iter__(self):
         return iter(self.data)
 
+    def __contains__(self, section: str) -> bool:
+        return section in self.data
+
     def get_section(self, section: str) -> Any:
         return self.data.get(section)
 
@@ -161,34 +68,33 @@ class ConfigScope:
             yaml.dump({"hpc_connect": self.data}, fh, default_flow_style=False)
 
 
-config_defaults = {
-    "config": {
-        "debug": False,
-    },
-    "machine": {
-        "resources": None,
-    },
-    "submit": {
-        "backend": None,
-        "default_options": [],
-    },
-    "launch": {
-        "exec": "mpiexec",
-        "numproc_flag": "-n",
-        "default_options": [],
-        "local_options": [],
-        "pre_options": [],
-        "mappings": {},
-    },
-}
-
-
 class Config:
     def __init__(self) -> None:
         self.pluginmanager: pluggy.PluginManager = HPCConnectPluginManager()
-        self.scopes: dict[str, ConfigScope] = {
-            "defaults": ConfigScope("defaults", None, config_defaults)
+        rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
+        defaults = {
+            "config": {
+                "debug": False,
+            },
+            "machine": {
+                "resources": rspec,
+            },
+            "submit": {
+                "backend": None,
+                "default_options": [],
+            },
+            "launch": {
+                "exec": "mpiexec",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "local_options": [],
+                "pre_options": [],
+                "mappings": {},
+            },
         }
+        self.scopes: dict[str, ConfigScope] = {}
+        default_scope = ConfigScope("defaults", None, defaults)
+        self.push_scope(default_scope)
         for scope in ("site", "global", "local"):
             config_scope = read_config_scope(scope)
             self.push_scope(config_scope)
@@ -223,6 +129,8 @@ class Config:
         return merged_section[section]
 
     def get(self, path: str, default: Any = None, scope: str | None = None) -> Any:
+        if path == "machine:resources":
+            return self.resource_specs
         parts = process_config_path(path)
         section = parts.pop(0)
         value = self.get_config(section, scope=scope)
@@ -336,18 +244,12 @@ class Config:
 
     @property
     def resource_specs(self) -> list[dict]:
-        from .submit import factory
-
-        if resource_specs := self.get("machine:resources"):
-            return resource_specs
-        if self.get("submit:backend"):
-            # backend may set resources
-            factory(config=self)
-        if resource_specs := self.get("machine:resources"):
-            return resource_specs
-        resource_specs = default_resource_spec()
-        self.set("machine:resources", resource_specs, scope="defaults")
-        return resource_specs
+        scope: ConfigScope
+        for scope in reversed(self.scopes.values()):
+            if "machine" in scope:
+                if resources := scope.data["machine"].get("resources"):
+                    return resources
+        raise ValueError("No machine resources set")
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""
@@ -486,20 +388,15 @@ class Config:
         return reqd_resources
 
     def dump(self, stream: IO[Any], scope: str | None = None, **kwargs: Any) -> None:
-        from .submit import factory
-
-        # initialize the resource spec
-        if self.get("machine:resources") is None:
-            if self.get("submit:backend"):
-                factory(self)
-            if not self.get("machine:resources"):
-                self.set("machine:resources", default_resource_spec(), scope="defaults")
         data: dict[str, Any] = {}
         for section in self.scopes["defaults"]:
+            if section == "machine":
+                continue
             section_data = self.get_config(section, scope=scope)
             if not section_data and scope is not None:
                 continue
             data[section] = section_data
+        data.setdefault("machine", {})["resources"] = self.resource_specs
         yaml.dump({"hpc_connect": data}, stream, **kwargs)
 
 
@@ -548,7 +445,7 @@ def read_env_config() -> ConfigScope | None:
             key = "_".join(parts)
         except ValueError:
             continue
-        if section not in config_defaults:
+        if section not in section_schemas:
             continue
         value: Any
         if key == "mappings":
@@ -609,25 +506,3 @@ def set_logging_level(levelname: str) -> None:
     for h in logger.handlers:
         h.setLevel(level)
     logger.setLevel(level)
-
-
-def default_resource_spec() -> list[dict]:
-    resource_spec: list[dict] = [
-        {
-            "type": "node",
-            "count": 1,
-            "resources": [
-                {
-                    "type": "socket",
-                    "count": 1,
-                    "resources": [
-                        {
-                            "type": "cpu",
-                            "count": psutil.cpu_count(),
-                        },
-                    ],
-                },
-            ],
-        }
-    ]
-    return resource_spec

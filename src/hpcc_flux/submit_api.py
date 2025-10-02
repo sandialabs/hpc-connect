@@ -8,7 +8,6 @@ import math
 import multiprocessing
 import multiprocessing.synchronize
 import os
-import subprocess
 import time
 from concurrent.futures import CancelledError
 from datetime import timedelta
@@ -22,10 +21,13 @@ from flux.job import Jobspec  # type: ignore
 from flux.job import JobspecV1  # type: ignore
 
 from hpc_connect.config import Config
+from hpc_connect.config import ConfigScope
 from hpc_connect.submit import HPCProcess
 from hpc_connect.submit import HPCSubmissionFailedError
 from hpc_connect.submit import HPCSubmissionManager
 from hpc_connect.util import time_in_seconds
+
+from .discover import read_resource_info
 
 logger = logging.getLogger("hpc_connect")
 
@@ -129,56 +131,6 @@ class FluxMultiProcess(HPCProcess):
         return max(stat)  # type: ignore
 
 
-def parse_resource_info(output: str) -> dict[str, int] | None:
-    """Parses the output from `flux resource info` and returns a dictionary of resource values.
-
-    The expected output format is "1 Nodes, 32 Cores, 1 GPUs".
-
-    Returns:
-        dict: A dictionary containing the resource values with the following keys:
-            - nodes (int): The number of nodes.
-            - cpu (int): The number of CPU cores.
-            - gpu (int): The number of GPU devices.
-    """
-    parts = output.split(", ")
-    vals = [int(p.split()[0]) for p in parts]
-    if len(vals) != 3:
-        return None
-    return {"nodes": vals[0], "cpu": vals[1], "gpu": vals[2]}
-
-
-def read_resource_info() -> dict[str, Any] | None:
-    try:
-        output = subprocess.check_output(["flux", "resource", "info"], encoding="utf-8")
-    except subprocess.CalledProcessError:
-        return None
-    if totals := parse_resource_info(output):
-        # assume homogenous resources
-        nodes = totals["nodes"]
-        info: dict = {
-            "type": "node",
-            "count": nodes,
-            "resources": [
-                {
-                    "type": "socket",
-                    "count": 1,
-                    "resources": [
-                        {
-                            "type": "cpu",
-                            "count": int(totals["cpu"] / nodes),
-                        },
-                        {
-                            "type": "gpu",
-                            "count": int(totals["gpu"] / nodes),
-                        },
-                    ],
-                }
-            ],
-        }
-        return info
-    return None
-
-
 class FluxSubmissionManager(HPCSubmissionManager):
     """Setup and submit jobs to the Flux scheduler"""
 
@@ -189,9 +141,11 @@ class FluxSubmissionManager(HPCSubmissionManager):
         super().__init__(config=config)
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
-        if self.config.get("machine:resources") is None:
-            if info := read_resource_info():
-                self.config.set("machine:resources", [info], scope="defaults")
+        if info := read_resource_info():
+            scope = ConfigScope("flux", None, {"machine": {"resources": [info]}})
+            self.config.push_scope(scope)
+        else:
+            logger.warning("Unable to determine system configuration from flux, using default")
 
     @property
     def supports_subscheduling(self) -> bool:

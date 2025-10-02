@@ -12,9 +12,12 @@ import subprocess
 from typing import Any
 
 from hpc_connect.config import Config
+from hpc_connect.config import ConfigScope
 from hpc_connect.submit import HPCProcess
 from hpc_connect.submit import HPCSubmissionFailedError
 from hpc_connect.submit import HPCSubmissionManager
+
+from .discover import read_pbsnodes
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +115,9 @@ class PBSSubmissionManager(HPCSubmissionManager):
         qdel = shutil.which("qdel")
         if qdel is None:
             raise ValueError("qdel not found on PATH")
-        if self.config.get("machine:resources") is None:
-            if resources := read_pbsnodes():
-                self.config.set("machine:resources", resources, scope="defaults")
+        if resources := read_pbsnodes():
+            scope = ConfigScope("pbs", None, {"machine": {"resources": resources}})
+            self.config.push_scope(scope)
         else:
             logger.warning("Unable to determine system configuration from pbsnodes, using default")
 
@@ -161,43 +164,3 @@ class PBSSubmissionManager(HPCSubmissionManager):
         )
         assert script is not None
         return PBSProcess(script)
-
-
-def read_pbsnodes() -> list[dict[str, Any]] | None:
-    if pbsnodes := shutil.which("pbsnodes"):
-        args = [pbsnodes, "-a", "-F", "json"]
-        allocated_nodes: list[str] | None = None
-        if var := os.getenv("PBS_NODEFILE"):
-            with open(var) as fh:
-                allocated_nodes = [line.strip() for line in fh if line.split()]
-        try:
-            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
-        except subprocess.CalledProcessError:
-            return None
-        else:
-            resources: list[dict[str, Any]] = []
-            data = json.loads(proc.stdout)
-            for nodename, nodeinfo in data["nodes"].items():
-                if allocated_nodes is not None and nodename not in allocated_nodes:
-                    continue
-                cpus_on_node = nodeinfo["pcpus"]
-                resource: dict[str, Any] = {
-                    "type": "node",
-                    "count": 1,
-                    "additional_properties": {"name": nodename},
-                    "resources": [
-                        {
-                            "type": "socket",
-                            "count": 1,
-                            "resources": [
-                                {
-                                    "type": "cpu",
-                                    "count": cpus_on_node,
-                                },
-                            ],
-                        },
-                    ],
-                }
-                resources.append(resource)
-            return resources
-    return None
