@@ -264,7 +264,7 @@ def read_sinfo() -> dict[str, Any] | None:
                     "cores_per_socket": cores_per_socket,
                     "threads_per_core": threads_per_core,
                     "cpus_per_node": cpus_per_node,
-                    "gres": " ".join(gres),
+                    "gres": " ".join(str(_) for _ in gres),
                 },
             }
             for res in gres:

@@ -396,9 +396,12 @@ class Config:
 
     @cached_property
     def node_count(self) -> int:
+        count: int = 0
         for resource in self.resource_specs:
             if resource["type"] == "node":
-                return resource["count"]
+                count += resource["count"]
+        if count:
+            return count
         raise ValueError("Unable to determine node count")
 
     @cached_property
