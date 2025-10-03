@@ -23,8 +23,8 @@ def read_resources_from_hostfile() -> dict[str, list] | None:
     if file := os.getenv("HPC_CONNECT_HOSTFILE"):
         with open(file) as fh:
             data = json.load(fh)
-        nodename = os.uname().nodename
+        host: str = os.getenv("HPC_CONNECT_HOSTNAME") or os.uname().nodename
         for pattern, rspec in data.items():
-            if fnmatch.fnmatch(nodename, pattern):
+            if fnmatch.fnmatch(host, pattern):
                 return rspec
     return None
