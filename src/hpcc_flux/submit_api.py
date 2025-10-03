@@ -141,11 +141,12 @@ class FluxSubmissionManager(HPCSubmissionManager):
         super().__init__(config=config)
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
-        if info := read_resource_info():
-            scope = ConfigScope("flux", None, {"machine": {"resources": [info]}})
-            self.config.push_scope(scope)
-        else:
-            logger.warning("Unable to determine system configuration from flux, using default")
+        if self.config.get("machine:resources") is None:
+            if info := read_resource_info():
+                scope = ConfigScope("flux", None, {"machine": {"resources": [info]}})
+                self.config.push_scope(scope)
+            else:
+                logger.warning("Unable to determine system configuration from flux, using default")
 
     @property
     def supports_subscheduling(self) -> bool:

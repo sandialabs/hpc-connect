@@ -14,6 +14,7 @@ from typing import Any
 import schema
 import yaml
 
+from .discover import default_resource_set
 from .pluginmanager import HPCConnectPluginManager
 from .schemas import config_schema
 from .schemas import environment_variable_schema
@@ -137,8 +138,6 @@ class Config:
         return merged_section[section]
 
     def get(self, path: str, default: Any = None, scope: str | None = None) -> Any:
-        if path == "machine:resources":
-            return self.resource_specs
         parts = process_config_path(path)
         section = parts.pop(0)
         value = self.get_config(section, scope=scope)
@@ -260,12 +259,12 @@ class Config:
 
     @property
     def resource_specs(self) -> list[dict]:
-        scope: ConfigScope
-        for scope in reversed(self.scopes.values()):
-            if "machine" in scope:
-                if resources := scope.data["machine"].get("resources"):
-                    return resources
-        raise ValueError("No machine resources set")
+        specs, _ = self.get_highest_priority("machine:resources")
+        if specs is not None:
+            return specs
+        resources = default_resource_set()
+        self.set("machine:resources", specs, scope="defaults")
+        return resources
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""

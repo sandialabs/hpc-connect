@@ -67,7 +67,7 @@ class SlurmProcess(HPCProcess):
         args = []
         with open(script, "r") as file:
             for line in file:
-                if match := re.search("^#SBATCH\s+(.*)$", line):
+                if match := re.search(r"^#SBATCH\s+(.*)$", line):
                     args.append(match.group(1).strip())
         p = argparse.ArgumentParser()
         p.add_argument("-M", "--cluster", "--clusters", dest="clusters")
@@ -156,11 +156,12 @@ class SlurmSubmissionManager(HPCSubmissionManager):
         sacct = shutil.which("sacct")
         if sacct is None:
             raise ValueError("sacct not found on PATH")
-        if sinfo := read_sinfo():
-            scope = ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
-            self.config.push_scope(scope)
-        else:
-            logger.warning("Unable to determine system configuration from sinfo, using default")
+        if self.config.get("machine:resources") is None:
+            if sinfo := read_sinfo():
+                scope = ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
+                self.config.push_scope(scope)
+            else:
+                logger.warning("Unable to determine system configuration from sinfo, using default")
 
     @property
     def submission_template(self) -> str:

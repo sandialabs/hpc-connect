@@ -113,7 +113,7 @@ launch_schema = Schema(
         **launch_spec,
     }
 )
-machine_schema = Schema({"resources": [resource_spec]})
+machine_schema = Schema({"resources": Or([resource_spec], None)})
 submit_schema = Schema(
     {
         Optional("backend"): Use(

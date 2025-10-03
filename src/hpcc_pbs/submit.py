@@ -115,11 +115,14 @@ class PBSSubmissionManager(HPCSubmissionManager):
         qdel = shutil.which("qdel")
         if qdel is None:
             raise ValueError("qdel not found on PATH")
-        if resources := read_pbsnodes():
-            scope = ConfigScope("pbs", None, {"machine": {"resources": resources}})
-            self.config.push_scope(scope)
-        else:
-            logger.warning("Unable to determine system configuration from pbsnodes, using default")
+        if self.config.get("machine:resources") is None:
+            if resources := read_pbsnodes():
+                scope = ConfigScope("pbs", None, {"machine": {"resources": resources}})
+                self.config.push_scope(scope)
+            else:
+                logger.warning(
+                    "Unable to determine system configuration from pbsnodes, using default"
+                )
 
     @property
     def submission_template(self) -> str:
