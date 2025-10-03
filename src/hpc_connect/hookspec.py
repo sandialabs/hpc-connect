@@ -11,9 +11,10 @@ if TYPE_CHECKING:
     from .launch import HPCLauncher
     from .submit import HPCSubmissionManager
 
+project_name = "hpc_connect"
 
-hookspec = pluggy.HookspecMarker("hpc_connect")
-hookimpl = pluggy.HookimplMarker("hpc_connect")
+hookspec = pluggy.HookspecMarker(project_name)
+hookimpl = pluggy.HookimplMarker(project_name)
 
 
 @hookspec(firstresult=True)

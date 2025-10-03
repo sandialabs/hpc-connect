@@ -26,14 +26,17 @@ def read_pbsnodes() -> list[dict[str, Any]] | None:
         else:
             resources: list[dict[str, Any]] = []
             data = json.loads(proc.stdout)
+            config: dict[int, list[str]] = {}
             for nodename, nodeinfo in data["nodes"].items():
                 if allocated_nodes is not None and nodename not in allocated_nodes:
                     continue
                 cpus_on_node = nodeinfo["pcpus"]
+                config.setdefault(cpus_on_node, []).append(nodename)
+            for cpus_on_node, nodenames in config.items():
                 resource: dict[str, Any] = {
                     "type": "node",
-                    "count": 1,
-                    "additional_properties": {"name": nodename},
+                    "count": len(nodenames),
+                    "additional_properties": {"nodes": nodenames},
                     "resources": [
                         {
                             "type": "socket",

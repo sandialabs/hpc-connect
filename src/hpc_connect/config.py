@@ -11,12 +11,12 @@ from functools import cached_property
 from typing import IO
 from typing import Any
 
-import pluggy
 import schema
 import yaml
 
 from .pluginmanager import HPCConnectPluginManager
 from .schemas import config_schema
+from .schemas import environment_variable_schema
 from .schemas import launch_schema
 from .schemas import machine_schema
 from .schemas import submit_schema
@@ -61,6 +61,9 @@ class ConfigScope:
     def get_section(self, section: str) -> Any:
         return self.data.get(section)
 
+    def pop_section(self, section: str) -> Any:
+        return self.data.pop(section, None)
+
     def dump(self) -> None:
         if self.file is None:
             return
@@ -70,11 +73,12 @@ class ConfigScope:
 
 class Config:
     def __init__(self) -> None:
-        self.pluginmanager: pluggy.PluginManager = HPCConnectPluginManager()
+        self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
         rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
         defaults = {
             "config": {
                 "debug": False,
+                "plugins": [],
             },
             "machine": {
                 "resources": rspec,
@@ -108,6 +112,10 @@ class Config:
 
     def push_scope(self, scope: ConfigScope) -> None:
         self.scopes[scope.name] = scope
+        if cfg := scope.get_section("config"):
+            if plugins := cfg.get("plugins"):
+                for f in plugins:
+                    self.pluginmanager.consider_plugin(f)
 
     def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
         return self.scopes.pop(scope.name, None)
@@ -142,6 +150,14 @@ class Config:
                 return default
             value = value[key]
         return value
+
+    def get_highest_priority(self, path: str, default: Any = None) -> tuple[Any, str]:
+        sentinel = object()
+        for scope in reversed(self.scopes.keys()):
+            value = self.get(path, default=sentinel, scope=scope)
+            if value is not sentinel:
+                return value, scope
+        return default, "none"
 
     def set(self, path: str, value: Any, scope: str | None = None) -> None:
         parts = process_config_path(path)
@@ -429,32 +445,10 @@ def get_scope_filename(scope: str) -> str | None:
 
 
 def read_env_config() -> ConfigScope | None:
-    def load_mappings(arg: str) -> dict[str, str]:
-        mappings: dict[str, str] = {}
-        for kv in arg.split(","):
-            k, v = [_.strip() for _ in kv.split(":") if _.split()]
-            mappings[k] = v
-        return mappings
-
-    data: dict[str, Any] = {}
-    for var in os.environ:
-        if not var.startswith("HPCC_"):
-            continue
-        try:
-            section, *parts = var[5:].lower().split("_")
-            key = "_".join(parts)
-        except ValueError:
-            continue
-        if section not in section_schemas:
-            continue
-        value: Any
-        if key == "mappings":
-            value = load_mappings(os.environ[var])
-        else:
-            value = safe_loads(os.environ[var])
-        data.setdefault(section, {}).update({key: value})
-    if not data:
+    variables = {key: var for key, var in os.environ.items() if key.startswith("HPC_CONNECT_")}
+    if not variables:
         return None
+    data = environment_variable_schema.validate(variables)
     return ConfigScope("environment", None, data)
 
 
