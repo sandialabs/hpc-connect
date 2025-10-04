@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 from typing import TYPE_CHECKING
+from typing import Any
 
 from hpc_connect.hookspec import hookimpl
 
@@ -21,7 +22,7 @@ def hpc_connect_submission_manager(config) -> "HPCSubmissionManager | None":
 
 
 @hookimpl
-def hpc_connect_discover_resources() -> dict[str, list] | None:
+def hpc_connect_discover_resources() -> list[dict[str, Any]] | None:
     if info := read_pbsnodes():
-        return {"resources": info}
+        return info
     return None
