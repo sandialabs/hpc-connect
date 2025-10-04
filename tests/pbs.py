@@ -39,9 +39,9 @@ def test_basic():
         text = fh.getvalue()
     assert "#!/bin/sh" in text
     assert "#PBS -V" in text
+    assert "#PBS -N my-job" in text
     assert f"#PBS -l nodes=1:ppn={backend.config.count_per_node('cpu')}" in text
     assert "#PBS -l walltime=00:00:01" in text
-    assert "#PBS --job-name=my-job" in text
     assert "#PBS -o my-out.txt" in text
     assert "#PBS -e my-err.txt" in text
     assert "export MY_VAR=SPAM" in text
