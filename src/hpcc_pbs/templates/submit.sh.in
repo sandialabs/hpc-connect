@@ -1,7 +1,6 @@
 {% extends "hpcc-submit.sh.in" %}
 {% block header %}
 #PBS -N {{ name }}
-#PBS --job-name={{ name }}
 #PBS -l nodes={{ nodes }}:ppn={{ cpus_per_node }}
 #PBS -l walltime={{ hhmmss(time * 1.25, threshold=0) }}
 {% if output %}

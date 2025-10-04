@@ -48,6 +48,10 @@ class PBSProcess(HPCProcess):
         logger.error(f"    The following output was received from {qsub}:")
         for line in result.split("\n"):
             logger.error(f"    {line}")
+        logger.error(f"    qsub submission line: {' '.join(args)}")
+        with open(script) as fh:
+            script_lines = fh.read()
+        logger.error(f"    qsub script: {script_lines}")
         raise HPCSubmissionFailedError
 
     @property
