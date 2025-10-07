@@ -4,10 +4,9 @@
 
 from typing import Any
 
-from ..config import Config
-from ..hookspec import hookimpl
-from .base import HPCProcess
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionManager
 
 try:
     import flux  # noqa: F401
@@ -42,11 +41,4 @@ except ImportError:
             return name == "flux"
 
 else:
-    from .flux_api import FluxSubmissionManager  # type: ignore
-
-
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if FluxSubmissionManager.matches(config.get("submit:backend")):
-        return FluxSubmissionManager(config=config)
-    return None
+    from .submit_api import FluxSubmissionManager  # type: ignore

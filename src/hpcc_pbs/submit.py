@@ -11,11 +11,13 @@ import shutil
 import subprocess
 from typing import Any
 
-from ..config import Config
-from ..hookspec import hookimpl
-from .base import HPCProcess
-from .base import HPCSubmissionFailedError
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.config import ConfigScope
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionFailedError
+from hpc_connect.submit import HPCSubmissionManager
+
+from .discover import read_pbsnodes
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,10 @@ class PBSProcess(HPCProcess):
         logger.error(f"    The following output was received from {qsub}:")
         for line in result.split("\n"):
             logger.error(f"    {line}")
+        logger.error(f"    qsub submission line: {' '.join(args)}")
+        with open(script) as fh:
+            script_lines = fh.read()
+        logger.error(f"    qsub script: {script_lines}")
         raise HPCSubmissionFailedError
 
     @property
@@ -113,12 +119,20 @@ class PBSSubmissionManager(HPCSubmissionManager):
         qdel = shutil.which("qdel")
         if qdel is None:
             raise ValueError("qdel not found on PATH")
+        if self.config.get("machine:resources") is None:
+            if resources := read_pbsnodes():
+                scope = ConfigScope("pbs", None, {"machine": {"resources": resources}})
+                self.config.push_scope(scope)
+            else:
+                logger.warning(
+                    "Unable to determine system configuration from pbsnodes, using default"
+                )
 
     @property
     def submission_template(self) -> str:
         if "HPCC_PBS_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_PBS_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/pbs.sh.in"))
+        return str(importlib.resources.files("hpcc_pbs").joinpath("templates/submit.sh.in"))
 
     def prepare_command_line(self, args: list[str]) -> list[str]:
         qsub = shutil.which("qsub")
@@ -157,10 +171,3 @@ class PBSSubmissionManager(HPCSubmissionManager):
         )
         assert script is not None
         return PBSProcess(script)
-
-
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if PBSSubmissionManager.matches(config.get("submit:backend")):
-        return PBSSubmissionManager(config=config)
-    return None

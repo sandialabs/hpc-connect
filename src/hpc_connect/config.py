@@ -5,121 +5,44 @@ import argparse
 import logging
 import math
 import os
-import shlex
-import shutil
 import sys
 from collections.abc import ValuesView
 from functools import cached_property
 from typing import IO
 from typing import Any
 
-import pluggy
+import schema
 import yaml
 
+from .discover import default_resource_set
 from .pluginmanager import HPCConnectPluginManager
-from .third_party.schema import Optional
-from .third_party.schema import Or
-from .third_party.schema import Schema
-from .third_party.schema import Use
+from .schemas import config_schema
+from .schemas import environment_variable_schema
+from .schemas import launch_schema
+from .schemas import machine_schema
+from .schemas import submit_schema
 from .util import collections
-from .util import cpu_count
 from .util import safe_loads
 from .util.string import strip_quotes
 
 logger = logging.getLogger("hpc_connect")
 
-
-def flag_splitter(arg: list[str] | str) -> list[str]:
-    if isinstance(arg, str):
-        return shlex.split(arg)
-    elif not isinstance(arg, list) and not all(isinstance(str, _) for _ in arg):
-        raise ValueError("expected list[str]")
-    return arg
-
-
-def dict_str_str(arg: Any) -> bool:
-    f = isinstance
-    return f(arg, dict) and all([f(_, str) for k, v in arg.items() for _ in (k, v)])
-
-
-class choose_from:
-    def __init__(self, *choices: str | None):
-        self.choices = set(choices)
-
-    def __call__(self, arg: str | None) -> str | None:
-        if arg not in self.choices:
-            raise ValueError(f"Invalid choice {arg!r}, choose from {self.choices!r}")
-        return arg
-
-
-def which(arg: str) -> str:
-    if path := shutil.which(arg):
-        return path
-    logger.debug(f"{arg} not found on PATH")
-    return arg
-
-
-resource_spec = {
-    "type": "node",
-    "count": int,
-    "resources": [
-        {
-            "type": str,
-            "count": int,
-            Optional("resources"): [
-                {
-                    "type": str,
-                    "count": int,
-                },
-            ],
-        },
-    ],
+section_schemas: dict[str, schema.Schema] = {
+    "config": config_schema,
+    "machine": machine_schema,
+    "submit": submit_schema,
+    "launch": launch_schema,
 }
-
-
-launch_spec = {
-    Optional("numproc_flag"): str,
-    Optional("default_options"): Use(flag_splitter),
-    Optional("local_options"): Use(flag_splitter),
-    Optional("pre_options"): Use(flag_splitter),
-    Optional("mappings"): dict_str_str,
-}
-
-schema = Schema(
-    {
-        "hpc_connect": {
-            Optional("config"): {
-                Optional("debug"): bool,
-            },
-            Optional("submit"): {
-                Optional("backend"): Use(
-                    choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")
-                ),
-                Optional("default_options"): Use(flag_splitter),
-                Optional(str): {
-                    Optional("default_options"): Use(flag_splitter),
-                },
-            },
-            Optional("machine"): {
-                Optional("resources"): Or([resource_spec], None),
-            },
-            Optional("launch"): {
-                Optional("exec"): Use(which),
-                **launch_spec,
-                Optional(str): launch_spec,
-            },
-        }
-    },
-    ignore_extra_keys=True,
-    description="HPC connect configuration schema",
-)
 
 
 class ConfigScope:
     def __init__(self, name: str, file: str | None, data: dict[str, Any]) -> None:
         self.name = name
         self.file = file
-        self.data = schema.validate({"hpc_connect": data})["hpc_connect"]
+        self.data: dict[str, Any] = {}
+        for section, data in data.items():
+            schema = section_schemas[section]
+            self.data[section] = schema.validate(data)
 
     def __repr__(self):
         file = self.file or "<none>"
@@ -133,8 +56,14 @@ class ConfigScope:
     def __iter__(self):
         return iter(self.data)
 
+    def __contains__(self, section: str) -> bool:
+        return section in self.data
+
     def get_section(self, section: str) -> Any:
         return self.data.get(section)
+
+    def pop_section(self, section: str) -> Any:
+        return self.data.pop(section, None)
 
     def dump(self) -> None:
         if self.file is None:
@@ -143,34 +72,34 @@ class ConfigScope:
             yaml.dump({"hpc_connect": self.data}, fh, default_flow_style=False)
 
 
-config_defaults = {
-    "config": {
-        "debug": False,
-    },
-    "machine": {
-        "resources": None,
-    },
-    "submit": {
-        "backend": None,
-        "default_options": [],
-    },
-    "launch": {
-        "exec": "mpiexec",
-        "numproc_flag": "-n",
-        "default_options": [],
-        "local_options": [],
-        "pre_options": [],
-        "mappings": {},
-    },
-}
-
-
 class Config:
     def __init__(self) -> None:
-        self.pluginmanager: pluggy.PluginManager = HPCConnectPluginManager()
-        self.scopes: dict[str, ConfigScope] = {
-            "defaults": ConfigScope("defaults", None, config_defaults)
+        self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
+        rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
+        defaults = {
+            "config": {
+                "debug": False,
+                "plugins": [],
+            },
+            "machine": {
+                "resources": rspec,
+            },
+            "submit": {
+                "backend": None,
+                "default_options": [],
+            },
+            "launch": {
+                "exec": "mpiexec",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "local_options": [],
+                "pre_options": [],
+                "mappings": {},
+            },
         }
+        self.scopes: dict[str, ConfigScope] = {}
+        default_scope = ConfigScope("defaults", None, defaults)
+        self.push_scope(default_scope)
         for scope in ("site", "global", "local"):
             config_scope = read_config_scope(scope)
             self.push_scope(config_scope)
@@ -184,6 +113,10 @@ class Config:
 
     def push_scope(self, scope: ConfigScope) -> None:
         self.scopes[scope.name] = scope
+        if cfg := scope.get_section("config"):
+            if plugins := cfg.get("plugins"):
+                for f in plugins:
+                    self.pluginmanager.consider_plugin(f)
 
     def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
         return self.scopes.pop(scope.name, None)
@@ -216,6 +149,14 @@ class Config:
                 return default
             value = value[key]
         return value
+
+    def get_highest_priority(self, path: str, default: Any = None) -> tuple[Any, str]:
+        sentinel = object()
+        for scope in reversed(self.scopes.keys()):
+            value = self.get(path, default=sentinel, scope=scope)
+            if value is not sentinel:
+                return value, scope
+        return default, "none"
 
     def set(self, path: str, value: Any, scope: str | None = None) -> None:
         parts = process_config_path(path)
@@ -318,34 +259,47 @@ class Config:
 
     @property
     def resource_specs(self) -> list[dict]:
-        from .submit import factory
+        specs, _ = self.get_highest_priority("machine:resources")
+        if specs is not None:
+            return specs
+        resources = default_resource_set()
+        self.set("machine:resources", specs, scope="defaults")
+        return resources
 
-        if resource_specs := self.get("machine:resources"):
-            return resource_specs
-        if self.get("submit:backend"):
-            # backend may set resources
-            factory(config=self)
-        if resource_specs := self.get("machine:resources"):
-            return resource_specs
-        resource_specs = default_resource_spec()
-        self.set("machine:resources", resource_specs, scope="defaults")
-        return resource_specs
+    def resource_types(self) -> list[str]:
+        """Return the types of resources available"""
+        types: set[str] = set()
+        for rspec in self.resource_specs:
+            if rspec["type"] == "node":
+                for spec in rspec["resources"]:
+                    if spec["type"] == "socket":
+                        types.update([child["type"] for child in spec["resources"]])
+        return sorted(types)
 
     def count_per_rspec(self, rspec: dict[str, Any], type: str) -> int | None:
         for child in rspec["resources"]:
             if child["type"] == type:
                 return child["count"]
+            elif type.endswith("s") and child["type"] == type[:-1]:
+                return child["count"]
         return None
 
-    def count_per_node(self, type: str) -> int:
+    def count_per_node(self, type: str, default: int | None = None) -> int:
         for rspec in self.resource_specs:
             if rspec["type"] == "node":
                 count = self.count_per_rspec(rspec, type)
                 if count is not None:
                     return count
-        raise ValueError(f"Unable to determine count_per_node for {type!r}")
+        try:
+            count_per_socket = self.count_per_socket(type)
+        except ValueError:
+            if default is not None:
+                return default
+            raise ValueError(f"Unable to determine count_per_node for {type!r}") from None
+        else:
+            return count_per_socket * self.sockets_per_node
 
-    def count_per_socket(self, type: str) -> int:
+    def count_per_socket(self, type: str, default: int | None = None) -> int:
         for rspec1 in self.resource_specs:
             if rspec1["type"] == "node":
                 for rspec2 in rspec1["resources"]:
@@ -353,13 +307,18 @@ class Config:
                         count = self.count_per_rspec(rspec2, type)
                         if count is not None:
                             return count
+        if default is not None:
+            return default
         raise ValueError(f"Unable to determine count_per_socket for {type!r}")
 
     @cached_property
     def node_count(self) -> int:
+        count: int = 0
         for resource in self.resource_specs:
             if resource["type"] == "node":
-                return resource["count"]
+                count += resource["count"]
+        if count:
+            return count
         raise ValueError("Unable to determine node count")
 
     @cached_property
@@ -370,47 +329,24 @@ class Config:
         except ValueError:
             return 1
 
-    @cached_property
-    def cpus_per_socket(self) -> int:
-        try:
-            return self.count_per_socket("cpu")
-        except ValueError:
-            return cpu_count()
-
-    @cached_property
-    def gpus_per_socket(self) -> int:
-        try:
-            return self.count_per_socket("gpu")
-        except ValueError:
-            return 0
-
-    @cached_property
-    def cpus_per_node(self) -> int:
-        return self.sockets_per_node * self.cpus_per_socket
-
-    @cached_property
-    def gpus_per_node(self) -> int:
-        if gpus_per_resource_type := self.gpus_per_socket:
-            return self.sockets_per_node * gpus_per_resource_type
-        try:
-            return self.count_per_node("gpu")
-        except ValueError:
-            return 0
-
-    @cached_property
-    def cpu_count(self) -> int:
-        return self.node_count * self.cpus_per_node
-
-    @cached_property
-    def gpu_count(self) -> int:
-        return self.node_count * self.gpus_per_node
-
-    def nodes_required(self, max_cpus: int | None = None, max_gpus: int | None = None) -> int:
+    def nodes_required(self, **types: int) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
-        nodes = max(1, int(math.ceil((max_cpus or 1) / self.cpus_per_node)))
-        if self.gpus_per_node:
-            nodes = max(nodes, int(math.ceil((max_gpus or 0) / self.gpus_per_node)))
+        # backward compatible
+        if n := types.pop("max_cpus", None):
+            types["cpu"] = n
+        if n := types.pop("max_gpus", None):
+            types["gpu"] = n
+        nodes: int = 1
+        for type, count in types.items():
+            try:
+                count_per_node = self.count_per_node(type)
+            except ValueError:
+                continue
+            else:
+                if count_per_node == 0:
+                    continue
+            nodes = max(nodes, int(math.ceil(count / count_per_node)))
         return nodes
 
     def compute_required_resources(
@@ -452,13 +388,13 @@ class Config:
             ranks = ranks_per_socket = 1
             nodes = 1
         elif ranks is not None and ranks_per_socket is None:
-            ranks_per_socket = min(ranks, self.cpus_per_socket)
-            nodes = int(math.ceil(ranks / self.cpus_per_socket / self.sockets_per_node))
+            ranks_per_socket = min(ranks, self.count_per_socket("cpu"))
+            nodes = int(math.ceil(ranks / self.count_per_socket("cpu") / self.sockets_per_node))
         else:
             assert ranks is not None
             assert ranks_per_socket is not None
             nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-        sockets = int(math.ceil(ranks / ranks_per_socket))
+        sockets = int(math.ceil(ranks / ranks_per_socket))  # ty: ignore[unsupported-operator]
         reqd_resources["np"] = ranks
         reqd_resources["ranks"] = ranks
         reqd_resources["ranks_per_socket"] = ranks_per_socket
@@ -467,20 +403,15 @@ class Config:
         return reqd_resources
 
     def dump(self, stream: IO[Any], scope: str | None = None, **kwargs: Any) -> None:
-        from .submit import factory
-
-        # initialize the resource spec
-        if self.get("machine:resources") is None:
-            if self.get("submit:backend"):
-                factory(self)
-            if not self.get("machine:resources"):
-                self.set("machine:resources", default_resource_spec(), scope="defaults")
         data: dict[str, Any] = {}
         for section in self.scopes["defaults"]:
+            if section == "machine":
+                continue
             section_data = self.get_config(section, scope=scope)
             if not section_data and scope is not None:
                 continue
             data[section] = section_data
+        data.setdefault("machine", {})["resources"] = self.resource_specs
         yaml.dump({"hpc_connect": data}, stream, **kwargs)
 
 
@@ -513,32 +444,10 @@ def get_scope_filename(scope: str) -> str | None:
 
 
 def read_env_config() -> ConfigScope | None:
-    def load_mappings(arg: str) -> dict[str, str]:
-        mappings: dict[str, str] = {}
-        for kv in arg.split(","):
-            k, v = [_.strip() for _ in kv.split(":") if _.split()]
-            mappings[k] = v
-        return mappings
-
-    data: dict[str, Any] = {}
-    for var in os.environ:
-        if not var.startswith("HPCC_"):
-            continue
-        try:
-            section, *parts = var[5:].lower().split("_")
-            key = "_".join(parts)
-        except ValueError:
-            continue
-        if section not in config_defaults:
-            continue
-        value: Any
-        if key == "mappings":
-            value = load_mappings(os.environ[var])
-        else:
-            value = safe_loads(os.environ[var])
-        data.setdefault(section, {}).update({key: value})
-    if not data:
+    variables = {key: var for key, var in os.environ.items() if key.startswith("HPC_CONNECT_")}
+    if not variables:
         return None
+    data = environment_variable_schema.validate(variables)
     return ConfigScope("environment", None, data)
 
 
@@ -563,7 +472,7 @@ def process_config_path(path: str) -> list[str]:
     return result
 
 
-ch = logging.StreamHandler()
+ch = logging.StreamHandler(sys.stdout)
 ch.setFormatter(logging.Formatter("==> %(message)s"))
 logger.addHandler(ch)
 
@@ -590,25 +499,3 @@ def set_logging_level(levelname: str) -> None:
     for h in logger.handlers:
         h.setLevel(level)
     logger.setLevel(level)
-
-
-def default_resource_spec() -> list[dict]:
-    resource_spec: list[dict] = [
-        {
-            "type": "node",
-            "count": 1,
-            "resources": [
-                {
-                    "type": "socket",
-                    "count": 1,
-                    "resources": [
-                        {
-                            "type": "cpu",
-                            "count": cpu_count(),
-                        },
-                    ],
-                },
-            ],
-        }
-    ]
-    return resource_spec

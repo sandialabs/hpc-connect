@@ -1,13 +1,17 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "hpc-connect"
 dynamic = ["version"]
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2", "psutil", "PyYAML"]
+dependencies = ["pluggy", "jinja2", "psutil", "PyYAML", "schema"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"
@@ -16,9 +20,12 @@ hpcc = "hpc_connect.__main__:main"
 [project.optional-dependencies]
 dev = ["ruff", "mypy", "pytest"]
 
-[build-system]
-requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
-build-backend = "setuptools.build_meta"
+[project.entry-points."hpc_connect"]
+hpcc_flux = "hpcc_flux"
+hpcc_mpi = "hpcc_mpi"
+hpcc_pbs = "hpcc_pbs"
+hpcc_slurm = "hpcc_slurm"
+hpcc_subprocess = "hpcc_subprocess"
 
 [tool.setuptools.dynamic]
 version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}
@@ -53,8 +60,11 @@ select = ["F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
 "src/hpc_connect/__init__.py" = ["F401", "F403", "F405"]
-"src/hpc_connect/launch/__init__.py" = ["F401", "F403", "F405"]
-"src/hpc_connect/submit/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_slurm/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_flux/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_flux/submit_hl.py" = ["F401", "F403", "F405"]
+"src/hpcc_subprocess/__init__.py" = ["F401", "F403", "F405"]
+"src/hpcc_mpi/__init__.py" = ["F401", "F403", "F405"]
 "src/hpc_connect/util/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
@@ -81,9 +91,26 @@ module = "psutil"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "schema"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "flux"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "yaml"
 ignore_missing_imports = true
+
+[tool.bandit]
+skips = [
+    "B101",  # ignore asserts
+    "B311",  # ignore warnings about random numbers
+    "B318",  # xml.dom.minidom.parse to parse XML
+    "B324",  # non-cryptographic hashes allowed (they are used to generate IDs only)
+    "B404",  # consider security risks when using subprocess module
+    "B406",  # xml.sax.saxutils to parse XML
+    "B408",  # allow use of xml parsers
+    "B603",
+    "B607", # start_process_with_partial_path"
+]

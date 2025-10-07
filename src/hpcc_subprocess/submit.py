@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-import importlib
+import importlib.resources
 import logging
 import os
 import shutil
@@ -13,11 +13,10 @@ from typing import TextIO
 
 import psutil
 
-from ..config import Config
-from ..hookspec import hookimpl
-from ..util import time_in_seconds
-from .base import HPCProcess
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionManager
+from hpc_connect.util import time_in_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ def streamify(arg: str | None) -> TextIO | None:
     return open(arg, mode="w")
 
 
-class ShellProcess(HPCProcess):
+class Subprocess(HPCProcess):
     def __init__(
         self,
         script: str,
@@ -76,17 +75,17 @@ class ShellProcess(HPCProcess):
         for p in children:
             try:
                 p.terminate()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         _, alive = psutil.wait_procs(children)
         for p in alive:
             try:
                 p.kill()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
 
 
-class ShellSubmissionManager(HPCSubmissionManager):
+class SubprocessSubmissionManager(HPCSubmissionManager):
     name = "shell"
 
     def __init__(self, config: Config | None = None):
@@ -97,7 +96,7 @@ class ShellSubmissionManager(HPCSubmissionManager):
 
     @staticmethod
     def matches(name) -> bool:
-        return name in ("shell", "none")
+        return name in ("subprocess", "shell", "none")
 
     @property
     def polling_frequency(self) -> float:
@@ -134,15 +133,8 @@ class ShellSubmissionManager(HPCSubmissionManager):
             gpus=gpus,
         )
         assert script is not None
-        return ShellProcess(script, output=output, error=error)
+        return Subprocess(script, output=output, error=error)
 
     @property
     def submission_template(self) -> str:
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/shell.sh.in"))
-
-
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if ShellSubmissionManager.matches(config.get("submit:backend")):
-        return ShellSubmissionManager(config=config)
-    return None
+        return str(importlib.resources.files("hpcc_subprocess").joinpath("templates/submit.sh.in"))

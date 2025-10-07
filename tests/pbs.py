@@ -6,8 +6,6 @@ import io
 import os
 from contextlib import contextmanager
 
-import hpc_connect
-
 
 @contextmanager
 def tmp_environ():
@@ -23,7 +21,9 @@ def tmp_environ():
 
 
 def test_basic():
-    backend = hpc_connect.submit.pbs.PBSSubmissionManager()
+    import hpcc_pbs.submit
+
+    backend = hpcc_pbs.submit.PBSSubmissionManager()
     with io.StringIO() as fh:
         backend.write_submission_script(
             "my-job",
@@ -38,10 +38,10 @@ def test_basic():
         )
         text = fh.getvalue()
     assert "#!/bin/sh" in text
+    assert "#PBS -V" in text
     assert "#PBS -N my-job" in text
-    assert f"#PBS -l nodes=1:ppn={backend.config.cpus_per_node}" in text
+    assert f"#PBS -l nodes=1:ppn={backend.config.count_per_node('cpu')}" in text
     assert "#PBS -l walltime=00:00:01" in text
-    assert "#PBS --job-name=my-job" in text
     assert "#PBS -o my-out.txt" in text
     assert "#PBS -e my-err.txt" in text
     assert "export MY_VAR=SPAM" in text

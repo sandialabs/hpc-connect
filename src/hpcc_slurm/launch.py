@@ -2,11 +2,11 @@ import io
 import os
 import shutil
 
-from ..config import Config
-from ..hookspec import hookimpl
-from ..submit import slurm
-from .base import HPCLauncher
-from .base import LaunchSpecs
+from hpc_connect.config import Config
+from hpc_connect.launch import HPCLauncher
+from hpc_connect.launch import LaunchSpecs
+
+from .submit import read_sinfo
 
 
 class SrunLauncher(HPCLauncher):
@@ -15,7 +15,7 @@ class SrunLauncher(HPCLauncher):
         if not self.exec.endswith("srun"):
             raise ValueError("SrunLauncher: expected exec = srun")
         if self.config.get("machine:resources") is None:
-            if sinfo := slurm.read_sinfo():
+            if sinfo := read_sinfo():
                 self.config.set("machine:resources", [sinfo])
 
     @staticmethod
@@ -80,10 +80,3 @@ class SrunLauncher(HPCLauncher):
             if shutil.which(arg):
                 return i
         return -1
-
-
-@hookimpl
-def hpc_connect_launcher(config: Config) -> HPCLauncher | None:
-    if SrunLauncher.matches(config.get("launch:exec")):
-        return SrunLauncher(config=config)
-    return None

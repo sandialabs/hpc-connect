@@ -14,11 +14,13 @@ import subprocess
 import time
 from typing import Any
 
-from ..config import Config
-from ..hookspec import hookimpl
-from .base import HPCProcess
-from .base import HPCSubmissionFailedError
-from .base import HPCSubmissionManager
+from hpc_connect.config import Config
+from hpc_connect.config import ConfigScope
+from hpc_connect.submit import HPCProcess
+from hpc_connect.submit import HPCSubmissionFailedError
+from hpc_connect.submit import HPCSubmissionManager
+
+from .discover import read_sinfo
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,7 @@ class SlurmProcess(HPCProcess):
             date = datetime.datetime.now().strftime("%c")
             meta = {"args": " ".join(args), "date": date, "stdout/stderr": proc.stdout}
             json.dump({"meta": meta}, fh, indent=2)
-        if match := re.search("Submitted batch job (.*)$", proc.stdout):
+        if match := re.match(r"Submitted batch job (\S*)", proc.stdout):
             jobid = match.group(1).strip()
             return jobid
         logger.error(f"Failed to find jobid!\n    The following output was received from {sbatch}:")
@@ -65,7 +67,7 @@ class SlurmProcess(HPCProcess):
         args = []
         with open(script, "r") as file:
             for line in file:
-                if match := re.search("^#SBATCH\s+(.*)$", line):
+                if match := re.search(r"^#SBATCH\s+(.*)$", line):
                     args.append(match.group(1).strip())
         p = argparse.ArgumentParser()
         p.add_argument("-M", "--cluster", "--clusters", dest="clusters")
@@ -90,8 +92,12 @@ class SlurmProcess(HPCProcess):
             args = [sacct, "--noheader", "-j", self.jobid, "-p", "-b"]
             if self.clusters:
                 args.append(f"--clusters={self.clusters}")
-            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
-            lines = [line.strip() for line in proc.stdout.splitlines() if line.split()]
+            proc = subprocess.run(args, encoding="utf-8", capture_output=True)
+            if proc.returncode != 0:
+                logger.warning(f"sacct returned non-zero status {proc.returncode}")
+                continue
+            out = proc.stdout
+            lines = [line.strip() for line in out.splitlines() if line.split()]
             if lines:
                 for line in lines:
                     jobid, state, exit_code = [_.strip() for _ in line.split("|") if _.split()]
@@ -108,7 +114,10 @@ class SlurmProcess(HPCProcess):
                 break
             time.sleep(0.5)
         else:
-            raise RuntimeError(f"{' '.join(args)!r} did not return any accounting data")
+            cmd, err = " ".join(args), proc.stderr or ""
+            raise RuntimeError(
+                f"$ {cmd}\n{out}\n{err}\n==> Error: could not determine state from accounting data"
+            )
 
         if jobinfo := acct_data.get(self.jobid):
             if jobinfo["state"].upper() in ("PENDING", "RUNNING"):
@@ -149,15 +158,16 @@ class SlurmSubmissionManager(HPCSubmissionManager):
             raise ValueError("sacct not found on PATH")
         if self.config.get("machine:resources") is None:
             if sinfo := read_sinfo():
-                self.config.set("machine:resources", [sinfo], scope="defaults")
-        else:
-            logger.warning("Unable to determine system configuration from sinfo, using default")
+                scope = ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
+                self.config.push_scope(scope)
+            else:
+                logger.warning("Unable to determine system configuration from sinfo, using default")
 
     @property
     def submission_template(self) -> str:
         if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
             return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpc_connect").joinpath("templates/slurm.sh.in"))
+        return str(importlib.resources.files("hpcc_slurm").joinpath("templates/submit.sh.in"))
 
     def prepare_command_line(self, args: list[str]) -> list[str]:
         sbatch = shutil.which("sbatch")
@@ -196,79 +206,3 @@ class SlurmSubmissionManager(HPCSubmissionManager):
         )
         assert script is not None
         return SlurmProcess(script)
-
-
-def read_sinfo() -> dict[str, Any] | None:
-    if sinfo := shutil.which("sinfo"):
-        opts = [
-            "%X",  # Number of sockets per node
-            "%Y",  # Number of cores per socket
-            "%Z",  # Number of threads per core
-            "%c",  # Number of CPUs per node
-            "%D",  # Number of nodes
-            "%G",  # General resources
-        ]
-        format = " ".join(opts)
-        args = [sinfo, "-o", format]
-        try:
-            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
-        except subprocess.CalledProcessError:
-            return None
-        else:
-            for line in proc.stdout.split("\n"):
-                parts = line.split()
-                if not parts:
-                    continue
-                elif parts and parts[0].startswith("SOCKETS"):
-                    continue
-                spn, cps, _, cpn, nc, *gres = [safe_loads(_) for _ in parts]
-                break
-            else:
-                raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
-            info: dict[str, Any] = {
-                "type": "node",
-                "count": nc,
-                "resources": [
-                    {
-                        "type": "socket",
-                        "count": spn,
-                        "resources": [
-                            {
-                                "type": "cpu",
-                                "count": cps,
-                            },
-                        ],
-                    }
-                ],
-            }
-            for res in gres:
-                if not res:
-                    continue
-                parts = res.split(":")
-                resource: dict[str, Any] = {
-                    "type": parts[0],
-                    "count": safe_loads(parts[-1]),
-                }
-                if len(parts) > 2:
-                    resource["gres"] = ":".join(parts[1:-1])
-                info["resources"].append(resource)
-            return info
-    return None
-
-
-def safe_loads(arg: str) -> Any:
-    if arg == "(null)":
-        return None
-    if arg.endswith("+"):
-        return safe_loads(arg[:-1])
-    try:
-        return json.loads(arg)
-    except json.JSONDecodeError:
-        return arg
-
-
-@hookimpl
-def hpc_connect_submission_manager(config) -> HPCSubmissionManager | None:
-    if SlurmSubmissionManager.matches(config.get("submit:backend")):
-        return SlurmSubmissionManager(config=config)
-    return None

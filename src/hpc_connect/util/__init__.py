@@ -2,13 +2,16 @@
 #
 # SPDX-License-Identifier: MIT
 
+import json
+import json.decoder
 import os
 import re
 import stat
 from typing import Any
 from typing import Callable
 
-from .proc import cpu_count
+from psutil import cpu_count
+
 from .tengine import make_template_env
 from .time import hhmmss
 from .time import time_in_seconds
@@ -45,8 +48,6 @@ def sanitize_path(path: str) -> str:
 
 
 def safe_loads(arg):
-    import json
-
     try:
         return json.loads(arg)
     except json.decoder.JSONDecodeError:
