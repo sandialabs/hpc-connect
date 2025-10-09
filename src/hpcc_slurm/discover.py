@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 from typing import Any
@@ -52,6 +53,7 @@ def read_sinfo() -> dict[str, Any] | None:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
             if var := os.getenv("SLURM_NNODES"):
                 node_count = int(var)
+            cmd_line = shlex.join(args)
             info: dict[str, Any] = {
                 "type": "node",
                 "count": node_count,
@@ -62,12 +64,13 @@ def read_sinfo() -> dict[str, Any] | None:
                         "resources": [
                             {
                                 "type": "cpu",
-                                "count": int(cpus_per_node / sockets_per_node),
+                                "count": cores_per_socket,
                             },
                         ],
                     }
                 ],
                 "additional_properties": {
+                    cmd_line: line,
                     "sockets_per_node": sockets_per_node,
                     "cores_per_socket": cores_per_socket,
                     "threads_per_core": threads_per_core,
