@@ -11,7 +11,7 @@
     {% if val is none %}
 unset {{ var }}
     {% else %}
-export {{ var }}={{ val }}
+export {{ var }}="{{ val }}"
     {% endif %}
   {% endfor %}
 {% endif %}

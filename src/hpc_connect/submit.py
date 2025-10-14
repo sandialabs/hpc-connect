@@ -53,6 +53,8 @@ class HPCSubmissionManager(ABC):
     def supports_subscheduling(self) -> bool:
         return False
 
+    def setup(self, **kwargs: Any) -> None: ...
+
     def get_from_config(self, key: str, default: Any = None) -> Any:
         if value := self.config.get(f"submit:{self.name}:{key}"):
             return value

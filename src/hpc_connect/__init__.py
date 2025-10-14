@@ -5,6 +5,7 @@
 import os
 
 from . import config
+from .hookspec import hookimpl
 from .launch import HPCLauncher
 from .launch import factory as get_launcher
 from .submit import HPCProcess
