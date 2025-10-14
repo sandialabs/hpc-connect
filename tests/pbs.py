@@ -44,6 +44,6 @@ def test_basic():
     assert "#PBS -l walltime=00:00:01" in text
     assert "#PBS -o my-out.txt" in text
     assert "#PBS -e my-err.txt" in text
-    assert "export MY_VAR=SPAM" in text
+    assert 'export MY_VAR="SPAM"' in text
     assert "printenv || true" in text
     assert "ls" in text

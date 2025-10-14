@@ -36,9 +36,8 @@ class RemoteSubprocess(HPCProcess):
         output: str | None = None,
         error: str | None = None,
     ) -> None:
-        sh = shutil.which("sh")
         ssh = shutil.which("ssh")
-        if sh is None:
+        if ssh is None:
             raise RuntimeError("ssh not found on PATH")
         stdout = streamify(output)
         if stdout is not None:
@@ -108,7 +107,6 @@ class RemoteSubprocessSubmissionManager(HPCSubmissionManager):
     def submit(
         self,
         name: str,
-        host: str,
         args: list[str],
         scriptname: str | None = None,
         qtime: float | None = None,
@@ -121,6 +119,9 @@ class RemoteSubprocessSubmissionManager(HPCSubmissionManager):
         gpus: int | None = None,
         **kwargs: Any,
     ) -> HPCProcess:
+        host = kwargs.get("host")
+        if host is None:
+            raise ValueError("missing required kwarg 'host'")
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,

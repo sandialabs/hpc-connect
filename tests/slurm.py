@@ -44,7 +44,7 @@ def test_basic():
     assert "#SBATCH --job-name=my-job" in text
     assert "#SBATCH --error=my-err.txt" in text
     assert "#SBATCH --output=my-out.txt" in text
-    assert "export MY_VAR=SPAM" in text
+    assert 'export MY_VAR="SPAM"' in text
     assert "printenv || true" in text
     assert "ls" in text
 
