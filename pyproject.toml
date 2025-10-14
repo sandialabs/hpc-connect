@@ -26,6 +26,7 @@ hpcc_mpi = "hpcc_mpi"
 hpcc_pbs = "hpcc_pbs"
 hpcc_slurm = "hpcc_slurm"
 hpcc_subprocess = "hpcc_subprocess"
+hpcc_remote = "hpcc_remote"
 
 [tool.setuptools.dynamic]
 version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}

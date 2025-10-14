@@ -1,0 +1,9 @@
+{% extends "hpcc-submit.sh.in" %}
+{% block header %}
+{% for arg in args %}
+#BASH {{ arg }}
+{% endfor %}
+# output: {{ output }}
+# error: {{ error }}
+echo "REMOTE HOST: $(hostname)"
+{% endblock header %}
