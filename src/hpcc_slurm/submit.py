@@ -18,7 +18,7 @@ import hpc_connect
 
 from .discover import read_sinfo
 
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.slurm.submit")
 
 
 class SlurmProcess(hpc_connect.HPCProcess):

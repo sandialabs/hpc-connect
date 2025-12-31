@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import shlex
 import shutil
 import typing
@@ -11,9 +12,7 @@ from schema import Or
 from schema import Schema
 from schema import Use
 
-from .logging import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger("hpc_connect.schemas")
 
 
 def flag_splitter(arg: list[str] | str) -> list[str]:

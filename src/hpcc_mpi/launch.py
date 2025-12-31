@@ -1,8 +1,9 @@
+import logging
 import os
 
 import hpc_connect
 
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.mpi.launch")
 
 
 class MPILauncher(hpc_connect.HPCLauncher):

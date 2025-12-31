@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import importlib.resources
+import logging
 import os
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ import psutil
 import hpc_connect
 from hpc_connect.util import time_in_seconds
 
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.remote.submit")
 
 
 def streamify(arg: str | None) -> TextIO | None:

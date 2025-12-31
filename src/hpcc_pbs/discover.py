@@ -3,14 +3,13 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import logging
 import os
 import shutil
 import subprocess
 from typing import Any
 
-import hpc_connect
-
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.pbs.discover")
 
 
 def read_pbsnodes() -> list[dict[str, Any]] | None:

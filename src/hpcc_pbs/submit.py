@@ -5,6 +5,7 @@
 import datetime
 import importlib.resources
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ import hpc_connect
 
 from .discover import read_pbsnodes
 
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.pbs.submit")
 
 
 class PBSProcess(hpc_connect.HPCProcess):

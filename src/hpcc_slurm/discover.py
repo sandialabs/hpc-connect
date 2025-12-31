@@ -3,15 +3,14 @@
 # SPDX-License-Identifier: MIT
 
 import json
+import logging
 import os
 import shlex
 import shutil
 import subprocess
 from typing import Any
 
-import hpc_connect
-
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.slurm.discover")
 
 
 def read_sinfo() -> dict[str, Any] | None:

@@ -2,13 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import shutil
 import subprocess
 from typing import Any
 
-import hpc_connect
-
-logger = hpc_connect.get_logger(__name__)
+logger = logging.getLogger("hpc_connect.flux.discover")
 
 
 def parse_resource_info(output: str) -> dict[str, int] | None:

@@ -10,7 +10,6 @@ from .config import ConfigScope
 from .hookspec import hookimpl
 from .launch import HPCLauncher
 from .launch import factory as get_launcher
-from .logging import get_logger
 from .submit import HPCProcess
 from .submit import HPCSubmissionFailedError
 from .submit import HPCSubmissionManager
@@ -26,7 +25,6 @@ __all__ = [
     "HPCSubmissionFailedError",
     "HPCSubmissionManager",
     "get_submission_manager",
-    "get_logger",
     "HPCBackend",
     "get_backend",
     "Config",

@@ -1,3 +1,7 @@
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+import logging
 import os
 import shlex
 import shutil
@@ -7,9 +11,8 @@ from typing import Generator
 from typing import Sequence
 
 from .config import Config
-from .logging import get_logger
 
-logger = get_logger(__name__)
+logger = logging.getLogger("hpc_connect.launch")
 
 
 class HPCLauncher:

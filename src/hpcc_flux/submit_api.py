@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import importlib.resources
+import logging
 import math
 import multiprocessing
 import multiprocessing.synchronize
@@ -24,7 +25,7 @@ from hpc_connect.util import time_in_seconds
 
 from .discover import read_resource_info
 
-logger = hpc_connect.get_logger("hpc_connect")
+logger = logging.getLogger("hpc_connect.flux.submit")
 
 
 class FluxProcess(hpc_connect.HPCProcess):
