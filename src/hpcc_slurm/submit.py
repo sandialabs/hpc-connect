@@ -95,8 +95,7 @@ class SlurmProcess(hpc_connect.HPCProcess):
             lines = [line.strip() for line in out.splitlines() if line.split()]
             now = time.time()
             if now - self.last_debug_emit >= self.emit_interval:
-                logger.debug(f"Running command: {' '.join(args)!r}")
-                logger.debug(f"Command output:\n{out}")
+                logger.debug(f"Polling slurm job {self.jobid}:\n$ {' '.join(args)!r}\n{out}")
                 self.last_debug_emit = now
             if proc.returncode != 0:
                 logger.warning(f"sacct returned non-zero status {proc.returncode}")
