@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import importlib.resources
-import logging
 import os
 import shutil
 import subprocess
@@ -13,12 +12,10 @@ from typing import TextIO
 
 import psutil
 
-from hpc_connect.config import Config
-from hpc_connect.submit import HPCProcess
-from hpc_connect.submit import HPCSubmissionManager
+import hpc_connect
 from hpc_connect.util import time_in_seconds
 
-logger = logging.getLogger(__name__)
+logger = hpc_connect.get_logger(__name__)
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -28,7 +25,7 @@ def streamify(arg: str | None) -> TextIO | None:
     return open(arg, mode="w")
 
 
-class RemoteSubprocess(HPCProcess):
+class RemoteSubprocess(hpc_connect.HPCProcess):
     def __init__(
         self,
         host: str,
@@ -86,10 +83,10 @@ class RemoteSubprocess(HPCProcess):
                 pass
 
 
-class RemoteSubprocessSubmissionManager(HPCSubmissionManager):
+class RemoteSubprocessSubmissionManager(hpc_connect.HPCSubmissionManager):
     name = "remote_subprocess"
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: hpc_connect.Config | None = None):
         super().__init__(config=config)
         ssh = shutil.which("ssh")
         if ssh is None:
@@ -118,7 +115,7 @@ class RemoteSubprocessSubmissionManager(HPCSubmissionManager):
         cpus: int | None = None,
         gpus: int | None = None,
         **kwargs: Any,
-    ) -> HPCProcess:
+    ) -> hpc_connect.HPCProcess:
         host = kwargs.get("host")
         if host is None:
             raise ValueError("missing required kwarg 'host'")

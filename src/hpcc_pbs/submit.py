@@ -5,24 +5,19 @@
 import datetime
 import importlib.resources
 import json
-import logging
 import os
 import shutil
 import subprocess
 from typing import Any
 
-from hpc_connect.config import Config
-from hpc_connect.config import ConfigScope
-from hpc_connect.submit import HPCProcess
-from hpc_connect.submit import HPCSubmissionFailedError
-from hpc_connect.submit import HPCSubmissionManager
+import hpc_connect
 
 from .discover import read_pbsnodes
 
-logger = logging.getLogger(__name__)
+logger = hpc_connect.get_logger(__name__)
 
 
-class PBSProcess(HPCProcess):
+class PBSProcess(hpc_connect.HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
         self._jobid = self.submit(script)
@@ -52,7 +47,7 @@ class PBSProcess(HPCProcess):
         with open(script) as fh:
             script_lines = fh.read()
         logger.error(f"    qsub script: {script_lines}")
-        raise HPCSubmissionFailedError
+        raise hpc_connect.HPCSubmissionFailedError
 
     @property
     def jobid(self) -> str:
@@ -99,7 +94,7 @@ class PBSProcess(HPCProcess):
         self.returncode = 1
 
 
-class PBSSubmissionManager(HPCSubmissionManager):
+class PBSSubmissionManager(hpc_connect.HPCSubmissionManager):
     """Setup and submit jobs to the PBS scheduler"""
 
     name = "pbs"
@@ -108,7 +103,7 @@ class PBSSubmissionManager(HPCSubmissionManager):
     def matches(name: str | None) -> bool:
         return name is not None and name.lower() in ("pbs", "qsub")
 
-    def __init__(self, config: Config | None = None) -> None:
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
         super().__init__(config=config)
         qsub = shutil.which("qsub")
         if qsub is None:
@@ -121,7 +116,7 @@ class PBSSubmissionManager(HPCSubmissionManager):
             raise ValueError("qdel not found on PATH")
         if self.config.get("machine:resources") is None:
             if resources := read_pbsnodes():
-                scope = ConfigScope("pbs", None, {"machine": {"resources": resources}})
+                scope = hpc_connect.ConfigScope("pbs", None, {"machine": {"resources": resources}})
                 self.config.push_scope(scope)
             else:
                 logger.warning(

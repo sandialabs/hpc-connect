@@ -1,15 +1,13 @@
-import logging
 import os
 
-from hpc_connect.config import Config
-from hpc_connect.launch import HPCLauncher
+import hpc_connect
 
-logger = logging.getLogger(__name__)
+logger = hpc_connect.get_logger(__name__)
 
 
-class MPILauncher(HPCLauncher):
-    def __init__(self, config: Config | None = None) -> None:
-        self.config = config or Config()
+class MPILauncher(hpc_connect.HPCLauncher):
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
+        self.config = config or hpc_connect.Config()
 
     @staticmethod
     def matches(arg: str) -> bool:

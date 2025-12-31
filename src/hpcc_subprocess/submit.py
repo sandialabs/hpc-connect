@@ -3,22 +3,20 @@
 # SPDX-License-Identifier: MIT
 
 import importlib.resources
-import logging
 import os
 import shutil
 import subprocess
+import time
 import weakref
 from typing import Any
 from typing import TextIO
 
 import psutil
 
-from hpc_connect.config import Config
-from hpc_connect.submit import HPCProcess
-from hpc_connect.submit import HPCSubmissionManager
+import hpc_connect
 from hpc_connect.util import time_in_seconds
 
-logger = logging.getLogger(__name__)
+logger = hpc_connect.get_logger(__name__)
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -28,12 +26,13 @@ def streamify(arg: str | None) -> TextIO | None:
     return open(arg, mode="w")
 
 
-class Subprocess(HPCProcess):
+class Subprocess(hpc_connect.HPCProcess):
     def __init__(
         self,
         script: str,
         output: str | None = None,
         error: str | None = None,
+        emit_interval: float = 300.0,
     ) -> None:
         sh = shutil.which("sh")
         if sh is None:
@@ -51,6 +50,8 @@ class Subprocess(HPCProcess):
         if hasattr(stderr, "write"):
             weakref.finalize(stderr, stderr.close)  # type: ignore
         self.proc = subprocess.Popen([sh, script], stdout=stdout, stderr=stderr)
+        self.last_debug_emit: float = -1
+        self.emit_interval: float = emit_interval
 
     @property
     def returncode(self) -> int | None:
@@ -61,7 +62,12 @@ class Subprocess(HPCProcess):
         raise NotImplementedError
 
     def poll(self) -> int | None:
-        return self.proc.poll()
+        rc = self.proc.poll()
+        now = time.monotonic()
+        if now - self.last_debug_emit >= self.emit_interval:
+            logger.debug(f"Polling running job with pid {self.proc.pid}")
+            self.last_debug_emit = now
+        return rc
 
     def cancel(self) -> None:
         """Kill a process tree (including grandchildren)"""
@@ -85,10 +91,10 @@ class Subprocess(HPCProcess):
                 pass
 
 
-class SubprocessSubmissionManager(HPCSubmissionManager):
+class SubprocessSubmissionManager(hpc_connect.HPCSubmissionManager):
     name = "shell"
 
-    def __init__(self, config: Config | None = None):
+    def __init__(self, config: hpc_connect.Config | None = None):
         super().__init__(config=config)
         sh = shutil.which("sh")
         if sh is None:
@@ -117,7 +123,7 @@ class SubprocessSubmissionManager(HPCSubmissionManager):
         cpus: int | None = None,
         gpus: int | None = None,
         **kwargs: Any,
-    ) -> HPCProcess:
+    ) -> hpc_connect.HPCProcess:
         cpus = cpus or kwargs.get("tasks")  # backward compatible
         script = self.write_submission_script(
             name,

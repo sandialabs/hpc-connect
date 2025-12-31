@@ -2,7 +2,6 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
-import logging
 import math
 import os
 import sys
@@ -24,8 +23,6 @@ from .schemas import submit_schema
 from .util import collections
 from .util import safe_loads
 from .util.string import strip_quotes
-
-logger = logging.getLogger("hpc_connect")
 
 section_schemas: dict[str, schema.Schema] = {
     "config": config_schema,
@@ -74,6 +71,8 @@ class ConfigScope:
 
 class Config:
     def __init__(self) -> None:
+        from .logging import set_logging_level
+
         self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
         rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
         defaults = {
@@ -244,6 +243,8 @@ class Config:
         Args:
             args: An argparse.Namespace object containing command-line arguments.
         """
+        from .logging import set_logging_level
+
         if args.config_mods:
             data: dict[str, Any] = {}
             for fullpath in args.config_mods:
@@ -470,32 +471,3 @@ def process_config_path(path: str) -> list[str]:
             result.append(path)
             return result
     return result
-
-
-ch = logging.StreamHandler(sys.stdout)
-ch.setFormatter(logging.Formatter("==> %(message)s"))
-logger.addHandler(ch)
-
-
-loglevelmap: dict[str, int] = {
-    "CRITICAL": logging.CRITICAL,
-    "FATAL": logging.FATAL,
-    "ERROR": logging.ERROR,
-    "WARN": logging.WARNING,
-    "WARNING": logging.WARNING,
-    "INFO": logging.INFO,
-    "DEBUG": logging.DEBUG,
-    "NOTSET": logging.NOTSET,
-}
-
-
-def set_debug(arg: bool) -> None:
-    if arg:
-        set_logging_level("DEBUG")
-
-
-def set_logging_level(levelname: str) -> None:
-    level = loglevelmap[levelname.upper()]
-    for h in logger.handlers:
-        h.setLevel(level)
-    logger.setLevel(level)

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 
 import importlib.resources
-import logging
 import math
 import multiprocessing
 import multiprocessing.synchronize
@@ -20,19 +19,15 @@ from flux.job import FluxExecutorFuture  # type: ignore
 from flux.job import Jobspec  # type: ignore
 from flux.job import JobspecV1  # type: ignore
 
-from hpc_connect.config import Config
-from hpc_connect.config import ConfigScope
-from hpc_connect.submit import HPCProcess
-from hpc_connect.submit import HPCSubmissionFailedError
-from hpc_connect.submit import HPCSubmissionManager
+import hpc_connect
 from hpc_connect.util import time_in_seconds
 
 from .discover import read_resource_info
 
-logger = logging.getLogger("hpc_connect")
+logger = hpc_connect.get_logger("hpc_connect")
 
 
-class FluxProcess(HPCProcess):
+class FluxProcess(hpc_connect.HPCProcess):
     JOB_TIMEOUT_CODE = 66
 
     def __init__(self, name: str, future: FluxExecutorFuture) -> None:
@@ -56,7 +51,7 @@ class FluxProcess(HPCProcess):
             except CancelledError:
                 self.returncode = 1
             except Exception as e:
-                raise HPCSubmissionFailedError(e)
+                raise hpc_connect.HPCSubmissionFailedError(e)
 
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)
@@ -91,7 +86,7 @@ class FluxProcess(HPCProcess):
         self.returncode = 1
 
 
-class FluxMultiProcess(HPCProcess):
+class FluxMultiProcess(hpc_connect.HPCProcess):
     def __init__(
         self,
         lock: multiprocessing.synchronize.RLock,
@@ -131,19 +126,19 @@ class FluxMultiProcess(HPCProcess):
         return max(stat)  # type: ignore
 
 
-class FluxSubmissionManager(HPCSubmissionManager):
+class FluxSubmissionManager(hpc_connect.HPCSubmissionManager):
     """Setup and submit jobs to the Flux scheduler"""
 
     name = "flux"
     lock: multiprocessing.synchronize.RLock = multiprocessing.RLock()
 
-    def __init__(self, config: Config | None = None) -> None:
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
         super().__init__(config=config)
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
         if self.config.get("machine:resources") is None:
             if info := read_resource_info():
-                scope = ConfigScope("flux", None, {"machine": {"resources": [info]}})
+                scope = hpc_connect.ConfigScope("flux", None, {"machine": {"resources": [info]}})
                 self.config.push_scope(scope)
             else:
                 logger.warning("Unable to determine system configuration from flux, using default")

@@ -14,24 +14,22 @@ import subprocess
 import time
 from typing import Any
 
-from hpc_connect.config import Config
-from hpc_connect.config import ConfigScope
-from hpc_connect.submit import HPCProcess
-from hpc_connect.submit import HPCSubmissionFailedError
-from hpc_connect.submit import HPCSubmissionManager
+import hpc_connect
 
 from .discover import read_sinfo
 
-logger = logging.getLogger(__name__)
+logger = hpc_connect.get_logger(__name__)
 
 
-class SlurmProcess(HPCProcess):
-    def __init__(self, script: str) -> None:
+class SlurmProcess(hpc_connect.HPCProcess):
+    def __init__(self, script: str, emit_interval: float = 300.0) -> None:
         self._rc: int | None = None
         self.clusters: str | None = None
         self.script = os.path.abspath(script)
         self.script_dir = os.path.dirname(self.script)
         self._jobid = self.submit(script)
+        self.last_debug_emit = -1.0
+        self.emit_interval = emit_interval
         f = os.path.basename(self.script)
         logger.debug(f"Submitted batch script {f} with jobid={self.jobid}")
 
@@ -60,7 +58,7 @@ class SlurmProcess(HPCProcess):
             logger.log(logging.ERROR, f"    {line}")
         for line in proc.stderr.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
-        raise HPCSubmissionFailedError
+        raise hpc_connect.HPCSubmissionFailedError
 
     @staticmethod
     def parse_script_args(script: str) -> argparse.Namespace:
@@ -93,11 +91,16 @@ class SlurmProcess(HPCProcess):
             if self.clusters:
                 args.append(f"--clusters={self.clusters}")
             proc = subprocess.run(args, encoding="utf-8", capture_output=True)
+            out = proc.stdout
+            lines = [line.strip() for line in out.splitlines() if line.split()]
+            now = time.time()
+            if now - self.last_debug_emit >= self.emit_interval:
+                logger.debug(f"Running command: {' '.join(args)!r}")
+                logger.debug(f"Command output:\n{out}")
+                self.last_debug_emit = now
             if proc.returncode != 0:
                 logger.warning(f"sacct returned non-zero status {proc.returncode}")
                 continue
-            out = proc.stdout
-            lines = [line.strip() for line in out.splitlines() if line.split()]
             if lines:
                 for line in lines:
                     jobid, state, exit_code = [_.strip() for _ in line.split("|") if _.split()]
@@ -139,7 +142,7 @@ class SlurmProcess(HPCProcess):
         self.returncode = 1
 
 
-class SlurmSubmissionManager(HPCSubmissionManager):
+class SlurmSubmissionManager(hpc_connect.HPCSubmissionManager):
     """Setup and submit jobs to the slurm scheduler"""
 
     name = "slurm"
@@ -148,7 +151,7 @@ class SlurmSubmissionManager(HPCSubmissionManager):
     def matches(name: str | None) -> bool:
         return name is not None and name.lower() in ("slurm", "sbatch")
 
-    def __init__(self, config: Config | None = None) -> None:
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
         super().__init__(config=config)
         sbatch = shutil.which("sbatch")
         if sbatch is None:
@@ -158,7 +161,7 @@ class SlurmSubmissionManager(HPCSubmissionManager):
             raise ValueError("sacct not found on PATH")
         if self.config.get("machine:resources") is None:
             if sinfo := read_sinfo():
-                scope = ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
+                scope = hpc_connect.ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
                 self.config.push_scope(scope)
             else:
                 logger.warning("Unable to determine system configuration from sinfo, using default")

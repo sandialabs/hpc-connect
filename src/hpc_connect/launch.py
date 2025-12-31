@@ -1,4 +1,3 @@
-import logging
 import os
 import shlex
 import shutil
@@ -8,8 +7,9 @@ from typing import Generator
 from typing import Sequence
 
 from .config import Config
+from .logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HPCLauncher:
