@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
+import logging
 import os
 
 from . import config
@@ -31,23 +32,23 @@ __all__ = [
     "ConfigScope",
 ]
 
-
-def _initial_logging_setup(*, _ini_setup=[False]):
-    from . import logging
-
-    if _ini_setup[0]:
-        return
-    logging.configure_logging()
-    if levelname := os.getenv("HPC_CONNECT_LOG_LEVEL"):
-        logging.set_logging_level(levelname)
-    else:
-        logging.set_logging_level("INFO")
-    if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
-        logging.set_logging_level("DEBUG")
-    _ini_setup[0] = True
-
-
-_initial_logging_setup()
+if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
+    logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
+elif levelname := os.getenv("HPC_CONNECT_LOG_LEVEL"):
+    loglevelmap: dict[str, int] = {
+        "CRITICAL": logging.CRITICAL,
+        "FATAL": logging.FATAL,
+        "ERROR": logging.ERROR,
+        "WARN": logging.WARNING,
+        "WARNING": logging.WARNING,
+        "INFO": logging.INFO,
+        "DEBUG": logging.DEBUG,
+        "NOTSET": logging.NOTSET,
+    }
+    levelno = loglevelmap.get(levelname, logging.NOTSET)
+    logging.getLogger("hpc_connect").setLevel(levelno)
+else:
+    logging.getLogger("hpc_connect").setLevel(logging.NOTSET)
 
 
 # --- backward compatible layer

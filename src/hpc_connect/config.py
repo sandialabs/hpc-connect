@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
+import logging
 import math
 import os
 import sys
@@ -71,8 +72,6 @@ class ConfigScope:
 
 class Config:
     def __init__(self) -> None:
-        from .logging import set_logging_level
-
         self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
         rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
         defaults = {
@@ -105,7 +104,7 @@ class Config:
         if cscope := read_env_config():
             self.push_scope(cscope)
         if self.get("config:debug"):
-            set_logging_level("debug")
+            logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
 
     def read_only_scope(self, scope: str) -> bool:
         return scope in ("defaults", "environment", "command_line")
@@ -243,8 +242,6 @@ class Config:
         Args:
             args: An argparse.Namespace object containing command-line arguments.
         """
-        from .logging import set_logging_level
-
         if args.config_mods:
             data: dict[str, Any] = {}
             for fullpath in args.config_mods:
@@ -256,7 +253,7 @@ class Config:
             scope = ConfigScope("command_line", None, data)
             self.push_scope(scope)
             if self.get("config:debug", scope="command_line"):
-                set_logging_level("debug")
+                logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
 
     @property
     def resource_specs(self) -> list[dict]:
