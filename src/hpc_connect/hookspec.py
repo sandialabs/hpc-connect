@@ -7,7 +7,7 @@ from typing import Any
 import pluggy
 
 if TYPE_CHECKING:
-    from .config import Config
+    from .config import Config as HPCConnectConfig
     from .launch import HPCLauncher
     from .submit import HPCSubmissionManager
 
@@ -18,13 +18,13 @@ hookimpl = pluggy.HookimplMarker(project_name)
 
 
 @hookspec(firstresult=True)
-def hpc_connect_submission_manager(config: "Config") -> "HPCSubmissionManager":
+def hpc_connect_submission_manager(config: "HPCConnectConfig") -> "HPCSubmissionManager":
     """HPC scheduler implementation"""
     raise NotImplementedError
 
 
 @hookspec(firstresult=True)
-def hpc_connect_launcher(config: "Config") -> "HPCLauncher":
+def hpc_connect_launcher(config: "HPCConnectConfig") -> "HPCLauncher":
     """HPC scheduler implementation"""
     raise NotImplementedError
 
