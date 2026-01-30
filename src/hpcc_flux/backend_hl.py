@@ -21,4 +21,4 @@ except ImportError:
             raise NotImplementedError
 
 else:
-    pass  # type: ignore
+    from .backend_api import FluxBackend  # type: ignore
