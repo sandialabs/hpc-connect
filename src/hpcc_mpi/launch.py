@@ -7,8 +7,8 @@ logger = logging.getLogger("hpc_connect.mpi.launch")
 
 
 class MPILauncher(hpc_connect.HPCLauncher):
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        self.config = config or hpc_connect.Config()
+    def __init__(self, config) -> None:
+        self.config = config
 
     @staticmethod
     def matches(arg: str) -> bool:

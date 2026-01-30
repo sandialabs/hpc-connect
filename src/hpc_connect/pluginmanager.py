@@ -3,11 +3,15 @@
 # SPDX-License-Identifier: MIT
 import sys
 import warnings
+from typing import TYPE_CHECKING
 
 import pluggy
 
 from . import discover
 from . import hookspec
+
+if TYPE_CHECKING:
+    from .backend import Backend
 
 warnings.simplefilter("once", DeprecationWarning)
 
@@ -46,6 +50,24 @@ class HPCConnectPluginManager(pluggy.PluginManager):
                 msg = f"Plugin {name} already registered under the name {other}"
                 raise PluginAlreadyImportedError(msg)
             self.register(mod, name)
+
+
+_pm: HPCConnectPluginManager | None = None
+
+
+def pm() -> HPCConnectPluginManager:
+    global _pm
+    if _pm is None:
+        _pm = HPCConnectPluginManager()
+    return _pm
+
+
+def get_backend(name: str) -> "Backend":
+    backend = pm().hook.hpc_connect_backend(name=name)
+    if backend is not None:
+        backend.validate()
+        return backend
+    raise ValueError(f"No backend for {name}")
 
 
 class PluginAlreadyImportedError(Exception): ...

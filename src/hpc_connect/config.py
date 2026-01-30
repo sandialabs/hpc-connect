@@ -6,141 +6,58 @@ import logging
 import math
 import os
 import sys
-from collections.abc import ValuesView
 from functools import cached_property
 from typing import IO
 from typing import Any
+from typing import Literal
+from typing import cast
 
-import schema
 import yaml
 
 from .discover import default_resource_set
 from .pluginmanager import HPCConnectPluginManager
 from .schemas import config_schema
 from .schemas import environment_variable_schema
-from .schemas import launch_schema
-from .schemas import machine_schema
-from .schemas import submit_schema
 from .util import collections
 from .util import safe_loads
-from .util.string import strip_quotes
 
-section_schemas: dict[str, schema.Schema] = {
-    "config": config_schema,
-    "machine": machine_schema,
-    "submit": submit_schema,
-    "launch": launch_schema,
+default_config_values: dict[str, Any] = {
+    "debug": False,
+    "plugins": [],
+    "machine": {"resources": None},
+    "submit": {"backend": None, "default_options": []},
+    "launch": {
+        "exec": "mpiexec",
+        "numproc_flag": "-n",
+        "default_options": [],
+        "local_options": [],
+        "pre_options": [],
+        "mappings": {},
+    },
 }
 
-
-class ConfigScope:
-    def __init__(self, name: str, file: str | None, data: dict[str, Any]) -> None:
-        self.name = name
-        self.file = file
-        self.data: dict[str, Any] = {}
-        for section, data in data.items():
-            schema = section_schemas[section]
-            self.data[section] = schema.validate(data)
-
-    def __repr__(self):
-        file = self.file or "<none>"
-        return f"ConfigScope({self.name}: {file})"
-
-    def __eq__(self, other):
-        if not isinstance(other, ConfigScope):
-            return False
-        return self.name == other.name and self.file == other.file and other.data == self.data
-
-    def __iter__(self):
-        return iter(self.data)
-
-    def __contains__(self, section: str) -> bool:
-        return section in self.data
-
-    def get_section(self, section: str) -> Any:
-        return self.data.get(section)
-
-    def pop_section(self, section: str) -> Any:
-        return self.data.pop(section, None)
-
-    def dump(self) -> None:
-        if self.file is None:
-            return
-        with open(self.file, "w") as fh:
-            yaml.dump({"hpc_connect": self.data}, fh, default_flow_style=False)
+ConfigScopes = Literal["site", "global", "local"]
 
 
 class Config:
     def __init__(self) -> None:
         self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
-        rspec = self.pluginmanager.hook.hpc_connect_discover_resources()
-        defaults = {
-            "config": {
-                "debug": False,
-                "plugins": [],
-            },
-            "machine": {
-                "resources": rspec,
-            },
-            "submit": {
-                "backend": None,
-                "default_options": [],
-            },
-            "launch": {
-                "exec": "mpiexec",
-                "numproc_flag": "-n",
-                "default_options": [],
-                "local_options": [],
-                "pre_options": [],
-                "mappings": {},
-            },
-        }
-        self.scopes: dict[str, ConfigScope] = {}
-        default_scope = ConfigScope("defaults", None, defaults)
-        self.push_scope(default_scope)
-        for scope in ("site", "global", "local"):
-            config_scope = read_config_scope(scope)
-            self.push_scope(config_scope)
-        if cscope := read_env_config():
-            self.push_scope(cscope)
-        if self.get("config:debug"):
+        self.data: dict[str, Any] = dict(default_config_values)
+        for name in ("site", "global", "local"):
+            scope = get_config_scope_data(cast(ConfigScopes, name))
+            self.data = collections.merge(self.data, scope)  # type: ignore
+        if env_scope := get_env_scope():
+            self.data = collections.merge(self.data, env_scope)  # type: ignore
+        if self.data["debug"]:
             logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
 
-    def read_only_scope(self, scope: str) -> bool:
-        return scope in ("defaults", "environment", "command_line")
-
-    def push_scope(self, scope: ConfigScope) -> None:
-        self.scopes[scope.name] = scope
-        if cfg := scope.get_section("config"):
-            if plugins := cfg.get("plugins"):
-                for f in plugins:
-                    self.pluginmanager.consider_plugin(f)
-
-    def pop_scope(self, scope: ConfigScope) -> ConfigScope | None:
-        return self.scopes.pop(scope.name, None)
-
-    def get_config(self, section: str, scope: str | None = None) -> Any:
-        scopes: ValuesView[ConfigScope] | list[ConfigScope]
-        if scope is None:
-            scopes = self.scopes.values()
-        else:
-            scopes = [self.validate_scope(scope)]
-        merged_section: dict[str, Any] = {}
-        for config_scope in scopes:
-            data = config_scope.get_section(section)
-            if not data or not isinstance(data, dict):
-                continue
-            merged_section = collections.merge(merged_section, {section: data})
-        if section not in merged_section:
-            return {}
-        return merged_section[section]
-
-    def get(self, path: str, default: Any = None, scope: str | None = None) -> Any:
+    def get(self, path: str, default: Any = None) -> Any:
         parts = process_config_path(path)
-        section = parts.pop(0)
-        value = self.get_config(section, scope=scope)
-        while parts:
-            key = parts.pop(0)
+        if parts[0] == "config":
+            # Legacy support for top level config key
+            parts = parts[1:]
+        value = self.data.get(parts[0], {})
+        for key in parts[1:]:
             # cannot use value.get(key, default) in case there is another part
             # and default is not a dict
             if key not in value:
@@ -148,90 +65,13 @@ class Config:
             value = value[key]
         return value
 
-    def get_highest_priority(self, path: str, default: Any = None) -> tuple[Any, str]:
-        sentinel = object()
-        for scope in reversed(self.scopes.keys()):
-            value = self.get(path, default=sentinel, scope=scope)
-            if value is not sentinel:
-                return value, scope
-        return default, "none"
-
-    def set(self, path: str, value: Any, scope: str | None = None) -> None:
+    def set(self, path: str, value: Any) -> None:
         parts = process_config_path(path)
-        section = parts.pop(0)
-        section_data = self.get_config(section, scope=scope)
-        data = section_data
-        while len(parts) > 1:
-            key = parts.pop(0)
-            new = data.get(key, {})
-            if isinstance(new, dict):
-                new = dict(new)
-                # reattach to parent object
-                data[key] = new
-            data = new
-        # update new value
-        data[parts[0]] = value
-        self.update_config(section, section_data, scope=scope)
-
-    def add(self, fullpath: str, scope: str | None = None) -> None:
-        path: str = ""
-        existing: Any = None
-        components = process_config_path(fullpath)
-        has_existing_value = True
-        for idx, name in enumerate(components[:-1]):
-            path = name if not path else f"{path}:{name}"
-            existing = self.get(path, scope=scope)
-            if existing is None:
-                has_existing_value = False
-                # construct value from this point down
-                value = safe_loads(components[-1])
-                for component in reversed(components[idx + 1 : -1]):
-                    value = {component: value}
-                break
-
-        if has_existing_value:
-            path = ":".join(components[:-1])
-            value = safe_loads(strip_quotes(components[-1]))
-            existing = self.get(path, scope=scope)
-
-        if isinstance(existing, list) and not isinstance(value, list):
-            # append values to lists
-            value = [value]
-
-        new = collections.merge(existing, value)
-        self.set(path, new, scope=scope)
-
-    def highest_precedence_scope(self) -> ConfigScope:
-        """Non-internal scope with highest precedence."""
-        file_scopes = [scope for scope in self.scopes.values() if scope.file is not None]
-        return next(reversed(file_scopes))
-
-    def validate_scope(self, scope: str | None) -> ConfigScope:
-        if scope is None:
-            return self.highest_precedence_scope()
-        elif scope in self.scopes:
-            return self.scopes[scope]
-        elif scope == "internal":
-            self.scopes["internal"] = ConfigScope("internal", None, {})
-            return self.scopes["internal"]
-        else:
-            raise ValueError(f"Invalid scope {scope!r}")
-
-    def update_config(self, section: str, update_data: dict[str, Any], scope: str | None = None):
-        """Update the configuration file for a particular scope.
-
-        Args:
-            section (str): section of the configuration to be updated
-            update_data (dict): data to be used for the update
-            scope (str): scope to be updated
-        """
-        if scope is None:
-            config_scope = self.highest_precedence_scope()
-        else:
-            config_scope = self.scopes[scope]
-        # read only the requested section's data.
-        config_scope.data[section] = dict(update_data)
-        config_scope.dump()
+        data = value
+        for key in reversed(parts):
+            data = {key: data}
+        data = config_schema.validate(data)
+        self.data = collections.merge(self.data, data)  # type: ignore
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -250,19 +90,15 @@ class Config:
                 for component in components[:-2]:
                     current = current.setdefault(component, {})
                 current[components[-2]] = safe_loads(components[-1])
-            scope = ConfigScope("command_line", None, data)
-            self.push_scope(scope)
-            if self.get("config:debug", scope="command_line"):
+            self.data = collections.merge(self.data, data)  # type: ignore
+            if self.data["debug"]:
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
 
     @property
     def resource_specs(self) -> list[dict]:
-        specs, _ = self.get_highest_priority("machine:resources")
-        if specs is not None:
-            return specs
-        resources = default_resource_set()
-        self.set("machine:resources", specs, scope="defaults")
-        return resources
+        if self.data["machine"]["resources"] is None:
+            self.data["machine"]["resources"] = default_resource_set()
+        return self.data["machine"]["resources"]
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""
@@ -413,14 +249,17 @@ class Config:
         yaml.dump({"hpc_connect": data}, stream, **kwargs)
 
 
-def read_config_scope(scope: str) -> ConfigScope:
+def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
+    """Read the data from config scope ``data``
+
+    By the time the data leaves, it is validated and does not contain a top-level ``canary`` field
+
+    """
     data: dict[str, Any] = {}
-    if file := get_scope_filename(scope):
-        if fd := read_config_file(file):
-            if "hpc_connect" not in fd:
-                raise KeyError("Missing key 'hpc_connect'")
-            data.update(fd["hpc_connect"])
-    return ConfigScope(scope, file, data)
+    file = get_scope_filename(scope)
+    if file is not None and (fd := read_config_file(file)):
+        data.update(fd)
+    return config_schema.validate(data)
 
 
 def get_scope_filename(scope: str) -> str | None:
@@ -441,12 +280,11 @@ def get_scope_filename(scope: str) -> str | None:
     raise ValueError(f"Could not determine filename for scope {scope!r}")
 
 
-def read_env_config() -> ConfigScope | None:
+def get_env_scope() -> dict[str, Any]:
     variables = {key: var for key, var in os.environ.items() if key.startswith("HPC_CONNECT_")}
-    if not variables:
-        return None
-    data = environment_variable_schema.validate(variables)
-    return ConfigScope("environment", None, data)
+    if variables:
+        variables = environment_variable_schema.validate(variables)
+    return variables
 
 
 def read_config_file(file: str) -> dict[str, Any] | None:
@@ -468,3 +306,7 @@ def process_config_path(path: str) -> list[str]:
             result.append(path)
             return result
     return result
+
+
+class LocalScopeDoesNotExistError(Exception):
+    pass

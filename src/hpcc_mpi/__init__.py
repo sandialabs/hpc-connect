@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 @hookimpl
-def hpc_connect_launcher(config: "Config") -> "HPCLauncher | None":
-    if MPILauncher.matches(config.get("launch:exec")):
+def hpc_connect_launcher(name: str) -> "HPCLauncher | None":
+    if MPILauncher.matches(name):
         return MPILauncher(config=config)
     return None

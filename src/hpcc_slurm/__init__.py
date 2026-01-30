@@ -7,32 +7,23 @@ from typing import Any
 
 from hpc_connect.hookspec import hookimpl
 
-from .discover import read_sinfo
+from .backend import SlurmBackend
 from .launch import SrunLauncher
-from .submit import SlurmSubmissionManager
 
 if TYPE_CHECKING:
-    from hpc_connect.config import Config
+    from hpc_connect.backend import Backend
     from hpc_connect.launch import HPCLauncher
-    from hpc_connect.submit import HPCSubmissionManager
 
 
 @hookimpl
-def hpc_connect_submission_manager(config: "Config") -> "HPCSubmissionManager | None":
-    if SlurmSubmissionManager.matches(config.get("submit:backend")):
-        return SlurmSubmissionManager(config=config)
+def hpc_connect_backend(name: str) -> "Backend | None":
+    if name in ("sbatch", "slurm"):
+        return SlurmBackend()
     return None
 
 
-@hookimpl
-def hpc_connect_launcher(config: "Config") -> "HPCLauncher | None":
-    if SrunLauncher.matches(config.get("launch:exec")):
-        return SrunLauncher(config=config)
-    return None
-
-
-@hookimpl
-def hpc_connect_discover_resources() -> list[dict[str, Any]] | None:
-    if info := read_sinfo():
-        return [info]
-    return None
+# @hookimpl
+# def hpc_connect_launcher(name: str) -> "Backend | None":
+#   if SrunLauncher.matches(config.get("launch:exec")):
+#       return SrunLauncher(config=config)
+#   return None

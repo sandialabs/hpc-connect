@@ -98,7 +98,6 @@ resource_spec = {
     ],
 }
 resource_schema = Schema({"resources": [resource_spec]})
-config_schema = Schema({Optional("debug"): bool, Optional("plugins"): list_of_str})
 launch_spec = {
     Optional("numproc_flag"): str,
     Optional("default_options"): Use(flag_splitter),
@@ -124,6 +123,17 @@ submit_schema = Schema(
             Optional("default_options"): Use(flag_splitter),
         },
     },
+)
+
+
+config_schema = Schema(
+    {
+        Optional("debug"): bool,
+        Optional("plugins"): list_of_str,
+        Optional("machine"): machine_schema,
+        Optional("submit"): submit_schema,
+        Optional("launch"): launch_schema,
+    }
 )
 
 

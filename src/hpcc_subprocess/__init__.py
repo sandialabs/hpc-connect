@@ -2,14 +2,14 @@ from typing import TYPE_CHECKING
 
 from hpc_connect.hookspec import hookimpl
 
-from .submit import SubprocessSubmissionManager
+from .backend import LocalBackend
 
 if TYPE_CHECKING:
     from hpc_connect.submit import HPCSubmissionManager
 
 
 @hookimpl
-def hpc_connect_submission_manager(config) -> "HPCSubmissionManager | None":
-    if SubprocessSubmissionManager.matches(config.get("submit:backend")):
-        return SubprocessSubmissionManager(config=config)
+def hpc_connect_backend(name) -> "LocalBackend | None":
+    if name in ("local", "shell", "subprocess"):
+        return LocalBackend()
     return None

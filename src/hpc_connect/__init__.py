@@ -5,31 +5,27 @@
 import logging
 import os
 
-from . import config
+from .backend import Backend
 from .config import Config
-from .config import ConfigScope
+from .futures import Future
 from .hookspec import hookimpl
+from .jobspec import JobSpec
 from .launch import HPCLauncher
 from .launch import factory as get_launcher
-from .submit import HPCProcess
-from .submit import HPCSubmissionFailedError
+from .pluginmanager import get_backend
+from .process import HPCProcess
 from .submit import HPCSubmissionManager
-from .submit import factory as get_submission_manager
 
 __all__ = [
-    "hookimpl",
-    "Config",
-    "ConfigScope",
-    "HPCLauncher",
-    "get_launcher",
-    "HPCProcess",
-    "HPCSubmissionFailedError",
-    "HPCSubmissionManager",
-    "get_submission_manager",
-    "HPCBackend",
+    "Backend",
+    "Future",
     "get_backend",
-    "Config",
-    "ConfigScope",
+    "get_launcher",
+    "hookimpl",
+    "HPCLauncher",
+    "HPCProcess",
+    "HPCSubmissionManager",
+    "JobSpec",
 ]
 
 if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):
@@ -49,13 +45,3 @@ elif levelname := os.getenv("HPC_CONNECT_LOG_LEVEL"):
     logging.getLogger("hpc_connect").setLevel(levelno)
 else:
     logging.getLogger("hpc_connect").setLevel(logging.NOTSET)
-
-
-# --- backward compatible layer
-HPCBackend = HPCSubmissionManager
-
-
-def get_backend(arg: str) -> HPCSubmissionManager:
-    cfg = config.Config()
-    cfg.set("submit:backend", arg, scope="internal")
-    return get_submission_manager(cfg)

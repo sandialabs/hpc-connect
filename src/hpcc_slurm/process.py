@@ -4,7 +4,6 @@
 
 import argparse
 import datetime
-import importlib.resources
 import json
 import logging
 import os
@@ -15,8 +14,6 @@ import time
 from typing import Any
 
 import hpc_connect
-
-from .discover import read_sinfo
 
 logger = logging.getLogger("hpc_connect.slurm.submit")
 
@@ -58,7 +55,7 @@ class SlurmProcess(hpc_connect.HPCProcess):
             logger.log(logging.ERROR, f"    {line}")
         for line in proc.stderr.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
-        raise hpc_connect.HPCSubmissionFailedError
+        raise SubmissionFailedError
 
     @staticmethod
     def parse_script_args(script: str) -> argparse.Namespace:
@@ -141,70 +138,5 @@ class SlurmProcess(hpc_connect.HPCProcess):
         self.returncode = 1
 
 
-class SlurmSubmissionManager(hpc_connect.HPCSubmissionManager):
-    """Setup and submit jobs to the slurm scheduler"""
-
-    name = "slurm"
-
-    @staticmethod
-    def matches(name: str | None) -> bool:
-        return name is not None and name.lower() in ("slurm", "sbatch")
-
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        super().__init__(config=config)
-        sbatch = shutil.which("sbatch")
-        if sbatch is None:
-            raise ValueError("sbatch not found on PATH")
-        sacct = shutil.which("sacct")
-        if sacct is None:
-            raise ValueError("sacct not found on PATH")
-        if self.config.get("machine:resources") is None:
-            if sinfo := read_sinfo():
-                scope = hpc_connect.ConfigScope("slurm", None, {"machine": {"resources": [sinfo]}})
-                self.config.push_scope(scope)
-            else:
-                logger.warning("Unable to determine system configuration from sinfo, using default")
-
-    @property
-    def submission_template(self) -> str:
-        if "HPCC_SLURM_SUBMIT_TEMPLATE" in os.environ:
-            return os.environ["HPCC_SLURM_SUBMIT_TEMPLATE"]
-        return str(importlib.resources.files("hpcc_slurm").joinpath("templates/submit.sh.in"))
-
-    def prepare_command_line(self, args: list[str]) -> list[str]:
-        sbatch = shutil.which("sbatch")
-        if sbatch is None:
-            raise ValueError("sbatch not found on PATH")
-        return [sbatch, *self.default_options, *args]
-
-    def submit(
-        self,
-        name: str,
-        args: list[str],
-        scriptname: str | None = None,
-        qtime: float | None = None,
-        submit_flags: list[str] | None = None,
-        variables: dict[str, str | None] | None = None,
-        output: str | None = None,
-        error: str | None = None,
-        nodes: int | None = None,
-        cpus: int | None = None,
-        gpus: int | None = None,
-        **kwargs: Any,
-    ) -> SlurmProcess:
-        cpus = cpus or kwargs.get("tasks")  # backward compatible
-        script = self.write_submission_script(
-            name,
-            args,
-            scriptname,
-            qtime=qtime,
-            submit_flags=submit_flags,
-            variables=variables,
-            output=output,
-            error=error,
-            nodes=nodes,
-            cpus=cpus,
-            gpus=gpus,
-        )
-        assert script is not None
-        return SlurmProcess(script)
+class SubmissionFailedError(Exception):
+    pass
