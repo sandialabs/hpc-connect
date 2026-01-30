@@ -91,7 +91,7 @@ class FluxAdapter:
             for command in spec.commands:
                 fh.write(f"{command}\n")
         os.chmod(script, 0o755)
-        kwds: dict[str, Any] = {"command": [script], "exclusive": exclusive}
+        kwds: dict[str, Any] = {"command": [str(script)], "exclusive": exclusive}
         kwds.update(alloc)
         jobspec = JobspecV1.from_nest_command(**kwds)
         jobspec.setattr("system.job.name", spec.name)
