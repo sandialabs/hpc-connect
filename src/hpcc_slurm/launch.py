@@ -6,7 +6,7 @@ from hpc_connect.config import Config
 from hpc_connect.launch import HPCLauncher
 from hpc_connect.launch import LaunchSpecs
 
-from .submit import read_sinfo
+from .discover import read_sinfo
 
 
 class SrunLauncher(HPCLauncher):
