@@ -82,7 +82,7 @@ class QsubAdapter:
             for command in spec.commands:
                 fh.write(f"{command}\n")
         os.chmod(script, 0o755)
-        return spec.with_updates(commands=[script])
+        return spec.with_updates(commands=[str(script)])
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> hpc_connect.HPCProcess:
         s = self.prepare(spec)
