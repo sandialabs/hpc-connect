@@ -5,6 +5,7 @@
 import logging
 import multiprocessing
 import multiprocessing.synchronize
+import time
 from concurrent.futures import CancelledError
 
 import flux  # type: ignore
@@ -42,8 +43,16 @@ class FluxProcess(hpc_connect.HPCProcess):
                 logger.exception("Submission failed")
                 raise
 
+        def set_submittime(fut: FluxExecutorFuture, *args):
+            self.submitted = time.time()
+
+        def set_starttime(fut: FluxExecutorFuture, *args):
+            self.started = time.time()
+
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)
+        self.fut.add_event_callback("submit", set_submittime)
+        self.fut.add_event_callback("start", set_starttime)
 
     @property
     def returncode(self) -> int | None:
