@@ -77,7 +77,7 @@ class SbatchAdapter:
             if spec.error:
                 fh.write(f"#SBATCH --error={spec.error}\n")
             if spec.output:
-                fh.write(f"#SBATCH --error={spec.output}\n")
+                fh.write(f"#SBATCH --output={spec.output}\n")
             for arg in self.config.default_options:
                 fh.write(f"#SBATCH {arg}\n")
             for arg in spec.submit_args:

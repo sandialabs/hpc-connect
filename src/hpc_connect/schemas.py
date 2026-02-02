@@ -111,7 +111,7 @@ class EnvarSchema(Schema):
                     section, _, field = name.partition("_")
                     final.setdefault(section, {})[field] = value
                 else:
-                    final.setdefault("config", {})[name] = value
+                    final[name] = value
             return final
         return data
 
@@ -119,13 +119,11 @@ class EnvarSchema(Schema):
 environment_variable_schema = EnvarSchema(
     {
         Optional("HPC_CONNECT_DEBUG"): Use(boolean),
+        Optional("HPC_CONNECT_BACKEND"): Use(str),
         Optional("HPC_CONNECT_LAUNCH_EXEC"): Use(which),
         Optional("HPC_CONNECT_LAUNCH_NUMPROC_FLAG"): Use(str),
         Optional("HPC_CONNECT_LAUNCH_DEFAULT_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_LAUNCH_LOCAL_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_LAUNCH_PRE_OPTIONS"): Use(flag_splitter),
         Optional("HPC_CONNECT_LAUNCH_MAPPINGS"): Use(load_mappings),
-        Optional("HPC_CONNECT_SUBMIT_BACKEND"): Use(str),
         Optional("HPC_CONNECT_SUBMIT_DEFAULT_OPTIONS"): Use(flag_splitter),
     },
     ignore_extra_keys=True,

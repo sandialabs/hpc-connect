@@ -75,7 +75,7 @@ def get_backend(config: "Config | None" = None) -> "Backend":
     raise ValueError(f"No backend for {config.backend}")
 
 
-def get_launcher(config: "Config | None") -> "HPCLauncher":
+def get_launcher(config: "Config | None" = None) -> "HPCLauncher":
     from .config import Config
 
     config = config or Config.from_defaults()

@@ -139,6 +139,7 @@ class Config:
             kwds["submit"] = RawSubmitConfig(**fd)
         if fd := data.pop("mpmd", None):
             kwds["mpmd"] = MPMDConfig(**fd)
+        kwds.update(data)
         self = cls(**kwds)
         return self
 

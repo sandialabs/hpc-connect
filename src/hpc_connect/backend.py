@@ -19,7 +19,7 @@ class Backend(abc.ABC):
     name: str
 
     def __init__(self, config: Config | None = None) -> None:
-        self.config = config or Config.from_defaults()
+        self.config = config or Config.from_defaults(overrides={"backend": self.name})
 
     @property
     @abc.abstractmethod

@@ -4,24 +4,24 @@ import hpc_connect.config
 
 
 def test_config_launch_basic(tmpdir):
+    cwd = os.getcwd()
     try:
-        cwd = os.getcwd()
         os.chdir(tmpdir.strpath)
-
-        config = hpc_connect.config.Config()
-        config.set("launch:exec", "my-mpiexec")
-        assert config.get("launch:exec") == "my-mpiexec"
-
-        config.set("launch:local_options", ["-a", "-b"])
-        assert config.get("launch:local_options") == ["-a", "-b"]
-        config.add('launch:local_options:["-c", "-d"]')
-        assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d"]
-        config.add("launch:local_options:-e")
-        assert config.get("launch:local_options") == ["-a", "-b", "-c", "-d", "-e"]
-
-        config.set("launch:mappings", {"-a": "-b", "-c": "-d"})
-        assert config.get("launch:mappings") == {"-a": "-b", "-c": "-d"}
-        config.add('launch:mappings:{"-e": "-f"}')
-        assert config.get("launch:mappings") == {"-a": "-b", "-c": "-d", "-e": "-f"}
+        config = hpc_connect.config.Config.from_defaults(
+            overrides={
+                "launch": {
+                    "exec": "my-mpiexec",
+                    "default_options": ["-a", "-b"],
+                    "mappings": {"-e": "-f"},
+                    "mpiexec": {
+                        "default_options": ["-c", "-d"]
+                    }
+                }
+            }
+        )
+        assert config.launch.default_options == ["-a", "-b"]
+        assert config.launch.mappings == {"-e": "-f"}
+        assert config.launch.resolve("mpiexec").default_options == ["-c", "-d"]
+        assert config.launch.resolve("mpiexec").mappings == {"-e": "-f"}
     finally:
         os.chdir(cwd)

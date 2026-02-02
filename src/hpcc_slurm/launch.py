@@ -52,8 +52,16 @@ class SrunAdapter(LaunchAdapter):
             view = self.backend.resource_view(ranks=p)
             for opt in self.config.mpmd.local_options:
                 fp.write(f" {self.expand(opt, **view)}")
-            for opt in launch_opts:
-                fp.write(f" {self.expand(opt, **view)}")
+            iter_opts = iter(launch_opts)
+            for opt in iter_opts:
+                if opt == "-n":
+                    next(iter_opts)
+                elif opt == "-np":
+                    next(iter_opts)
+                elif opt.startswith("-n=", "-np="):
+                    continue
+                else:
+                    fp.write(f" {self.expand(opt, **view)}")
             for opt in self.config.pre_options:
                 fp.write(f" {self.expand(opt, **view)}")
             for opt in program_opts:

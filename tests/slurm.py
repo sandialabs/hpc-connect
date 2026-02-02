@@ -4,7 +4,6 @@
 
 import os
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 
 import hpc_connect
@@ -12,45 +11,38 @@ import hpcc_slurm.backend
 import hpcc_slurm.process
 
 
-@contextmanager
-def tmp_environ():
-    save_env = os.environ.copy()
-    try:
-        os.environ["SLURM_NTASKS_PER_NODE"] = "10"
-        os.environ["SLURM_NNODES"] = "1"
-        os.environ["SLURM_GPUS"] = "0"
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(save_env)
-
-
 def test_basic(tmpdir):
-    dir = Path(tmpdir.strpath)
-    dir.mkdir(exist_ok=True)
-    config = hpc_connect.Config.from_defaults(overrides=dict(backend="slurm"))
-    backend = hpcc_slurm.backend.SlurmBackend(config=config)
-    spec = hpc_connect.JobSpec(
-        "my-job",
-        ["ls"],
-        cpus=1,
-        nodes=1,
-        workspace=dir,
-        output="my-out.txt",
-        error="my-err.txt",
-        time_limit=1.0,
-        env={"MY_VAR": "SPAM"},
-    )
-    backend.submission_manager().adapter.submit(spec)
-    text = (dir / "my-job.sh").read_text()
-    assert "#!/bin/sh" in text
-    assert "#SBATCH --nodes=1" in text
-    assert "#SBATCH --time=00:00:01" in text
-    assert "#SBATCH --job-name=my-job" in text
-    assert "#SBATCH --error=my-err.txt" in text
-    assert "#SBATCH --output=my-out.txt" in text
-    assert 'export MY_VAR="SPAM"' in text
-    assert "ls" in text
+
+    workspace = Path(tmpdir.strpath)
+    workspace.mkdir(parents=True, exist_ok=True)
+    cwd = Path.cwd()
+    try:
+        os.chdir(workspace)
+        backend = hpcc_slurm.backend.SlurmBackend()
+        spec = hpc_connect.JobSpec(
+            "my-job",
+            ["ls"],
+            cpus=1,
+            nodes=1,
+            output="my-out.txt",
+            error="my-err.txt",
+            workspace=workspace,
+            time_limit=1.0,
+            env={"MY_VAR": "SPAM"},
+        )
+        backend.submission_manager().adapter.submit(spec)
+        text = (workspace / "my-job.sh").read_text()
+        print(text)
+        assert "#!/bin/sh" in text
+        assert "#SBATCH --nodes=1" in text
+        assert "#SBATCH --time=00:00:01" in text
+        assert "#SBATCH --job-name=my-job" in text
+        assert "#SBATCH --error=my-err.txt" in text
+        assert "#SBATCH --output=my-out.txt" in text
+        assert 'export MY_VAR="SPAM"' in text
+        assert "ls" in text
+    finally:
+        os.chdir(cwd)
 
 
 def test_parse_script_args():
