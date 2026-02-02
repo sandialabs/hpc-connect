@@ -11,18 +11,21 @@ from .futures import Future
 from .hookspec import hookimpl
 from .jobspec import JobSpec
 from .launch import HPCLauncher
-from .launch import factory as get_launcher
+from .launch import LaunchAdapter
 from .pluginmanager import get_backend
+from .pluginmanager import get_launcher
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
 
 __all__ = [
     "Backend",
+    "Config",
     "Future",
     "get_backend",
     "get_launcher",
     "hookimpl",
     "HPCLauncher",
+    "LaunchAdapter",
     "HPCProcess",
     "HPCSubmissionManager",
     "JobSpec",

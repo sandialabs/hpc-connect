@@ -19,6 +19,7 @@ from flux.job import Jobspec  # type: ignore
 from flux.job import JobspecV1  # type: ignore
 
 import hpc_connect
+from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.util import time_in_seconds
 
 from .discover import read_resource_info
@@ -28,7 +29,10 @@ logger = logging.getLogger("hpc_connect.flux.backend_api")
 
 
 class FluxBackend(hpc_connect.Backend):
-    def __init__(self) -> None:
+    name = "flux"
+
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
+        super().__init__(config=config)
         self._resource_specs: list[dict]
         if info := read_resource_info():
             self._resource_specs = [info]
@@ -41,12 +45,16 @@ class FluxBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         return self._resource_specs
 
-    @property
     def supports_subscheduling(self) -> bool:
         return True
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
         return hpc_connect.HPCSubmissionManager(adapter=FluxAdapter(backend=self))
+
+    def launcher(self) -> hpc_connect.HPCLauncher:
+        return hpc_connect.HPCLauncher(
+            adapter=MPIExecAdapter(backend=self, config=self.config.launch.resolve("mpiexec"))
+        )
 
 
 class FluxAdapter:

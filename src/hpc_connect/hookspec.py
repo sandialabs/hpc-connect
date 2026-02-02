@@ -7,7 +7,7 @@ import pluggy
 
 if TYPE_CHECKING:
     from .backend import Backend
-    from .launch import HPCLauncher
+    from .config import Config
 
 project_name = "hpc_connect"
 
@@ -16,12 +16,6 @@ hookimpl = pluggy.HookimplMarker(project_name)
 
 
 @hookspec(firstresult=True)
-def hpc_connect_backend(name: str) -> "Backend":
-    """HPC scheduler implementation"""
-    raise NotImplementedError
-
-
-@hookspec(firstresult=True)
-def hpc_connect_launcher(name: str) -> "HPCLauncher":
+def hpc_connect_backend(config: "Config") -> "Backend":
     """HPC scheduler implementation"""
     raise NotImplementedError

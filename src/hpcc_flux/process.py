@@ -40,7 +40,8 @@ class FluxProcess(hpc_connect.HPCProcess):
             except CancelledError:
                 self.returncode = 1
             except Exception as e:
-                raise hpc_connect.HPCSubmissionFailedError(e)
+                logger.exception("Submission failed")
+                raise
 
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)

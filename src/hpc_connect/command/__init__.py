@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     args.extra_args = extra_args
 
     module = _commands[args.command]
-    cfg = Config()
+    cfg = Config.from_defaults()
     cfg.set_main_options(args)
     module.execute(cfg, args)  # ty: ignore[unresolved-attribute]
     return 0

@@ -7,10 +7,12 @@ import os
 import shutil
 
 import hpc_connect
+from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.util.time import hhmmss
 from hpc_connect.util.time import time_in_seconds
 
 from .discover import read_sinfo
+from .launch import SrunAdapter
 from .process import SlurmProcess
 
 logger = logging.getLogger("hpc_connect.slurm.submit")
@@ -19,7 +21,8 @@ logger = logging.getLogger("hpc_connect.slurm.submit")
 class SlurmBackend(hpc_connect.Backend):
     name = "slurm"
 
-    def __init__(self) -> None:
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
+        super().__init__(config=config)
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
@@ -38,6 +41,16 @@ class SlurmBackend(hpc_connect.Backend):
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
         return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter())
+
+    def launcher(self) -> hpc_connect.HPCLauncher:
+        name = os.path.basename(self.config.launch.exec)
+        if name == "srun":
+            config = self.config.launch.resolve("srun")
+            return hpc_connect.HPCLauncher(adapter=SrunAdapter(backend=self, config=config))
+        if name in ("mpiexec", "mpirun"):
+            config = self.config.launch.resolve("mpiexec")
+            return hpc_connect.HPCLauncher(adapter=MPIExecAdapter(backend=self, config=config))
+        raise ValueError(f"{name}: unknown launcher for slurm backend")
 
 
 class SbatchAdapter:

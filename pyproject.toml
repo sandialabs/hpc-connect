@@ -22,10 +22,8 @@ dev = ["ruff", "mypy", "pytest"]
 
 [project.entry-points."hpc_connect"]
 hpcc_flux = "hpcc_flux"
-hpcc_mpi = "hpcc_mpi"
 hpcc_pbs = "hpcc_pbs"
 hpcc_slurm = "hpcc_slurm"
-hpcc_subprocess = "hpcc_subprocess"
 hpcc_remote = "hpcc_remote"
 
 [tool.setuptools.dynamic]

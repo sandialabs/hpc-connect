@@ -2,18 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-from typing import TYPE_CHECKING
-
-from hpc_connect.hookspec import hookimpl
+import hpc_connect
 
 from .backend import PBSBackend
 
-if TYPE_CHECKING:
-    from hpc_connect.backend import Backend
 
-
-@hookimpl
-def hpc_connect_backend(name: str) -> "Backend | None":
-    if name in ("qsub", "pbs"):
-        return PBSBackend()
+@hpc_connect.hookimpl
+def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
+    if config.backend in ("qsub", "pbs"):
+        return PBSBackend(config=config)
     return None

@@ -1,5 +1,8 @@
 import argparse
+import dataclasses
 import sys
+
+import yaml
 
 from ..config import Config
 
@@ -31,7 +34,9 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
 
 def execute(config: Config, args: argparse.Namespace) -> None:
     if args.subcommand == "show":
-        config.dump(sys.stdout, scope=args.scope, default_flow_style=False)
+        data = dataclasses.asdict(config)
+        yaml.dump(data, sys.stdout, default_flow_style=False)
     elif args.subcommand == "add":
+        raise NotImplementedError
         for path in args.add_config_paths:
             config.add(path, scope=args.scope)

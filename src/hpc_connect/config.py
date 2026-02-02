@@ -2,76 +2,145 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
+import dataclasses
 import logging
-import math
 import os
+import shutil
 import sys
-from functools import cached_property
-from typing import IO
 from typing import Any
 from typing import Literal
 from typing import cast
 
 import yaml
 
-from .discover import default_resource_set
-from .pluginmanager import HPCConnectPluginManager
 from .schemas import config_schema
 from .schemas import environment_variable_schema
 from .util import collections
 from .util import safe_loads
 
-default_config_values: dict[str, Any] = {
-    "debug": False,
-    "plugins": [],
-    "machine": {"resources": None},
-    "submit": {"backend": None, "default_options": []},
-    "launch": {
-        "exec": "mpiexec",
-        "numproc_flag": "-n",
-        "default_options": [],
-        "local_options": [],
-        "pre_options": [],
-        "mappings": {},
-    },
-}
-
 ConfigScopes = Literal["site", "global", "local"]
 
 
+@dataclasses.dataclass
+class MPMDConfig:
+    local_options: list[str] = dataclasses.field(default_factory=list)
+    global_options: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class LaunchConfig:
+    exec: str
+    numproc_flag: str
+    pre_options: list[str] = dataclasses.field(default_factory=list)
+    default_options: list[str] = dataclasses.field(default_factory=list)
+    mappings: dict[str, str] = dataclasses.field(default_factory=dict)
+    mpmd: MPMDConfig = dataclasses.field(default_factory=MPMDConfig)
+
+
+@dataclasses.dataclass
+class RawLaunchConfig:
+    exec: str = ""
+    numproc_flag: str = ""
+    pre_options: list[str] = dataclasses.field(default_factory=list)
+    default_options: list[str] = dataclasses.field(default_factory=list)
+    mappings: dict[str, str] = dataclasses.field(default_factory=dict)
+    overrides: dict[str, "LaunchConfig"] = dataclasses.field(default_factory=dict)
+    mpmd: MPMDConfig = dataclasses.field(default_factory=MPMDConfig)
+
+    def __post_init__(self) -> None:
+        if not self.exec:
+            self.exec = shutil.which("mpiexec") or "mpiexec"
+        if not self.numproc_flag:
+            self.numproc_flag = "-n"
+
+    def resolve(self, name: str) -> LaunchConfig:
+        if name not in self.overrides:
+            return LaunchConfig(
+                exec=self.exec,
+                numproc_flag=self.numproc_flag,
+                pre_options=self.pre_options,
+                default_options=self.default_options,
+                mappings=self.mappings,
+                mpmd=self.mpmd,
+            )
+        override = self.overrides[name]
+        return LaunchConfig(
+            exec=override.exec or self.exec,
+            numproc_flag=override.numproc_flag or self.numproc_flag,
+            pre_options=override.pre_options or self.pre_options,
+            default_options=override.default_options or self.default_options,
+            mappings=override.mappings or self.mappings,
+            mpmd=override.mpmd or self.mpmd,
+        )
+
+
+@dataclasses.dataclass
+class SubmitConfig:
+    default_options: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass
+class RawSubmitConfig:
+    default_options: list[str] = dataclasses.field(default_factory=list)
+    overrides: dict[str, "SubmitConfig"] = dataclasses.field(default_factory=dict)
+
+    def resolve(self, name: str) -> SubmitConfig:
+        if name not in self.overrides:
+            return SubmitConfig(default_options=self.default_options)
+        override = self.overrides[name]
+        return SubmitConfig(default_options=override.default_options or self.default_options)
+
+
+@dataclasses.dataclass
 class Config:
-    def __init__(self) -> None:
-        self.pluginmanager: HPCConnectPluginManager = HPCConnectPluginManager()
-        self.data: dict[str, Any] = dict(default_config_values)
-        for name in ("site", "global", "local"):
-            scope = get_config_scope_data(cast(ConfigScopes, name))
-            self.data = collections.merge(self.data, scope)  # type: ignore
-        if env_scope := get_env_scope():
-            self.data = collections.merge(self.data, env_scope)  # type: ignore
-        if self.data["debug"]:
+    debug: bool = False
+    backend: str = ""
+    submit: RawSubmitConfig = dataclasses.field(default_factory=RawSubmitConfig)
+    launch: RawLaunchConfig = dataclasses.field(default_factory=RawLaunchConfig)
+
+    def __post_init__(self) -> None:
+        if not self.backend:
+            self.backend = "local"
+        if self.debug:
             logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
 
-    def get(self, path: str, default: Any = None) -> Any:
-        parts = process_config_path(path)
-        if parts[0] == "config":
-            # Legacy support for top level config key
-            parts = parts[1:]
-        value = self.data.get(parts[0], {})
-        for key in parts[1:]:
-            # cannot use value.get(key, default) in case there is another part
-            # and default is not a dict
-            if key not in value:
-                return default
-            value = value[key]
-        return value
-
-    def set(self, path: str, value: Any) -> None:
-        parts = process_config_path(path)
-        data = value
-        for key in reversed(parts):
-            data = {key: data}
-        data = config_schema.validate(data)
-        self.data = collections.merge(self.data, data)  # type: ignore
+    @classmethod
+    def from_defaults(
+        cls,
+        files: bool = True,
+        env: bool = True,
+        overrides: dict[str, Any] | None = None,
+    ) -> "Config":
+        data: dict[str, Any] = {}
+        if files:
+            for name in ("site", "global", "local"):
+                scope = get_config_scope_data(cast(ConfigScopes, name))
+                data = collections.merge(data, scope)  # type: ignore
+        if env:
+            if env_scope := get_env_scope():
+                data = collections.merge(data, env_scope)  # type: ignore
+        if overrides:
+            config_schema.validate(overrides)
+            data = collections.merge(data, overrides)  # type: ignore
+        kwds: dict[str, Any] = {}
+        if fd := data.pop("launch", None):
+            fields = {f.name for f in dataclasses.fields(RawLaunchConfig)}
+            for key in list(fd.keys()):
+                if key not in fields:
+                    o = fd.pop(key)
+                    fd.setdefault("overrides", {}).update({key: RawLaunchConfig(**o)})
+            kwds["launch"] = RawLaunchConfig(**fd)
+        if fd := data.pop("submit", None):
+            fields = {f.name for f in dataclasses.fields(RawSubmitConfig)}
+            for key in list(fd.keys()):
+                if key not in fields:
+                    o = fd.pop(key)
+                    fd.setdefault("overrides", {}).update({key: RawSubmitConfig(**o)})
+            kwds["submit"] = RawSubmitConfig(**fd)
+        if fd := data.pop("mpmd", None):
+            kwds["mpmd"] = MPMDConfig(**fd)
+        self = cls(**kwds)
+        return self
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -90,163 +159,17 @@ class Config:
                 for component in components[:-2]:
                     current = current.setdefault(component, {})
                 current[components[-2]] = safe_loads(components[-1])
-            self.data = collections.merge(self.data, data)  # type: ignore
-            if self.data["debug"]:
+            data = collections.merge(self.data, data)  # type: ignore
+            if data.get("debug"):
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
-
-    @property
-    def resource_specs(self) -> list[dict]:
-        if self.data["machine"]["resources"] is None:
-            self.data["machine"]["resources"] = default_resource_set()
-        return self.data["machine"]["resources"]
-
-    def resource_types(self) -> list[str]:
-        """Return the types of resources available"""
-        types: set[str] = set()
-        for rspec in self.resource_specs:
-            if rspec["type"] == "node":
-                for spec in rspec["resources"]:
-                    if spec["type"] == "socket":
-                        types.update([child["type"] for child in spec["resources"]])
-        return sorted(types)
-
-    def count_per_rspec(self, rspec: dict[str, Any], type: str) -> int | None:
-        for child in rspec["resources"]:
-            if child["type"] == type:
-                return child["count"]
-            elif type.endswith("s") and child["type"] == type[:-1]:
-                return child["count"]
-        return None
-
-    def count_per_node(self, type: str, default: int | None = None) -> int:
-        for rspec in self.resource_specs:
-            if rspec["type"] == "node":
-                count = self.count_per_rspec(rspec, type)
-                if count is not None:
-                    return count
-        try:
-            count_per_socket = self.count_per_socket(type)
-        except ValueError:
-            if default is not None:
-                return default
-            raise ValueError(f"Unable to determine count_per_node for {type!r}") from None
-        else:
-            return count_per_socket * self.sockets_per_node
-
-    def count_per_socket(self, type: str, default: int | None = None) -> int:
-        for rspec1 in self.resource_specs:
-            if rspec1["type"] == "node":
-                for rspec2 in rspec1["resources"]:
-                    if rspec2["type"] == "socket":
-                        count = self.count_per_rspec(rspec2, type)
-                        if count is not None:
-                            return count
-        if default is not None:
-            return default
-        raise ValueError(f"Unable to determine count_per_socket for {type!r}")
-
-    @cached_property
-    def node_count(self) -> int:
-        count: int = 0
-        for resource in self.resource_specs:
-            if resource["type"] == "node":
-                count += resource["count"]
-        if count:
-            return count
-        raise ValueError("Unable to determine node count")
-
-    @cached_property
-    def sockets_per_node(self) -> int:
-        try:
-            count = self.count_per_node("socket")
-            return count or 1
-        except ValueError:
-            return 1
-
-    def nodes_required(self, **types: int) -> int:
-        """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
-        rank"""
-        # backward compatible
-        if n := types.pop("max_cpus", None):
-            types["cpu"] = n
-        if n := types.pop("max_gpus", None):
-            types["gpu"] = n
-        nodes: int = 1
-        for type, count in types.items():
-            try:
-                count_per_node = self.count_per_node(type)
-            except ValueError:
-                continue
-            else:
-                if count_per_node == 0:
-                    continue
-            nodes = max(nodes, int(math.ceil(count / count_per_node)))
-        return nodes
-
-    def compute_required_resources(
-        self, *, ranks: int | None = None, ranks_per_socket: int | None = None
-    ) -> dict[str, int]:
-        """Return basic information about how to allocate resources on this machine for a job
-        requiring `ranks` ranks.
-
-        Parameters
-        ----------
-        ranks : int
-            The number of ranks to use for a job
-        ranks_per_socket : int
-            Number of ranks per socket, for performance use
-
-        Returns
-        -------
-        SimpleNamespace
-
-        """
-        if ranks is None and ranks_per_socket is not None:
-            # Raise an error since there is no reliable way of finding the number of
-            # available nodes
-            raise ValueError("ranks_per_socket requires ranks also be defined")
-
-        reqd_resources: dict[str, int] = {
-            "np": 0,
-            "ranks": 0,
-            "ranks_per_socket": 0,
-            "nodes": 0,
-            "sockets": 0,
-        }
-
-        if not ranks and not ranks_per_socket:
-            return reqd_resources
-
-        nodes: int
-        if ranks is None and ranks_per_socket is None:
-            ranks = ranks_per_socket = 1
-            nodes = 1
-        elif ranks is not None and ranks_per_socket is None:
-            ranks_per_socket = min(ranks, self.count_per_socket("cpu"))
-            nodes = int(math.ceil(ranks / self.count_per_socket("cpu") / self.sockets_per_node))
-        else:
-            assert ranks is not None
-            assert ranks_per_socket is not None
-            nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-        sockets = int(math.ceil(ranks / ranks_per_socket))  # ty: ignore[unsupported-operator]
-        reqd_resources["np"] = ranks
-        reqd_resources["ranks"] = ranks
-        reqd_resources["ranks_per_socket"] = ranks_per_socket
-        reqd_resources["nodes"] = nodes
-        reqd_resources["sockets"] = sockets
-        return reqd_resources
-
-    def dump(self, stream: IO[Any], scope: str | None = None, **kwargs: Any) -> None:
-        data: dict[str, Any] = {}
-        for section in self.scopes["defaults"]:
-            if section == "machine":
-                continue
-            section_data = self.get_config(section, scope=scope)
-            if not section_data and scope is not None:
-                continue
-            data[section] = section_data
-        data.setdefault("machine", {})["resources"] = self.resource_specs
-        yaml.dump({"hpc_connect": data}, stream, **kwargs)
+            if fd := data.pop("launch", None):
+                for key, value in fd.items():
+                    setattr(self.launch, key, value)
+            if fd := data.pop("submit", None):
+                for key, value in fd.items():
+                    setattr(self.submit, key, value)
+            for key, value in data.items():
+                setattr(self, key, value)
 
 
 def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
@@ -292,7 +215,10 @@ def read_config_file(file: str) -> dict[str, Any] | None:
     if not os.path.exists(file):
         return None
     with open(file) as fh:
-        return yaml.safe_load(fh)
+        fd = yaml.safe_load(fh)
+        if "hpc_connect" in fd:
+            fd = fd["hpc_connect"]
+        return fd
 
 
 def process_config_path(path: str) -> list[str]:
@@ -306,7 +232,3 @@ def process_config_path(path: str) -> list[str]:
             result.append(path)
             return result
     return result
-
-
-class LocalScopeDoesNotExistError(Exception):
-    pass

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 from typing import Mapping
 
 
@@ -42,6 +43,8 @@ class JobSpec:
     workspace: Path = field(default_factory=lambda: Path(tempfile.mkdtemp()))
 
     submit_args: list[str] = field(default_factory=list)
+
+    extensions: dict[str, Any] = field(default_factory=dict)
 
     def with_updates(self, **kwargs) -> "JobSpec":
         return replace(self, **kwargs)

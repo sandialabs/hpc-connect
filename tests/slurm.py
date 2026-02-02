@@ -2,12 +2,14 @@
 #
 # SPDX-License-Identifier: MIT
 
-import io
 import os
 import tempfile
 from contextlib import contextmanager
+from pathlib import Path
 
-import hpcc_slurm.submit
+import hpc_connect
+import hpcc_slurm.backend
+import hpcc_slurm.process
 
 
 @contextmanager
@@ -23,21 +25,24 @@ def tmp_environ():
         os.environ.update(save_env)
 
 
-def test_basic():
-    backend = hpcc_slurm.submit.SlurmSubmissionManager()
-    with io.StringIO() as fh:
-        backend.write_submission_script(
-            "my-job",
-            ["ls"],
-            fh,
-            cpus=1,
-            nodes=1,
-            output="my-out.txt",
-            error="my-err.txt",
-            qtime=1.0,
-            variables={"MY_VAR": "SPAM"},
-        )
-        text = fh.getvalue()
+def test_basic(tmpdir):
+    dir = Path(tmpdir.strpath)
+    dir.mkdir(exist_ok=True)
+    config = hpc_connect.Config.from_defaults(overrides=dict(backend="slurm"))
+    backend = hpcc_slurm.backend.SlurmBackend(config=config)
+    spec = hpc_connect.JobSpec(
+        "my-job",
+        ["ls"],
+        cpus=1,
+        nodes=1,
+        workspace=dir,
+        output="my-out.txt",
+        error="my-err.txt",
+        time_limit=1.0,
+        env={"MY_VAR": "SPAM"},
+    )
+    backend.submission_manager().adapter.submit(spec)
+    text = (dir / "my-job.sh").read_text()
     assert "#!/bin/sh" in text
     assert "#SBATCH --nodes=1" in text
     assert "#SBATCH --time=00:00:01" in text
@@ -45,7 +50,6 @@ def test_basic():
     assert "#SBATCH --error=my-err.txt" in text
     assert "#SBATCH --output=my-out.txt" in text
     assert 'export MY_VAR="SPAM"' in text
-    assert "printenv || true" in text
     assert "ls" in text
 
 
@@ -63,5 +67,5 @@ export MY_VAR=SPAM
 printenv || true
 ls""")
         fh.seek(0)
-        ns = hpcc_slurm.submit.SlurmProcess.parse_script_args(fh.name)
+        ns = hpcc_slurm.process.SlurmProcess.parse_script_args(fh.name)
         assert ns.clusters == "flight,eclipse"

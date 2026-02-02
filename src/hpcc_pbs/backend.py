@@ -7,6 +7,7 @@ import os
 import shutil
 
 import hpc_connect
+from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.util.time import hhmmss
 from hpc_connect.util.time import time_in_seconds
 
@@ -19,7 +20,8 @@ logger = logging.getLogger("hpc_connect.pbs.backend")
 class PBSBackend(hpc_connect.Backend):
     name = "pbs"
 
-    def __init__(self) -> None:
+    def __init__(self, config: hpc_connect.Config | None = None) -> None:
+        super().__init__(config=config)
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
@@ -40,7 +42,12 @@ class PBSBackend(hpc_connect.Backend):
         return self._resource_specs
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=QsubAdapter(), backend=self)
+        return hpc_connect.HPCSubmissionManager(adapter=QsubAdapter(backend=self))
+
+    def launcher(self) -> hpc_connect.HPCLauncher:
+        return hpc_connect.HPCLauncher(
+            adapter=MPIExecAdapter(backend=self, config=self.config.launch.resolve("mpiexec"))
+        )
 
 
 class QsubAdapter:

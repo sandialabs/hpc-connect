@@ -5,27 +5,21 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Generator
 
-from schema import Optional
-from schema import Or
-from schema import Schema
-from schema import Use
+from .config import Config
+from .schemas import resource_schema
 
 if TYPE_CHECKING:
+    from .launch import HPCLauncher
     from .submit import HPCSubmissionManager
 
 logger = logging.getLogger("hpc_connect.backend")
 
-resource_node = {
-    "type": str,
-    "count": int,
-    Optional("additional_properties"): Or(dict, None),
-    Optional("resources"): [Use(lambda x: x)],  # recursive schema
-}
-resource_schema = Schema({"resources": [resource_node]})
-
 
 class Backend(abc.ABC):
-    name = "base"
+    name: str
+
+    def __init__(self, config: Config | None = None) -> None:
+        self.config = config or Config.from_defaults()
 
     @property
     @abc.abstractmethod
@@ -34,7 +28,9 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     def submission_manager(self) -> "HPCSubmissionManager": ...
 
-    @property
+    @abc.abstractmethod
+    def launcher(self) -> "HPCLauncher": ...
+
     def supports_subscheduling(self) -> bool:
         return False
 
@@ -124,7 +120,7 @@ class Backend(abc.ABC):
                 nodes = max(nodes, int(math.ceil(count / per_node)))
         return nodes
 
-    def compute_required_resources(
+    def resource_view(
         self, *, ranks: int | None = None, ranks_per_socket: int | None = None
     ) -> dict[str, int]:
         """Return basic information about how to allocate resources on this machine for a job
@@ -139,7 +135,12 @@ class Backend(abc.ABC):
 
         Returns
         -------
-        SimpleNamespace
+        view:
+          view['np']
+          view['ranks']
+          view['nodes']
+          view['sockets']
+          view['ranks_per_socket']
 
         """
         if ranks is None and ranks_per_socket is not None:
@@ -147,9 +148,9 @@ class Backend(abc.ABC):
             # available nodes
             raise ValueError("ranks_per_socket requires ranks also be defined")
         if "socket" not in self._resource_index:
-            raise ValueError("compute_required_resources assumes socket-based topology")
+            raise ValueError("resource_view assumes socket-based topology")
 
-        reqd_resources: dict[str, int] = {
+        view: dict[str, int] = {
             "np": 0,
             "ranks": 0,
             "ranks_per_socket": 0,
@@ -158,7 +159,7 @@ class Backend(abc.ABC):
         }
 
         if not ranks and not ranks_per_socket:
-            return reqd_resources
+            return view
 
         nodes: int
         if ranks is None and ranks_per_socket is None:
@@ -172,12 +173,12 @@ class Backend(abc.ABC):
             assert ranks_per_socket is not None
             nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
         sockets = int(math.ceil(ranks / ranks_per_socket))  # ty: ignore[unsupported-operator]
-        reqd_resources["np"] = ranks
-        reqd_resources["ranks"] = ranks
-        reqd_resources["ranks_per_socket"] = ranks_per_socket
-        reqd_resources["nodes"] = nodes
-        reqd_resources["sockets"] = sockets
-        return reqd_resources
+        view["np"] = ranks
+        view["ranks"] = ranks
+        view["ranks_per_socket"] = ranks_per_socket
+        view["nodes"] = nodes
+        view["sockets"] = sockets
+        return view
 
 
 def walk_resources(
