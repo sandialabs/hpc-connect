@@ -110,7 +110,9 @@ class Subprocess(HPCProcess):
             stderr = streamify(error)
         if hasattr(stderr, "write"):
             weakref.finalize(stderr, stderr.close)  # type: ignore
+        self.submitted = self.started = time.time()
         self.proc = subprocess.Popen(args, stdout=stdout, stderr=stderr)
+        self.jobid = str(self.proc.pid)
         self.last_debug_emit: float = -1
         self.emit_interval: float = emit_interval
 

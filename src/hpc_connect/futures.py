@@ -4,7 +4,6 @@
 import threading
 import time
 from typing import TYPE_CHECKING
-from typing import Any
 from typing import Callable
 from typing import Generator
 from typing import Iterable
@@ -19,7 +18,9 @@ class Future:
     def __init__(self, proc: "HPCProcess", poll_interval: float = 1.0):
         self.proc = proc
         self._poll_interval = poll_interval
-        self._callbacks: List[Callable[["Future"], None]] = []
+        self._on_start_callbacks: List[Callable[["Future"], None]] = []
+        self._jobid_callbacks: List[Callable[["Future"], None]] = []
+        self._done_callbacks: List[Callable[["Future"], None]] = []
         self._done = threading.Event()
         self._cancelled = False
         self._lock = threading.Lock()
@@ -29,11 +30,31 @@ class Future:
 
     def _monitor(self):
         while True:
+            if self._on_start_callbacks and self.proc.started > 0.0:
+                with self._lock:
+                    callbacks = list(self._on_start_callbacks)
+                    self._on_start_callbacks.clear()
+                for cb in callbacks:
+                    try:
+                        cb(self)
+                    except Exception:
+                        pass
+            if self._jobid_callbacks and self.proc.jobid != "unset":
+                with self._lock:
+                    callbacks = list(self._jobid_callbacks)
+                    self._jobid_callbacks.clear()
+                for cb in callbacks:
+                    try:
+                        cb(self)
+                    except Exception:
+                        pass
             rc = self.proc.poll()
             if rc is not None:
                 self._done.set()
                 # call callbacks
-                for cb in self._callbacks:
+                with self._lock:
+                    callbacks = list(self._done_callbacks)
+                for cb in callbacks:
                     try:
                         cb(self)
                     except Exception:
@@ -60,7 +81,7 @@ class Future:
                 pass
             self._done.set()
             # callbacks still fire
-            for cb in self._callbacks:
+            for cb in self._done_callbacks:
                 try:
                     cb(self)
                 except Exception:
@@ -76,15 +97,23 @@ class Future:
 
     def add_done_callback(self, fn: Callable[["Future"], None]):
         with self._lock:
-            self._callbacks.append(fn)
+            self._done_callbacks.append(fn)
             if self.done():
                 try:
                     fn(self)
                 except Exception:
                     pass
 
+    def add_jobstart_callback(self, fn: Callable[["Future"], None]):
+        with self._lock:
+            self._on_start_callbacks.append(fn)
+
+    def add_jobid_callback(self, fn: Callable[["Future"], None]):
+        with self._lock:
+            self._jobid_callbacks.append(fn)
+
     @property
-    def jobid(self) -> Any:
+    def jobid(self) -> str:
         return self.proc.jobid
 
     @property

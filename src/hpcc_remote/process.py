@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 import weakref
 from typing import TextIO
 
@@ -47,6 +48,8 @@ class RemoteSubprocess(hpc_connect.HPCProcess):
         if hasattr(stderr, "write"):
             weakref.finalize(stderr, stderr.close)  # type: ignore
         self.proc = subprocess.Popen([ssh, host, script], stdout=stdout, stderr=stderr)
+        self.submitted = self.started = time.time()
+        self.jobid = str(self.proc.pid)
 
     @property
     def returncode(self) -> int | None:

@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 
 import hpc_connect
 
@@ -17,7 +18,7 @@ logger = logging.getLogger("hpc_connect.pbs.submit")
 class PBSProcess(hpc_connect.HPCProcess):
     def __init__(self, script: str) -> None:
         self._rc: int | None = None
-        self._jobid = self.submit(script)
+        self.jobid = self.submit(script)
         logger.debug(f"Submitted batch with jobid={self.jobid}")
 
     def submit(self, script: str) -> str:
@@ -28,6 +29,7 @@ class PBSProcess(hpc_connect.HPCProcess):
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         out, _ = p.communicate()
         result = str(out.decode("utf-8")).strip()
+        self.submitted = time.time()
         dirname, basename = os.path.split(script)
         with open(os.path.join(dirname, "qsub.meta.json"), "w") as fh:
             date = datetime.datetime.now().strftime("%c")
@@ -45,10 +47,6 @@ class PBSProcess(hpc_connect.HPCProcess):
             script_lines = fh.read()
         logger.error(f"    qsub script: {script_lines}")
         raise SubmissionFailedError
-
-    @property
-    def jobid(self) -> str:
-        return self._jobid
 
     @property
     def returncode(self) -> int | None:
@@ -74,10 +72,14 @@ class PBSProcess(hpc_connect.HPCProcess):
                 jid, state = parts[0], parts[4]
                 if jid == self.jobid:
                     # Job is still running
+                    if self.started <= 0.0:
+                        self.started = time.time()
                     return None
                 elif jid[-1] == "*" and self.jobid.startswith(jid[:-1]):
                     # the output from qstat may return a truncated job id,
                     # so match the beginning of the incoming 'jobids' strings
+                    if self.started <= 0.0:
+                        self.started = time.time()
                     return None
         # Job not found in qstat, assume it completed
         self.returncode = 0

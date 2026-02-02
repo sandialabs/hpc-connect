@@ -23,7 +23,6 @@ class FluxProcess(hpc_connect.HPCProcess):
         self.fh = Flux()
         self.name = name
         self.fut: FluxExecutorFuture = future
-        self._jobid: int | None = None
         self._rc: int | None = None
 
         def set_returncode(fut: FluxExecutorFuture):
@@ -35,7 +34,7 @@ class FluxProcess(hpc_connect.HPCProcess):
 
         def set_jobid(fut: FluxExecutorFuture):
             try:
-                self.jobid = fut.jobid()
+                self.jobid = str(fut.jobid())
                 logger.debug(f"submitted job {self.jobid} for {self.name}")
             except CancelledError:
                 self.returncode = 1
@@ -45,14 +44,6 @@ class FluxProcess(hpc_connect.HPCProcess):
 
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)
-
-    @property
-    def jobid(self) -> int | None:
-        return self._jobid
-
-    @jobid.setter
-    def jobid(self, arg: int) -> None:
-        self._jobid = arg
 
     @property
     def returncode(self) -> int | None:
@@ -68,7 +59,7 @@ class FluxProcess(hpc_connect.HPCProcess):
     def cancel(self) -> None:
         logger.warning(f"Canceling flux job {self.jobid}")
         try:
-            flux.job.cancel(self.fh, self.jobid)
+            flux.job.cancel(self.fh, int(self.jobid))
         except OSError:
             logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
         except Exception:
