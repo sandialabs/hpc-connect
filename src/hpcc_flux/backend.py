@@ -49,7 +49,8 @@ class FluxBackend(hpc_connect.Backend):
         return True
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=FluxAdapter(backend=self))
+        config = self.config.submit.resolve("flux")
+        return hpc_connect.HPCSubmissionManager(adapter=FluxAdapter(backend=self, config=config))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(
@@ -60,7 +61,8 @@ class FluxBackend(hpc_connect.Backend):
 class FluxAdapter:
     lock: multiprocessing.synchronize.RLock = multiprocessing.RLock()
 
-    def __init__(self, backend: FluxBackend) -> None:
+    def __init__(self, backend: FluxBackend, config: hpc_connect.SubmitConfig) -> None:
+        self.config = config
         self.backend = backend
 
     def poll_interval(self) -> float:
@@ -89,6 +91,8 @@ class FluxAdapter:
                 fh.write(f"#FLUX --output={spec.output}\n")
             if spec.error:
                 fh.write(f"#FLUX --error={spec.output}\n")
+            for arg in self.config.default_options:
+                fh.write(f"#FLUX {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#FLUX {arg}\n")
             for var, val in spec.env.items():

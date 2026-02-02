@@ -7,6 +7,8 @@ import os
 
 from .backend import Backend
 from .config import Config
+from .config import LaunchConfig
+from .config import SubmitConfig
 from .futures import Future
 from .hookspec import hookimpl
 from .jobspec import JobSpec
@@ -20,6 +22,8 @@ from .submit import HPCSubmissionManager
 __all__ = [
     "Backend",
     "Config",
+    "LaunchConfig",
+    "SubmitConfig",
     "Future",
     "get_backend",
     "get_launcher",

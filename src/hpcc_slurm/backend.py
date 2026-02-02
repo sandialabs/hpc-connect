@@ -40,7 +40,8 @@ class SlurmBackend(hpc_connect.Backend):
         return self._resource_specs
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter())
+        config = self.config.submit.resolve("slurm")
+        return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter(config=config))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         name = os.path.basename(self.config.launch.exec)
@@ -54,7 +55,8 @@ class SlurmBackend(hpc_connect.Backend):
 
 
 class SbatchAdapter:
-    def __init__(self):
+    def __init__(self, config: hpc_connect.SubmitConfig):
+        self.config = config
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
@@ -76,6 +78,8 @@ class SbatchAdapter:
                 fh.write(f"#SBATCH --error={spec.error}\n")
             if spec.output:
                 fh.write(f"#SBATCH --error={spec.output}\n")
+            for arg in self.config.default_options:
+                fh.write(f"#SBATCH {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#SBATCH {arg}\n")
             for var, val in spec.env.items():

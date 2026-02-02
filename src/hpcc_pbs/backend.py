@@ -42,7 +42,8 @@ class PBSBackend(hpc_connect.Backend):
         return self._resource_specs
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=QsubAdapter(backend=self))
+        config = self.config.submit.resolve("pbs")
+        return hpc_connect.HPCSubmissionManager(adapter=QsubAdapter(backend=self, config=config))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(
@@ -51,10 +52,11 @@ class PBSBackend(hpc_connect.Backend):
 
 
 class QsubAdapter:
-    def __init__(self, backend: PBSBackend) -> None:
+    def __init__(self, backend: PBSBackend, config: hpc_connect.SubmitConfig) -> None:
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
+        self.config = config
         self.backend = backend
 
     def poll_interval(self) -> float:
@@ -79,6 +81,8 @@ class QsubAdapter:
             if spec.error:
                 if spec.error != spec.output:
                     fh.write(f"#PBS -e {spec.error}\n")
+            for arg in self.config.default_options:
+                fh.write(f"#PBS {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#PBS {arg}\n")
             for var, val in spec.env.items():
