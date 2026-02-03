@@ -60,6 +60,7 @@ class Backend(abc.ABC):
 
     def count_per_node(self, type: str, default: int | None = None) -> int:
         total = 0
+        found = False
         for spec, parent in self._resource_index.get(type, []):
             # Walk up until we hit node
             multiplier = spec["count"]
@@ -71,8 +72,9 @@ class Backend(abc.ABC):
                 multiplier *= parents[0][0]["count"]
                 p = parents[0][1]
             if p == "node":
+                found = True
                 total += multiplier
-        if total:
+        if found:
             return total
         if default is not None:
             return default
