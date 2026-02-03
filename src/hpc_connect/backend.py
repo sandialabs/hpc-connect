@@ -76,7 +76,9 @@ class Backend(abc.ABC):
             return total
         if default is not None:
             return default
-        raise ValueError(f"Unable to determine count_per_node for {type!r}") from None
+        raise ValueError(
+            f"Unable to determine count_per_node for {type!r} from {self.resource_specs}"
+        ) from None
 
     def count_per_socket(self, type: str, default: int | None = None) -> int:
         for spec, parent in self._resource_index.get(type, []):
