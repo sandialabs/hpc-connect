@@ -18,6 +18,7 @@ import psutil
 
 from .backend import Backend
 from .config import Config
+from .config import SubmitConfig
 from .hookspec import hookimpl
 from .jobspec import JobSpec
 from .launch import HPCLauncher
@@ -41,7 +42,8 @@ class LocalBackend(Backend):
         return self._resource_specs
 
     def submission_manager(self) -> HPCSubmissionManager:
-        return HPCSubmissionManager(adapter=SubprocessAdapter())
+        config = self.config.submit.resolve("local")
+        return HPCSubmissionManager(adapter=SubprocessAdapter(config=config))
 
     def launcher(self) -> HPCLauncher:
         return HPCLauncher(
@@ -62,14 +64,14 @@ class LocalBackend(Backend):
 
 
 class SubprocessAdapter:
-    def __init__(self):
+    def __init__(self, config: SubmitConfig):
+        self.config = config
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
 
-    def poll_interval(self) -> float:
-        s = os.getenv("HPCC_POLL_INTERVAL") or 0.5
-        return time_in_seconds(s)
+    def polling_interval(self) -> float:
+        return self.config.polling_interval or 1.0
 
     def prepare(self, spec: JobSpec) -> JobSpec:
         sh = shutil.which("sh")

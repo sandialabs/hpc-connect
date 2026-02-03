@@ -77,18 +77,25 @@ class RawLaunchConfig:
 @dataclasses.dataclass
 class SubmitConfig:
     default_options: list[str] = dataclasses.field(default_factory=list)
+    polling_interval: float = dataclasses.field(default=0.0)
 
 
 @dataclasses.dataclass
 class RawSubmitConfig:
     default_options: list[str] = dataclasses.field(default_factory=list)
+    polling_interval: float = dataclasses.field(default=0.0)
     overrides: dict[str, "SubmitConfig"] = dataclasses.field(default_factory=dict)
 
     def resolve(self, name: str) -> SubmitConfig:
         if name not in self.overrides:
-            return SubmitConfig(default_options=self.default_options)
+            return SubmitConfig(
+                default_options=self.default_options, polling_interval=self.polling_interval
+            )
         override = self.overrides[name]
-        return SubmitConfig(default_options=override.default_options or self.default_options)
+        return SubmitConfig(
+            default_options=override.default_options or self.default_options,
+            polling_interval=override.polling_interval or self.polling_interval,
+        )
 
 
 @dataclasses.dataclass

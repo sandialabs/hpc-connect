@@ -15,9 +15,9 @@ if TYPE_CHECKING:
 
 
 class Future:
-    def __init__(self, proc: "HPCProcess", poll_interval: float = 1.0):
+    def __init__(self, proc: "HPCProcess", polling_interval: float = 1.0):
         self.proc = proc
-        self._poll_interval = poll_interval
+        self._polling_interval = polling_interval or 1.0
         self._on_start_callbacks: List[Callable[["Future"], None]] = []
         self._jobid_callbacks: List[Callable[["Future"], None]] = []
         self._done_callbacks: List[Callable[["Future"], None]] = []
@@ -62,7 +62,7 @@ class Future:
                 return
             if self._cancelled:
                 return
-            time.sleep(self._poll_interval)
+            time.sleep(self._polling_interval)
 
     def done(self) -> bool:
         return self._done.is_set()
@@ -124,7 +124,7 @@ class Future:
 def as_completed(
     futures: Iterable["Future"],
     timeout: float | None = None,
-    poll_interval: float = 1.0,
+    polling_interval: float = 1.0,
     cancel_on_exception: bool = True,
 ) -> Generator["Future", None, None]:
     """
@@ -133,7 +133,7 @@ def as_completed(
     Args:
         futures: Iterable of HPCFuture objects to monitor.
         timeout: Maximum number of seconds to wait for all futures. If None, wait indefinitely.
-        poll_interval: Seconds between checks of each future's done() status.
+        polling_interval: Seconds between checks of each future's done() status.
         cancel_on_exception: If True, cancel all pending futures if an exception occurs during iteration.
 
     Yields:
@@ -147,6 +147,7 @@ def as_completed(
     """
     pending = set(futures)
     start_time = time.monotonic()
+    polling_interval = max(polling_interval, max([f._polling_interval for f in pending]))
 
     try:
         while pending:
@@ -173,7 +174,7 @@ def as_completed(
 
             # Sleep briefly before polling again
             if pending:
-                time.sleep(poll_interval)
+                time.sleep(polling_interval)
 
     except Exception as e:
         # Optionally cancel pending futures on any exception

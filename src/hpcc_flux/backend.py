@@ -65,9 +65,8 @@ class FluxAdapter:
         self.config = config
         self.backend = backend
 
-    def poll_interval(self) -> float:
-        s = os.getenv("HPCC_POLL_INTERVAL") or 30.0
-        return time_in_seconds(s)
+    def polling_interval(self) -> float:
+        return self.config.polling_interval or 1.0
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxProcess:
         jobspec = self.prepare(spec, exclusive=exclusive)

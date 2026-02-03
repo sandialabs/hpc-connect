@@ -7,6 +7,7 @@ import os
 import shutil
 
 import hpc_connect
+from hpc_connect.config import SubmitConfig
 from hpc_connect.util import time_in_seconds
 
 from .process import RemoteSubprocess
@@ -35,9 +36,11 @@ class RemoteBackend(hpc_connect.Backend):
 
 
 class RemoteAdapter:
-    def poll_interval(self) -> float:
-        s = os.getenv("HPCC_POLLING_FREQUENCY") or 0.5
-        return time_in_seconds(s)
+    def __init__(self, config: SubmitConfig) -> None:
+        self.config = config
+
+    def polling_interval(self) -> float:
+        return self.config.polling_interval or 0.5
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")

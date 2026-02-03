@@ -12,6 +12,8 @@ from schema import Or
 from schema import Schema
 from schema import Use
 
+from .util.time import time_in_seconds
+
 logger = logging.getLogger("hpc_connect.schemas")
 
 
@@ -76,6 +78,7 @@ launch_schema = Schema(
 submit_schema = Schema(
     {
         Optional("default_options"): Use(flag_splitter),
+        Optional("polling_interval"): Use(time_in_seconds),
         Optional(str): {
             Optional("default_options"): Use(flag_splitter),
         },
@@ -125,6 +128,7 @@ environment_variable_schema = EnvarSchema(
         Optional("HPC_CONNECT_LAUNCH_DEFAULT_OPTIONS"): Use(flag_splitter),
         Optional("HPC_CONNECT_LAUNCH_MAPPINGS"): Use(load_mappings),
         Optional("HPC_CONNECT_SUBMIT_DEFAULT_OPTIONS"): Use(flag_splitter),
+        Optional("HPC_CONNECT_SUBMIT_POLLING_INTERVAL"): Use(time_in_seconds),
     },
     ignore_extra_keys=True,
 )

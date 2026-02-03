@@ -61,9 +61,8 @@ class SbatchAdapter:
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
 
-    def poll_interval(self) -> float:
-        s = os.getenv("HPCC_POLL_INTERVAL") or 30.0
-        return time_in_seconds(s)
+    def polling_interval(self) -> float:
+        return self.config.polling_interval or 5.0
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")
