@@ -20,7 +20,6 @@ from flux.job import JobspecV1  # type: ignore
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
-from hpc_connect.util import time_in_seconds
 
 from .discover import read_resource_info
 from .process import FluxProcess

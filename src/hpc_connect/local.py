@@ -25,7 +25,6 @@ from .launch import HPCLauncher
 from .mpi import MPIExecAdapter
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
-from .util.time import time_in_seconds
 
 logger = logging.getLogger("hpc_connect.subprocess.backend")
 

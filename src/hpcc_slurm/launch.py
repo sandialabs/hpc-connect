@@ -58,7 +58,7 @@ class SrunAdapter(LaunchAdapter):
                     next(iter_opts)
                 elif opt == "-np":
                     next(iter_opts)
-                elif opt.startswith("-n=", "-np="):
+                elif opt.startswith(("-n=", "-np=")):
                     continue
                 else:
                     fp.write(f" {self.expand(opt, **view)}")

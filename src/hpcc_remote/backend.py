@@ -8,7 +8,6 @@ import shutil
 
 import hpc_connect
 from hpc_connect.config import SubmitConfig
-from hpc_connect.util import time_in_seconds
 
 from .process import RemoteSubprocess
 
@@ -29,7 +28,8 @@ class RemoteBackend(hpc_connect.Backend):
         raise NotImplementedError
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter())
+        config = self.config.submit.resolve("remote_subprocess")
+        return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter(config=config))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         raise NotImplementedError
