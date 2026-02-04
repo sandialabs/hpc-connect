@@ -2,27 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
-from typing import TYPE_CHECKING
-from typing import Any
+import logging
 
-from hpc_connect.hookspec import hookimpl
+import hpc_connect
 
-from .discover import read_resource_info
-from .submit_hl import FluxSubmissionManager
-
-if TYPE_CHECKING:
-    from hpc_connect.submit import HPCSubmissionManager
+logger = logging.getLogger("hpc_connect.flux")
 
 
-@hookimpl
-def hpc_connect_submission_manager(config) -> "HPCSubmissionManager | None":
-    if FluxSubmissionManager.matches(config.get("submit:backend")):
-        return FluxSubmissionManager(config=config)
-    return None
-
-
-@hookimpl
-def hpc_connect_discover_resources() -> list[dict[str, Any]] | None:
-    if info := read_resource_info():
-        return [info]
+@hpc_connect.hookimpl
+def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
+    if config.backend == "flux":
+        try:
+            from .backend import FluxBackend
+        except (ImportError, ModuleNotFoundError) as e:
+            logger.error(
+                "Flux backed was requested, but the 'flux' Python package "
+                "is not installed or not importable",
+                exc_info=e,
+            )
+            return None
+        else:
+            return FluxBackend(config=config)
     return None

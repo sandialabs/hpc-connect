@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+import json
+data = {"nodes": {"node-1": {"pcpus": 8}}}
+print(json.dumps(data))

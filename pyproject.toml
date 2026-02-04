@@ -22,10 +22,8 @@ dev = ["ruff", "mypy", "pytest"]
 
 [project.entry-points."hpc_connect"]
 hpcc_flux = "hpcc_flux"
-hpcc_mpi = "hpcc_mpi"
 hpcc_pbs = "hpcc_pbs"
 hpcc_slurm = "hpcc_slurm"
-hpcc_subprocess = "hpcc_subprocess"
 hpcc_remote = "hpcc_remote"
 
 [tool.setuptools.dynamic]
@@ -63,7 +61,7 @@ select = ["F", "I"]
 "src/hpc_connect/__init__.py" = ["F401", "F403", "F405"]
 "src/hpcc_slurm/__init__.py" = ["F401", "F403", "F405"]
 "src/hpcc_flux/__init__.py" = ["F401", "F403", "F405"]
-"src/hpcc_flux/submit_hl.py" = ["F401", "F403", "F405"]
+"src/hpcc_flux/backend_hl.py" = ["F401", "F403", "F405"]
 "src/hpcc_subprocess/__init__.py" = ["F401", "F403", "F405"]
 "src/hpcc_mpi/__init__.py" = ["F401", "F403", "F405"]
 "src/hpc_connect/util/__init__.py" = ["F401"]

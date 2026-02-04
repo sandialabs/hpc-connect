@@ -12,6 +12,8 @@ from schema import Or
 from schema import Schema
 from schema import Use
 
+from .util.time import time_in_seconds
+
 logger = logging.getLogger("hpc_connect.schemas")
 
 
@@ -26,10 +28,6 @@ def flag_splitter(arg: list[str] | str) -> list[str]:
 def dict_str_str(arg: typing.Any) -> bool:
     f = isinstance
     return f(arg, dict) and all([f(_, str) for k, v in arg.items() for _ in (k, v)])
-
-
-def list_of_str(arg: typing.Any) -> bool:
-    return isinstance(arg, list) and all([isinstance(_, str) for _ in arg])
 
 
 class choose_from:
@@ -63,46 +61,10 @@ def load_mappings(arg: str) -> dict[str, str]:
     return mappings
 
 
-# Resource spec have the following form:
-# machine:
-#   resources:
-#   - type: node
-#     count: node_count
-#     resources:
-#     - type: socket
-#       count: sockets_per_node
-#       resources:
-#       - type: resource_name (like cpus)
-#         count: type_per_socket
-#         additional_properties:  (optional)
-#         - type: slots
-#           count: 1
-
-resource_spec = {
-    "type": "node",
-    "count": int,
-    Optional("additional_properties"): Or(dict, None),
-    "resources": [
-        {
-            "type": str,
-            "count": int,
-            Optional("additional_properties"): Or(dict, None),
-            Optional("resources"): [
-                {
-                    "type": str,
-                    "count": int,
-                    Optional("additional_properties"): Or(dict, None),
-                },
-            ],
-        },
-    ],
-}
-resource_schema = Schema({"resources": [resource_spec]})
-config_schema = Schema({Optional("debug"): bool, Optional("plugins"): list_of_str})
 launch_spec = {
+    Optional("exec"): str,
     Optional("numproc_flag"): str,
     Optional("default_options"): Use(flag_splitter),
-    Optional("local_options"): Use(flag_splitter),
     Optional("pre_options"): Use(flag_splitter),
     Optional("mappings"): dict_str_str,
 }
@@ -113,17 +75,31 @@ launch_schema = Schema(
         **launch_spec,
     }
 )
-machine_schema = Schema({"resources": Or([resource_spec], None)})
 submit_schema = Schema(
     {
-        Optional("backend"): Use(
-            choose_from(None, "shell", "slurm", "sbatch", "pbs", "qsub", "flux")
-        ),
         Optional("default_options"): Use(flag_splitter),
+        Optional("polling_interval"): Use(time_in_seconds),
         Optional(str): {
             Optional("default_options"): Use(flag_splitter),
         },
     },
+)
+mpmd_schema = Schema(
+    {
+        Optional("local_options"): Use(flag_splitter),
+        Optional("global_options"): Use(flag_splitter),
+    }
+)
+
+
+config_schema = Schema(
+    {
+        Optional("debug"): bool,
+        Optional("backend"): Or(str, None),  # type: ignore
+        Optional("submit"): submit_schema,
+        Optional("launch"): launch_schema,
+        Optional("mpmd"): mpmd_schema,
+    }
 )
 
 
@@ -138,7 +114,7 @@ class EnvarSchema(Schema):
                     section, _, field = name.partition("_")
                     final.setdefault(section, {})[field] = value
                 else:
-                    final.setdefault("config", {})[name] = value
+                    final[name] = value
             return final
         return data
 
@@ -146,17 +122,22 @@ class EnvarSchema(Schema):
 environment_variable_schema = EnvarSchema(
     {
         Optional("HPC_CONNECT_DEBUG"): Use(boolean),
-        Optional("HPC_CONNECT_PLUGINS"): Use(
-            lambda x: [_.strip() for _ in x.split(",") if _.split()]
-        ),
+        Optional("HPC_CONNECT_BACKEND"): Use(str),
         Optional("HPC_CONNECT_LAUNCH_EXEC"): Use(which),
         Optional("HPC_CONNECT_LAUNCH_NUMPROC_FLAG"): Use(str),
         Optional("HPC_CONNECT_LAUNCH_DEFAULT_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_LAUNCH_LOCAL_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_LAUNCH_PRE_OPTIONS"): Use(flag_splitter),
         Optional("HPC_CONNECT_LAUNCH_MAPPINGS"): Use(load_mappings),
-        Optional("HPC_CONNECT_SUBMIT_BACKEND"): Use(str),
         Optional("HPC_CONNECT_SUBMIT_DEFAULT_OPTIONS"): Use(flag_splitter),
+        Optional("HPC_CONNECT_SUBMIT_POLLING_INTERVAL"): Use(time_in_seconds),
     },
     ignore_extra_keys=True,
 )
+
+
+resource_node = {
+    "type": str,
+    "count": int,
+    Optional("additional_properties"): Or(dict, None),  # type: ignore
+    Optional("resources"): [Use(lambda x: x)],  # recursive schema
+}
+resource_schema = Schema({"resources": [resource_node]})

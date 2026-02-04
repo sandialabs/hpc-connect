@@ -2,51 +2,47 @@
 #
 # SPDX-License-Identifier: MIT
 
-import io
 import os
 import tempfile
-from contextlib import contextmanager
+from pathlib import Path
 
-import hpcc_slurm.submit
+import hpc_connect
+import hpcc_slurm.backend
+import hpcc_slurm.process
 
 
-@contextmanager
-def tmp_environ():
-    save_env = os.environ.copy()
+def test_basic(tmpdir):
+
+    workspace = Path(tmpdir.strpath)
+    workspace.mkdir(parents=True, exist_ok=True)
+    cwd = Path.cwd()
     try:
-        os.environ["SLURM_NTASKS_PER_NODE"] = "10"
-        os.environ["SLURM_NNODES"] = "1"
-        os.environ["SLURM_GPUS"] = "0"
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(save_env)
-
-
-def test_basic():
-    backend = hpcc_slurm.submit.SlurmSubmissionManager()
-    with io.StringIO() as fh:
-        backend.write_submission_script(
+        os.chdir(workspace)
+        backend = hpcc_slurm.backend.SlurmBackend()
+        spec = hpc_connect.JobSpec(
             "my-job",
             ["ls"],
-            fh,
             cpus=1,
             nodes=1,
             output="my-out.txt",
             error="my-err.txt",
-            qtime=1.0,
-            variables={"MY_VAR": "SPAM"},
+            workspace=workspace,
+            time_limit=1.0,
+            env={"MY_VAR": "SPAM"},
         )
-        text = fh.getvalue()
-    assert "#!/bin/sh" in text
-    assert "#SBATCH --nodes=1" in text
-    assert "#SBATCH --time=00:00:01" in text
-    assert "#SBATCH --job-name=my-job" in text
-    assert "#SBATCH --error=my-err.txt" in text
-    assert "#SBATCH --output=my-out.txt" in text
-    assert 'export MY_VAR="SPAM"' in text
-    assert "printenv || true" in text
-    assert "ls" in text
+        backend.submission_manager().adapter.submit(spec)
+        text = (workspace / "my-job.sh").read_text()
+        print(text)
+        assert "#!/bin/sh" in text
+        assert "#SBATCH --nodes=1" in text
+        assert "#SBATCH --time=00:00:01" in text
+        assert "#SBATCH --job-name=my-job" in text
+        assert "#SBATCH --error=my-err.txt" in text
+        assert "#SBATCH --output=my-out.txt" in text
+        assert 'export MY_VAR="SPAM"' in text
+        assert "ls" in text
+    finally:
+        os.chdir(cwd)
 
 
 def test_parse_script_args():
@@ -63,5 +59,5 @@ export MY_VAR=SPAM
 printenv || true
 ls""")
         fh.seek(0)
-        ns = hpcc_slurm.submit.SlurmProcess.parse_script_args(fh.name)
+        ns = hpcc_slurm.process.SlurmProcess.parse_script_args(fh.name)
         assert ns.clusters == "flight,eclipse"

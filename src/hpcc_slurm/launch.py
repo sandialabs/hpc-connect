@@ -1,82 +1,84 @@
 import io
 import os
 import shutil
+from typing import Any
 
-from hpc_connect.config import Config
-from hpc_connect.launch import HPCLauncher
-from hpc_connect.launch import LaunchSpecs
-
-from .submit import read_sinfo
+from hpc_connect.launch import LaunchAdapter
+from hpc_connect.launch import LaunchSpec
 
 
-class SrunLauncher(HPCLauncher):
-    def __init__(self, config: Config | None = None) -> None:
-        super().__init__(config=config)
-        if not self.exec.endswith("srun"):
-            raise ValueError("SrunLauncher: expected exec = srun")
-        if self.config.get("machine:resources") is None:
-            if sinfo := read_sinfo():
-                self.config.set("machine:resources", [sinfo])
-
-    @staticmethod
-    def matches(arg: str) -> bool:
-        return os.path.basename(arg) == "srun"
-
-    def join_specs(
-        self,
-        launchspecs: "LaunchSpecs",
-        local_options: list[str] | None = None,
-        global_options: list[str] | None = None,
-        pre_options: list[str] | None = None,
-    ) -> list[str]:
+class SrunAdapter(LaunchAdapter):
+    def join_specs(self, specs: list["LaunchSpec"]) -> list[str]:
         """Count the total number of processes and write a srun.conf file to
         split the jobs across ranks
 
         """
-        if len(launchspecs) <= 1:
-            return super().join_specs(
-                launchspecs, local_options=local_options, global_options=global_options
-            )
+        assert os.path.basename(self.config.exec) == "srun"
+        exec = shutil.which(self.config.exec)
+        if exec is None:
+            raise ValueError(f"{self.config.exec}: executable not found on PATH")
+        if len(specs) > 1:
+            return self._join_mpmd(exec, specs)
+        return self._join_spmd(exec, specs[0])
 
-        local_options = list(local_options or [])
-        local_options.extend(self.config.get("launch:local_options"))
-        global_options = list(global_options or [])
-        global_options.extend(self.config.get("launch:default_options"))
-        pre_options = list(pre_options or [])
-        pre_options.extend(self.config.get("launch:pre_options"))
+    def _join_spmd(self, exec: str, spec: LaunchSpec) -> list[str]:
+        argv = [os.fsdecode(exec)]
+        view = self.backend.resource_view(ranks=spec.processes)
+        for opt in self.config.default_options:
+            argv.append(self.expand(opt, **view))
+        launch_opts, program_opts = spec.partition()
+        for opt in launch_opts:
+            argv.append(self.expand(opt, **view))
+        for opt in self.config.pre_options:
+            argv.append(self.expand(opt, **view))
+        for opt in program_opts:
+            argv.append(self.expand(opt, **view))
+        return argv
 
+    def _join_mpmd(self, exec: str, specs: list["LaunchSpec"]) -> list[str]:
         np: int = 0
         fp = io.StringIO()
-        for p, spec in launchspecs:
+        for spec in specs:
             ranks: str
-            if p is not None:
+            p = spec.processes
+            if p:
                 ranks = f"{np}-{np + p - 1}"
                 np += p
             else:
                 ranks = str(np)
                 np += 1
-            i = self.argp(spec)
+            launch_opts, program_opts = spec.partition()
             fp.write(ranks)
-            for opt in local_options:
-                fp.write(f" {self.expand(opt, np=np)}")
-            for opt in pre_options:
-                fp.write(f" {self.expand(opt, np=np)}")
-            for arg in spec[i:]:
-                fp.write(f" {self.expand(arg, np=p)}")
+            view = self.backend.resource_view(ranks=p)
+            for opt in self.config.mpmd.local_options:
+                fp.write(f" {self.expand(opt, **view)}")
+            iter_opts = iter(launch_opts)
+            for opt in iter_opts:
+                if opt == "-n":
+                    next(iter_opts)
+                elif opt == "-np":
+                    next(iter_opts)
+                elif opt.startswith(("-n=", "-np=")):
+                    continue
+                else:
+                    fp.write(f" {self.expand(opt, **view)}")
+            for opt in self.config.pre_options:
+                fp.write(f" {self.expand(opt, **view)}")
+            for opt in program_opts:
+                fp.write(f" {self.expand(opt, **view)}")
             fp.write("\n")
         file = "launch-multi-prog.conf"
         with open(file, "w") as fh:
             fh.write(fp.getvalue())
-        cmd = [os.fsdecode(self.exec)]
-        required_resources = self.config.compute_required_resources(ranks=np)
-        for opt in global_options:
-            cmd.append(self.expand(opt, **required_resources))
+        cmd = [os.fsdecode(exec)]
+        view = self.backend.resource_view(ranks=np)
+        for opt in self.config.mpmd.global_options:
+            cmd.append(self.expand(opt, **view))
+        for opt in self.config.default_options:
+            cmd.append(self.expand(opt, **view))
         cmd.extend([f"-n{np}", "--multi-prog", file])
         return cmd
 
     @staticmethod
-    def argp(args: list[str]) -> int:
-        for i, arg in enumerate(args):
-            if shutil.which(arg):
-                return i
-        return -1
+    def expand(arg: str, **kwargs: Any) -> str:
+        return str(arg) % kwargs

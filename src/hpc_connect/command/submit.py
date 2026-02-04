@@ -6,7 +6,6 @@ import os
 import shlex
 
 from ..config import Config
-from ..submit import factory as submit_factory
 
 description = "Wrapper to submit tool, such as sbatch"
 add_help = False
@@ -33,8 +32,12 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
 
 
 def execute(config: Config, args: argparse.Namespace) -> None:
+    from .. import pluginmanager
+
+    raise NotImplementedError
     argv = list(args.extra_args)
-    manager = submit_factory(config=config)
+    backend = pluginmanager.get_backend(config=config)
+    manager = backend.submission_manager()
     cmd = manager.prepare_command_line(argv)
     if args.dryrun:
         print(shlex.join(cmd))

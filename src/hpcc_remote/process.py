@@ -2,21 +2,19 @@
 #
 # SPDX-License-Identifier: MIT
 
-import importlib.resources
 import logging
 import os
 import shutil
 import subprocess
+import time
 import weakref
-from typing import Any
 from typing import TextIO
 
 import psutil
 
 import hpc_connect
-from hpc_connect.util import time_in_seconds
 
-logger = logging.getLogger("hpc_connect.remote.submit")
+logger = logging.getLogger("hpc_connect.remote.process")
 
 
 def streamify(arg: str | None) -> TextIO | None:
@@ -50,6 +48,8 @@ class RemoteSubprocess(hpc_connect.HPCProcess):
         if hasattr(stderr, "write"):
             weakref.finalize(stderr, stderr.close)  # type: ignore
         self.proc = subprocess.Popen([ssh, host, script], stdout=stdout, stderr=stderr)
+        self.submitted = self.started = time.time()
+        self.jobid = str(self.proc.pid)
 
     @property
     def returncode(self) -> int | None:
@@ -82,61 +82,3 @@ class RemoteSubprocess(hpc_connect.HPCProcess):
                 p.kill()
             except Exception:  # nosec B110
                 pass
-
-
-class RemoteSubprocessSubmissionManager(hpc_connect.HPCSubmissionManager):
-    name = "remote_subprocess"
-
-    def __init__(self, config: hpc_connect.Config | None = None):
-        super().__init__(config=config)
-        ssh = shutil.which("ssh")
-        if ssh is None:
-            raise ValueError("ssh not found on PATH")
-
-    @staticmethod
-    def matches(name) -> bool:
-        return name in ("remote_subprocess", "ssh")
-
-    @property
-    def polling_frequency(self) -> float:
-        s = os.getenv("HPCC_POLLING_FREQUENCY") or 0.5
-        return time_in_seconds(s)
-
-    def submit(
-        self,
-        name: str,
-        args: list[str],
-        scriptname: str | None = None,
-        qtime: float | None = None,
-        submit_flags: list[str] | None = None,
-        variables: dict[str, str | None] | None = None,
-        output: str | None = None,
-        error: str | None = None,
-        nodes: int | None = None,
-        cpus: int | None = None,
-        gpus: int | None = None,
-        **kwargs: Any,
-    ) -> hpc_connect.HPCProcess:
-        host = kwargs.get("host")
-        if host is None:
-            raise ValueError("missing required kwarg 'host'")
-        cpus = cpus or kwargs.get("tasks")  # backward compatible
-        script = self.write_submission_script(
-            name,
-            args,
-            scriptname,
-            qtime=qtime,
-            submit_flags=submit_flags,
-            variables=variables,
-            output=output,
-            error=error,
-            nodes=nodes,
-            cpus=cpus,
-            gpus=gpus,
-        )
-        assert script is not None
-        return RemoteSubprocess(host, script, output=output, error=error)
-
-    @property
-    def submission_template(self) -> str:
-        return str(importlib.resources.files("hpcc_remote").joinpath("templates/submit.sh.in"))

@@ -2,146 +2,77 @@
 #
 # SPDX-License-Identifier: MIT
 import logging
-import os
 import shlex
 import shutil
 import subprocess
 from typing import Any
-from typing import Generator
 from typing import Sequence
 
-from .config import Config
+from .backend import Backend
+from .config import LaunchConfig
 
 logger = logging.getLogger("hpc_connect.launch")
 
 
 class HPCLauncher:
-    def __init__(self, config: Config | None = None) -> None:
-        self.config = config or Config()
+    def __init__(self, adapter: "LaunchAdapter") -> None:
+        self.adapter = adapter
 
     def __call__(
         self, args: list[str], echo: bool = False, **kwargs: Any
     ) -> subprocess.CompletedProcess:
-        cmd = self.prepare_command_line(args)
-        if echo:
-            logger.log(100, f"Command line: {shlex.join(cmd)}")
-        return subprocess.run(cmd, **kwargs)
+        return self.submit(args, echo=echo, **kwargs)
 
-    @staticmethod
-    def matches(arg: str) -> bool:
+    def submit(
+        self, args: list[str], echo: bool = False, **kwargs: Any
+    ) -> subprocess.CompletedProcess:
+        argv = self.adapter.build_argv(args)
+        if echo:
+            print(f"Command line: {shlex.join(argv)}")
+        return subprocess.run(argv, **kwargs)
+
+
+class LaunchAdapter:
+    name: str
+
+    def __init__(self, *, config: "LaunchConfig", backend: "Backend") -> None:
+        self.config = config
+        self.backend = backend
+
+    def build_argv(self, args: list[str]) -> list[str]:
+        specs = self.parse(args)
+        return self.join_specs(specs)
+
+    def join_specs(self, specs: list["LaunchSpec"]) -> list[str]:
         raise NotImplementedError
 
-    def get_from_config(self, key: str, default: Any | None = None) -> Any:
-        myexec = self.exec
-        if value := self.config.get(f"launch:{myexec}:{key}"):
-            return value
-        elif value := self.config.get(f"launch:{os.path.basename(myexec)}:{key}"):
-            return value
-        else:
-            value = self.config.get(f"launch:{key}")
-            return default if value is None else value
-
-    def set_config_var(self, key: str, value: Any, scope: str | None = None) -> None:
-        myexec = self.exec
-        self.config.set(f"launch:{os.path.basename(myexec)}:{key}", value, scope=scope)
-
-    @property
-    def exec(self) -> str:
-        return self.config.get("launch:exec")
-
-    @property
-    def mappings(self) -> dict[str, str]:
-        return self.get_from_config("mappings") or {}
-
-    @property
-    def numproc_flag(self) -> str:
-        return self.get_from_config("numproc_flag", default="-n")
-
-    @property
-    def local_options(self) -> list[str]:
-        return self.get_from_config("local_options") or []
-
-    @property
-    def global_options(self) -> list[str]:
-        return self.get_from_config("default_options") or []
-
-    @property
-    def pre_options(self) -> list[str]:
-        return self.get_from_config("pre_options") or []
-
-    def prepare_command_line(self, args: list[str]) -> list[str]:
-        parser = ArgumentParser(mappings=self.mappings, numproc_flag=self.numproc_flag)
-        launchspecs = parser.parse_args(args)
-        return self.join_specs(launchspecs)
-
-    def join_specs(
-        self,
-        launchspecs: "LaunchSpecs",
-        local_options: list[str] | None = None,
-        global_options: list[str] | None = None,
-        pre_options: list[str] | None = None,
-    ) -> list[str]:
-        local_options = list(local_options or [])
-        local_options.extend(self.local_options)
-        global_options = list(global_options or [])
-        global_options.extend(self.global_options)
-        pre_options = list(pre_options or [])
-        pre_options.extend(self.pre_options)
-
-        cmd = [os.fsdecode(self.exec)]
-        np = sum(p for p in launchspecs.processes if p)
-        required_resources = self.config.compute_required_resources(ranks=np)
-        for opt in global_options:
-            cmd.append(self.expand(opt, **required_resources))
-        for p, spec in launchspecs:
-            for opt in local_options:
-                cmd.append(self.expand(opt, np=p))
-            i = argp(spec)
-            if i == -1:
-                launch_opts, program_opts = [], spec
-            else:
-                launch_opts, program_opts = spec[:i], spec[i:]
-            for opt in launch_opts:
-                cmd.append(self.expand(opt, np=p))
-            for opt in pre_options:
-                cmd.append(self.expand(opt, np=p))
-            for opt in program_opts:
-                cmd.append(self.expand(opt, np=p))
-            cmd.append(":")
-        if cmd[-1] == ":":
-            cmd.pop()
-        return cmd
-
-    @staticmethod
-    def expand(arg: str, **kwargs: Any) -> str:
-        return str(arg) % kwargs
+    def parse(self, args: list[str]) -> list["LaunchSpec"]:
+        parser = ArgumentParser(
+            mappings=self.config.mappings, numproc_flag=self.config.numproc_flag or "-n"
+        )
+        return parser.parse_args(args)
 
 
-class LaunchSpecs:
-    def __init__(self) -> None:
-        self.specs: list[list[str]] = []
-        self.processes: list[int | None] = []
-
-    def __len__(self) -> int:
-        return len(self.specs)
+class LaunchSpec:
+    def __init__(self, args: list[str], processes: int | None = None) -> None:
+        self.args = list(args)
+        self.processes = processes
 
     def __repr__(self) -> str:
-        s = " : ".join(shlex.join(_) for _ in self.specs)
-        return f"LaunchSpecs({s})"
+        return f"LaunchSpec({shlex.join(self.args)})"
 
-    def __iter__(self) -> Generator[tuple[int | None, list[str]], None, None]:
-        for i, spec in enumerate(self.specs):
-            yield self.processes[i], spec
-
-    def add(self, spec: list[str], processes: int | None) -> None:
-        self.specs.append(list(spec))
-        self.processes.append(processes)
+    def partition(self) -> tuple[list[str], list[str]]:
+        i = argp(self.args)
+        if i == -1:
+            return [], list(self.args)
+        else:
+            return self.args[:i], self.args[i:]
 
 
 class ArgumentParser:
-    def __init__(self, *, mappings: dict[str, str] | None, numproc_flag: str = "-n") -> None:
+    def __init__(self, *, mappings: dict[str, str] | None, numproc_flag: str | None = None) -> None:
         self.mappings: dict[str, str] = mappings or {}
-        self.numproc_flag = numproc_flag
+        self.numproc_flag: str = numproc_flag or "-n"
         if "-n" not in self.mappings:
             # always map -n to numproc_flag
             self.mappings["-n"] = self.numproc_flag
@@ -155,9 +86,9 @@ class ArgumentParser:
                 return arg.replace(pat, repl)
         return None
 
-    def parse_args(self, args: Sequence[str]) -> LaunchSpecs:
+    def parse_args(self, args: Sequence[str]) -> list[LaunchSpec]:
         """Inspect arguments to launch to infer number of processors requested"""
-        launchspecs = LaunchSpecs()
+        launchspecs: list[LaunchSpec] = []
         spec: list[str] = []
         processes: int | None = None
         command_seen: bool = False
@@ -189,14 +120,14 @@ class ArgumentParser:
                     spec.append(arg)
             elif arg == ":":
                 # MPMD: end of this segment
-                launchspecs.add(spec, processes)
-                spec.clear()
+                launchspecs.append(LaunchSpec(spec, processes))
+                spec = []
                 command_seen, processes = False, None
             else:
                 spec.append(arg)
 
         if spec:
-            launchspecs.add(spec, processes)
+            launchspecs.append(LaunchSpec(spec, processes))
 
         return launchspecs
 
@@ -208,15 +139,10 @@ def argp(args: list[str]) -> int:
     return -1
 
 
-def factory(config: Config | None = None) -> "HPCLauncher":
-    config = config or Config()
-    launcher = config.pluginmanager.hook.hpc_connect_launcher(config=config)
-    if launcher is None:
-        exec = config.get("launch:exec")
-        raise ValueError(f"No matching launcher manager for {exec!r}")
-    return launcher
-
-
 def launch(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    launcher = factory()
-    return launcher(args, **kwargs)
+    from . import pluginmanager
+    from .config import Config
+
+    config = Config.from_defaults()
+    launcher = pluginmanager.get_launcher(config=config)
+    return launcher.submit(args, **kwargs)

@@ -2,37 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-from typing import TYPE_CHECKING
-from typing import Any
+import hpc_connect
 
-from hpc_connect.hookspec import hookimpl
-
-from .discover import read_sinfo
-from .launch import SrunLauncher
-from .submit import SlurmSubmissionManager
-
-if TYPE_CHECKING:
-    from hpc_connect.config import Config
-    from hpc_connect.launch import HPCLauncher
-    from hpc_connect.submit import HPCSubmissionManager
+from .backend import SlurmBackend
 
 
-@hookimpl
-def hpc_connect_submission_manager(config: "Config") -> "HPCSubmissionManager | None":
-    if SlurmSubmissionManager.matches(config.get("submit:backend")):
-        return SlurmSubmissionManager(config=config)
-    return None
-
-
-@hookimpl
-def hpc_connect_launcher(config: "Config") -> "HPCLauncher | None":
-    if SrunLauncher.matches(config.get("launch:exec")):
-        return SrunLauncher(config=config)
-    return None
-
-
-@hookimpl
-def hpc_connect_discover_resources() -> list[dict[str, Any]] | None:
-    if info := read_sinfo():
-        return [info]
+@hpc_connect.hookimpl
+def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
+    if config.backend in ("sbatch", "slurm"):
+        return SlurmBackend(config=config)
     return None

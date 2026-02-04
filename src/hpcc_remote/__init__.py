@@ -1,15 +1,13 @@
-from typing import TYPE_CHECKING
+# Copyright NTESS. See COPYRIGHT file for details.
+#
+# SPDX-License-Identifier: MIT
+import hpc_connect
 
-from hpc_connect.hookspec import hookimpl
-
-from .submit import RemoteSubprocessSubmissionManager
-
-if TYPE_CHECKING:
-    from hpc_connect.submit import HPCSubmissionManager
+from .backend import RemoteBackend
 
 
-@hookimpl
-def hpc_connect_submission_manager(config) -> "HPCSubmissionManager | None":
-    if RemoteSubprocessSubmissionManager.matches(config.get("submit:backend")):
-        return RemoteSubprocessSubmissionManager(config=config)
+@hpc_connect.hookimpl
+def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
+    if config.backend == "remote_subprocess":
+        return RemoteBackend(config=config)
     return None

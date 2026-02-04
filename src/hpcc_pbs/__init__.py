@@ -2,27 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
-from typing import TYPE_CHECKING
-from typing import Any
+import hpc_connect
 
-from hpc_connect.hookspec import hookimpl
-
-from .discover import read_pbsnodes
-from .submit import PBSSubmissionManager
-
-if TYPE_CHECKING:
-    from hpc_connect.submit import HPCSubmissionManager
+from .backend import PBSBackend
 
 
-@hookimpl
-def hpc_connect_submission_manager(config) -> "HPCSubmissionManager | None":
-    if PBSSubmissionManager.matches(config.get("submit:backend")):
-        return PBSSubmissionManager(config=config)
-    return None
-
-
-@hookimpl
-def hpc_connect_discover_resources() -> list[dict[str, Any]] | None:
-    if info := read_pbsnodes():
-        return info
+@hpc_connect.hookimpl
+def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
+    if config.backend in ("qsub", "pbs"):
+        return PBSBackend(config=config)
     return None
