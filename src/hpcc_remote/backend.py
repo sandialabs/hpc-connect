@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import logging
-import os
 import shutil
 
 import hpc_connect
 from hpc_connect.config import SubmitConfig
+from hpc_connect.util import set_executable
 
 from .process import RemoteSubprocess
 
@@ -57,7 +57,7 @@ class RemoteAdapter:
                     fh.write(f'export {var}="{val}"\n')
             for command in spec.commands:
                 fh.write(f"{command}\n")
-        os.chmod(script, 0o755)
+        set_executable(script)
         return spec.with_updates(commands=[script])
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> hpc_connect.HPCProcess:
