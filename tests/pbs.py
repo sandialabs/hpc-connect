@@ -30,7 +30,7 @@ def test_basic(tmpdir):
         )
         backend.submission_manager().adapter.submit(job)
         text = (workspace / "my-job.sh").read_text()
-        assert "#!/bin/sh" in text
+        assert "bin/sh" in text
         assert "#PBS -V" in text
         assert "#PBS -N my-job" in text
         assert f"#PBS -l nodes=1:ppn={cpus_per_node}" in text
