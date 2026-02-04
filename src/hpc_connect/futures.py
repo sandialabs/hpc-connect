@@ -37,7 +37,7 @@ class Future:
                 for cb in callbacks:
                     try:
                         cb(self)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
             if self._jobid_callbacks and self.proc.jobid != "unset":
                 with self._lock:
@@ -46,7 +46,7 @@ class Future:
                 for cb in callbacks:
                     try:
                         cb(self)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
             rc = self.proc.poll()
             if rc is not None:
@@ -57,7 +57,7 @@ class Future:
                 for cb in callbacks:
                     try:
                         cb(self)
-                    except Exception:
+                    except Exception:  # nosec B110
                         pass
                 return
             if self._cancelled:
@@ -77,14 +77,14 @@ class Future:
             self._cancelled = True
             try:
                 self.proc.cancel()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
             self._done.set()
             # callbacks still fire
             for cb in self._done_callbacks:
                 try:
                     cb(self)
-                except Exception:
+                except Exception:  # nosec B110
                     pass
             return True
 
@@ -101,7 +101,7 @@ class Future:
             if self.done():
                 try:
                     fn(self)
-                except Exception:
+                except Exception:  # nosec B110
                     pass
 
     def add_jobstart_callback(self, fn: Callable[["Future"], None]):

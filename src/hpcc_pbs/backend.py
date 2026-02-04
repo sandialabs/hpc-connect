@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 import logging
-import os
 import shutil
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.util import set_executable
 from hpc_connect.util.time import hhmmss
 
 from .discover import read_pbsnodes
@@ -90,7 +90,7 @@ class QsubAdapter:
                     fh.write(f'export {var}="{val}"\n')
             for command in spec.commands:
                 fh.write(f"{command}\n")
-        os.chmod(script, 0o755)
+        set_executable(script)
         return spec.with_updates(commands=[str(script)])
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> hpc_connect.HPCProcess:

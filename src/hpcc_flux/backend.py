@@ -20,6 +20,7 @@ from flux.job import JobspecV1  # type: ignore
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.util import set_executable
 
 from .discover import read_resource_info
 from .process import FluxProcess
@@ -100,7 +101,7 @@ class FluxAdapter:
                     fh.write(f'export {var}="{val}"\n')
             for command in spec.commands:
                 fh.write(f"{command}\n")
-        os.chmod(script, 0o755)
+        set_executable(script)
         kwds: dict[str, Any] = {"command": [str(script)], "exclusive": exclusive}
         kwds.update(alloc)
         jobspec = JobspecV1.from_nest_command(**kwds)

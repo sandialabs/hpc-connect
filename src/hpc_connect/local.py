@@ -25,6 +25,7 @@ from .launch import HPCLauncher
 from .mpi import MPIExecAdapter
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
+from .util import set_executable
 
 logger = logging.getLogger("hpc_connect.subprocess.backend")
 
@@ -87,7 +88,7 @@ class SubprocessAdapter:
                     fh.write(f'export {var}="{val}"\n')
             for command in spec.commands:
                 fh.write(f"{command}\n")
-        os.chmod(script, 0o755)
+        set_executable(script)
         return spec.with_updates(commands=[f"{sh} {script}"])
 
     def submit(self, spec: JobSpec, exclusive: bool = True) -> "Subprocess":

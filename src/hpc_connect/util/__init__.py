@@ -7,6 +7,7 @@ import json.decoder
 import os
 import re
 import stat
+from pathlib import Path
 from typing import Any
 from typing import Callable
 
@@ -28,7 +29,7 @@ __all__ = [
 ]
 
 
-def set_executable(path: str) -> None:
+def set_executable(path: str | Path) -> None:
     """Set executable bits on ``path``"""
     mode = os.stat(path).st_mode
     if mode & stat.S_IRUSR:
