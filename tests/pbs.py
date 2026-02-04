@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 import hpcc_pbs.backend
 from hpc_connect import JobSpec

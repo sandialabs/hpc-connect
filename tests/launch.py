@@ -1,7 +1,7 @@
 import os
 import shlex
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 import yaml
 
