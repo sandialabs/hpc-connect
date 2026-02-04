@@ -12,7 +12,6 @@ import hpcc_slurm.process
 
 
 def test_basic(tmpdir):
-
     workspace = Path(tmpdir.strpath)
     workspace.mkdir(parents=True, exist_ok=True)
     cwd = Path.cwd()

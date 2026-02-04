@@ -8,8 +8,8 @@ import os
 import hpcc_pbs.backend
 from hpc_connect import JobSpec
 
-def test_basic(tmpdir):
 
+def test_basic(tmpdir):
     workspace = Path(tmpdir.strpath)
     workspace.mkdir(parents=True, exist_ok=True)
     cwd = Path.cwd()
@@ -26,7 +26,7 @@ def test_basic(tmpdir):
             error="my-err.txt",
             workspace=Path.cwd(),
             time_limit=1.0,
-            env={"MY_VAR": "SPAM"}
+            env={"MY_VAR": "SPAM"},
         )
         backend.submission_manager().adapter.submit(job)
         text = (workspace / "my-job.sh").read_text()
