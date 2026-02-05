@@ -1,7 +1,7 @@
 import os
 import shlex
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 import yaml
 
@@ -46,7 +46,7 @@ def test_envar_config(capfd):
     env = {
         "HPC_CONNECT_BACKEND": "slurm",
         "HPC_CONNECT_LAUNCH_EXEC": "srun",
-        "HPC_CONNECT_LAUNCH_NUMPROC_FLAG": "-np"
+        "HPC_CONNECT_LAUNCH_NUMPROC_FLAG": "-np",
     }
     with envmods(**env):
         launch(["-n", "4", "-flag", "file", "executable", "--option"], files=False)
@@ -75,7 +75,7 @@ def test_file_config(tmpdir, capfd):
                     {
                         "hpc_connect": {
                             "backend": "slurm",
-                            "launch": {"exec": "srun", "numproc_flag": "-np"}
+                            "launch": {"exec": "srun", "numproc_flag": "-np"},
                         }
                     },
                     fh,
@@ -94,7 +94,7 @@ def test_file_config(tmpdir, capfd):
                                 "exec": "mpiexec",
                                 "numproc_flag": "-np",
                                 "default_options": "--map-by ppr:%(np)d:cores",
-                            }
+                            },
                         }
                     },
                     fh,
@@ -115,7 +115,7 @@ def test_file_config(tmpdir, capfd):
                                 "exec": "mpiexec",
                                 "numproc_flag": "-np",
                                 "mappings": {"-flag": "-xflag"},
-                            }
+                            },
                         }
                     },
                     fh,

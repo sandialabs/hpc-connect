@@ -9,7 +9,6 @@ import multiprocessing.synchronize
 import os
 import shutil
 import time
-from datetime import timedelta
 from typing import Any
 
 import flux  # type: ignore
@@ -74,26 +73,26 @@ class FluxAdapter:
         return FluxProcess(spec.name, future=fut)
 
     def prepare(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> Jobspec:
-        duration = timedelta(seconds=time_limit_in_seconds(spec.time_limit, pad=60))
+        duration = int(spec.time_limit + 60)
         sh = shutil.which("sh")
         script = spec.workspace / f"{spec.name}.sh"
         script.parent.mkdir(exist_ok=True)
         alloc = self.get_alloc_settings(spec.cpus, spec.gpus, spec.nodes)
         with open(script, "w") as fh:
             fh.write(f"#!{sh}\n")
-            fh.write(f"#FLUX --nodes={spec.nodes}\n")
-            fh.write(f"#FLUX --nslots={alloc['num_slots']}\n")
-            fh.write(f"#FLUX --cores-per-slot={alloc['cores_per_slot']}\n")
-            fh.write(f"#FLUX --gpus-per-slot={alloc['gpus_per_slot']}\n")
-            fh.write(f"#FLUX: --time-limit={duration}")
+            fh.write(f"#flux: --nodes={spec.nodes}\n")
+            fh.write(f"#flux: --nslots={alloc['num_slots']}\n")
+            fh.write(f"#flux: --cores-per-slot={alloc['cores_per_slot']}\n")
+            fh.write(f"#flux: --gpus-per-slot={alloc['gpus_per_slot']}\n")
+            fh.write(f"#flux: --time-limit={duration}s\n")
             if spec.output:
-                fh.write(f"#FLUX --output={spec.output}\n")
+                fh.write(f"#flux: --output={spec.output}\n")
             if spec.error:
-                fh.write(f"#FLUX --error={spec.output}\n")
+                fh.write(f"#flux: --error={spec.output}\n")
             for arg in self.config.default_options:
-                fh.write(f"#FLUX {arg}\n")
+                fh.write(f"#flux: {arg}\n")
             for arg in spec.submit_args:
-                fh.write(f"#FLUX {arg}\n")
+                fh.write(f"#flux: {arg}\n")
             for var, val in spec.env.items():
                 if val is None:
                     fh.write(f"unset {var}\n")
@@ -156,11 +155,3 @@ class FluxAdapter:
                         logger.warning(f"{len(jobs)} active jobs remain after shutdown")
                 self.backend.flux.shutdown(wait=False, cancel_futures=True)
                 self.backend.flux = None
-
-
-def time_limit_in_seconds(qtime: float | None, pad: int = 0) -> int:
-    """Return the time limit in seconds. Guarenteed return value >= 1."""
-    limit = math.ceil(qtime or 1)
-    if pad > 0:
-        limit += pad
-    return limit

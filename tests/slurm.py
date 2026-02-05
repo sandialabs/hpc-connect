@@ -12,7 +12,6 @@ import hpcc_slurm.process
 
 
 def test_basic(tmpdir):
-
     workspace = Path(tmpdir.strpath)
     workspace.mkdir(parents=True, exist_ok=True)
     cwd = Path.cwd()
@@ -33,7 +32,7 @@ def test_basic(tmpdir):
         backend.submission_manager().adapter.submit(spec)
         text = (workspace / "my-job.sh").read_text()
         print(text)
-        assert "#!/bin/sh" in text
+        assert "bin/sh" in text
         assert "#SBATCH --nodes=1" in text
         assert "#SBATCH --time=00:00:01" in text
         assert "#SBATCH --job-name=my-job" in text

@@ -13,9 +13,7 @@ def test_config_launch_basic(tmpdir):
                     "exec": "my-mpiexec",
                     "default_options": ["-a", "-b"],
                     "mappings": {"-e": "-f"},
-                    "mpiexec": {
-                        "default_options": ["-c", "-d"]
-                    }
+                    "mpiexec": {"default_options": ["-c", "-d"]},
                 }
             }
         )
