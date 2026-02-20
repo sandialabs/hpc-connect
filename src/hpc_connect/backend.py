@@ -1,4 +1,5 @@
 import abc
+import io
 import logging
 import math
 from functools import cached_property
@@ -30,6 +31,17 @@ class Backend(abc.ABC):
 
     @abc.abstractmethod
     def launcher(self) -> "HPCLauncher": ...
+
+    def describe(self) -> str:
+        fp = io.StringIO()
+        fp.write(f"Name: {self.name}\n")
+        fp.write("Available resources:\n")
+        fp.write(f"  Nodes: {self.node_count}\n")
+        for rtype in self.resource_types():
+            if rtype == "node":
+                continue
+            fp.write(f"  {rtype}s per node: {self.count_per_node(rtype)}\n")
+        return fp.getvalue().strip()
 
     def supports_subscheduling(self) -> bool:
         return False
