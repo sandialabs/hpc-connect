@@ -15,12 +15,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("hpc_connect.backend")
 
+rtype_aliases: dict[str, list[str]] = {
+    "cpu": ["CPU", "CPUs", "CPUS", "cpus"],
+    "gpu": ["GPU", "GPUs", "GPUS", "gpus"],
+    "node": ["NODE", "NODES", "nodes"],
+    "socket": ["SOCKET", "SOCKETS", "sockets"],
+}
+
 
 class Backend(abc.ABC):
     name: str
 
     def __init__(self, config: Config | None = None) -> None:
         self.config = config or Config.from_defaults(overrides={"backend": self.name})
+        self.aliases: dict[str, str] = {
+            alias: canonical for canonical, aliases in rtype_aliases.items() for alias in aliases
+        }
+        self._resource_index: dict[str, list[tuple[dict, str | None]]] | None = None
 
     @property
     @abc.abstractmethod
@@ -47,38 +58,48 @@ class Backend(abc.ABC):
         return False
 
     def validate(self) -> None:
+        for rspec in self.resource_specs:
+            self._canonicalize_rspec(rspec)
         resource_schema.validate({"resources": self.resource_specs})
-        nodes = self._resource_index.get("node", [])
+        nodes = self.resource_index.get("node", [])
         if not nodes:
             raise ValueError("Backend must define node resources")
 
-    @cached_property
-    def _resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
+    @property
+    def resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
+        if self._resource_index is None:
+            self._resource_index = self.make_resource_index()
+        assert self._resource_index is not None
+        return self._resource_index
+
+    def make_resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
         """Map resource type -> list of (resource_spec, parent_type)"""
         index: dict[str, list[tuple[dict, str | None]]] = {}
         for rspec in self.resource_specs:
             for spec, parent in walk_resources(rspec):
+                spec["type"] = self.canonical_type_name(spec["type"])
                 index.setdefault(spec["type"], []).append((spec, parent))
         return index
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""
         types: set[str] = set()
-        for rtype, specs in self._resource_index.items():
+        for rtype, specs in self.resource_index.items():
             # leaf resources = those with no children
             if all("resources" not in spec or not spec["resources"] for spec, _ in specs):
                 types.add(rtype)
         return sorted(types)
 
-    def count_per_node(self, type: str, default: int | None = None) -> int:
+    def count_per_node(self, rtype: str, default: int | None = None) -> int:
         total = 0
         found = False
-        for spec, parent in self._resource_index.get(type, []):
+        rtype = self.canonical_type_name(rtype)
+        for spec, parent in self.resource_index.get(rtype, []):
             # Walk up until we hit node
             multiplier = spec["count"]
             p = parent
             while p and p != "node":
-                parents = self._resource_index.get(p, [])
+                parents = self.resource_index.get(p, [])
                 if not parents:
                     break
                 multiplier *= parents[0][0]["count"]
@@ -91,20 +112,21 @@ class Backend(abc.ABC):
         if default is not None:
             return default
         raise ValueError(
-            f"Unable to determine count_per_node for {type!r} from {self.resource_specs}"
+            f"Unable to determine count_per_node for {rtype!r} from {self.resource_specs}"
         ) from None
 
-    def count_per_socket(self, type: str, default: int | None = None) -> int:
-        for spec, parent in self._resource_index.get(type, []):
+    def count_per_socket(self, rtype: str, default: int | None = None) -> int:
+        rtype = self.canonical_type_name(rtype)
+        for spec, parent in self.resource_index.get(rtype, []):
             if parent == "socket":
                 return spec["count"]
         if default is not None:
             return default
-        raise ValueError(f"Unable to determine count_per_socket for {type!r}")
+        raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
 
     @cached_property
     def node_count(self) -> int:
-        nodes = self._resource_index.get("node", [])
+        nodes = self.resource_index.get("node", [])
         count = sum(spec["count"] for spec, _ in nodes)
         if count:
             return count
@@ -118,23 +140,34 @@ class Backend(abc.ABC):
         except ValueError:
             return 1
 
-    def nodes_required(self, **types: int) -> int:
+    def nodes_required(self, **rtypes: int) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""
         # backward compatible
-        if n := types.pop("max_cpus", None):
-            types["cpu"] = n
-        if n := types.pop("max_gpus", None):
-            types["gpu"] = n
+        if n := rtypes.pop("max_cpus", None):
+            rtypes["cpu"] = n
+        if n := rtypes.pop("max_gpus", None):
+            rtypes["gpu"] = n
+        rtypes = {self.canonical_type_name(k): v for k, v in rtypes.items()}
         nodes: int = 1
-        for type, count in types.items():
+        for rtype, count in rtypes.items():
             try:
-                per_node = self.count_per_node(type)
+                per_node = self.count_per_node(rtype)
             except ValueError:
                 continue
             if per_node > 0:
                 nodes = max(nodes, int(math.ceil(count / per_node)))
         return nodes
+
+    def _canonicalize_rspec(self, rspec: dict) -> None:
+        rspec["type"] = self.canonical_type_name(rspec["type"])
+        for child in rspec.get("resources", []) or []:
+            self._canonicalize_rspec(child)
+
+    def canonical_type_name(self, rtype: str) -> str:
+        if canonical := self.aliases.get(rtype):
+            return canonical
+        return rtype
 
     def resource_view(
         self, *, ranks: int | None = None, ranks_per_socket: int | None = None
@@ -163,7 +196,7 @@ class Backend(abc.ABC):
             # Raise an error since there is no reliable way of finding the number of
             # available nodes
             raise ValueError("ranks_per_socket requires ranks also be defined")
-        if "socket" not in self._resource_index:
+        if "socket" not in self.resource_index:
             raise ValueError("resource_view assumes socket-based topology")
 
         view: dict[str, int] = {
