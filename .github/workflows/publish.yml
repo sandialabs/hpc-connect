@@ -3,7 +3,7 @@ name: Publish to PYPI Pipeline
 on:
   push:
     tags:
-    - "release/*"
+    - 'release/*'
 
 env:
   ACTIONS_RUNNER_DEBUG: "true"
