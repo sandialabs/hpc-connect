@@ -16,3 +16,14 @@ def add_mock_path():
     yield
     os.environ.clear()
     os.environ.update(save_env)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_env():
+    save_env = os.environ.copy()
+    for key in list(os.environ.keys()):
+        if key.startswith("HPC_CONNECT_"):
+            os.environ.pop(key)
+    yield
+    os.environ.clear()
+    os.environ.update(save_env)

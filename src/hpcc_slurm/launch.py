@@ -13,10 +13,10 @@ class SrunAdapter(LaunchAdapter):
         split the jobs across ranks
 
         """
-        assert os.path.basename(self.config.exec) == "srun"
-        exec = shutil.which(self.config.exec)
+        name = self.config.get("exec") or "srun"
+        exec = shutil.which(name)
         if exec is None:
-            raise ValueError(f"{self.config.exec}: executable not found on PATH")
+            raise ValueError(f"{name}: executable not found on PATH")
         if len(specs) > 1:
             return self._join_mpmd(exec, specs)
         return self._join_spmd(exec, specs[0])
@@ -24,12 +24,12 @@ class SrunAdapter(LaunchAdapter):
     def _join_spmd(self, exec: str, spec: LaunchSpec) -> list[str]:
         argv = [os.fsdecode(exec)]
         view = self.backend.resource_view(ranks=spec.processes)
-        for opt in self.config.default_options:
+        for opt in self.config["default_options"]:
             argv.append(self.expand(opt, **view))
         launch_opts, program_opts = spec.partition()
         for opt in launch_opts:
             argv.append(self.expand(opt, **view))
-        for opt in self.config.pre_options:
+        for opt in self.config["pre_options"]:
             argv.append(self.expand(opt, **view))
         for opt in program_opts:
             argv.append(self.expand(opt, **view))
@@ -50,7 +50,7 @@ class SrunAdapter(LaunchAdapter):
             launch_opts, program_opts = spec.partition()
             fp.write(ranks)
             view = self.backend.resource_view(ranks=p)
-            for opt in self.config.mpmd.local_options:
+            for opt in self.config["mpmd"]["local_options"]:
                 fp.write(f" {self.expand(opt, **view)}")
             iter_opts = iter(launch_opts)
             for opt in iter_opts:
@@ -62,7 +62,7 @@ class SrunAdapter(LaunchAdapter):
                     continue
                 else:
                     fp.write(f" {self.expand(opt, **view)}")
-            for opt in self.config.pre_options:
+            for opt in self.config["pre_options"]:
                 fp.write(f" {self.expand(opt, **view)}")
             for opt in program_opts:
                 fp.write(f" {self.expand(opt, **view)}")
@@ -72,9 +72,9 @@ class SrunAdapter(LaunchAdapter):
             fh.write(fp.getvalue())
         cmd = [os.fsdecode(exec)]
         view = self.backend.resource_view(ranks=np)
-        for opt in self.config.mpmd.global_options:
+        for opt in self.config["mpmd"]["global_options"]:
             cmd.append(self.expand(opt, **view))
-        for opt in self.config.default_options:
+        for opt in self.config["default_options"]:
             cmd.append(self.expand(opt, **view))
         cmd.extend([f"-n{np}", "--multi-prog", file])
         return cmd

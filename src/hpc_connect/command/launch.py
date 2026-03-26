@@ -1,17 +1,20 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
-import argparse
 import os
 import shlex
+from typing import TYPE_CHECKING
 
-from ..config import Config
+if TYPE_CHECKING:
+    import argparse
+
+    from ..config import Config
 
 description = "Wrapper to launch tool, such as mpiexec or srun"
 add_help = False
 
 
-def setup_parser(parser: argparse.ArgumentParser) -> None:
+def setup_parser(parser: "argparse.ArgumentParser") -> None:
     parser.usage = "%(prog)s [-h] [--help] ..."
     parser.add_argument(
         "-h",
@@ -27,10 +30,10 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def execute(config: Config, args: argparse.Namespace) -> None:
-    from .. import pluginmanager
+def execute(config: "Config", args: "argparse.Namespace") -> None:
+    from .. import get_backend
 
-    backend = pluginmanager.get_backend(config=config)
+    backend = get_backend(config["backend"])
     launcher = backend.launcher()
     cmd = launcher.adapter.build_argv(list(args.extra_args))
     if args.dryrun:

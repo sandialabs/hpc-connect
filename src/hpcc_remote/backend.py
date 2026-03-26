@@ -4,9 +4,9 @@
 
 import logging
 import shutil
+from typing import Any
 
 import hpc_connect
-from hpc_connect.config import SubmitConfig
 from hpc_connect.util import set_executable
 
 from .process import RemoteSubprocess
@@ -17,30 +17,57 @@ logger = logging.getLogger("hpc_connect.remote.backend")
 class RemoteBackend(hpc_connect.Backend):
     name = "remote_subprocess"
 
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        super().__init__(config=config)
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         ssh = shutil.which("ssh")
         if ssh is None:
             raise ValueError("ssh not found on PATH")
+        super().__init__(cfg=cfg)
 
     @property
     def resource_specs(self) -> list[dict]:
         raise NotImplementedError
 
+    @property
+    def valid_launchers(self) -> set[str]:
+        return {"<none>"}
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return {
+            "config": {},
+            "type": cls.name,
+            "launch": {
+                "type": "<none>",
+                "exec": "<none>",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "pre_options": [],
+                "mpmd": {
+                    "global_options": [],
+                    "local_options": [],
+                },
+            },
+            "submit": {
+                "default_options": [],
+                "polling_interval": 0.5,
+            },
+        }
+
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        config = self.config.submit.resolve("remote_subprocess")
-        return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter(config=config))
+        return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter(config=self.config["submit"]))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         raise NotImplementedError
 
 
 class RemoteAdapter:
-    def __init__(self, config: SubmitConfig) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
 
     def polling_interval(self) -> float:
-        return self.config.polling_interval or 0.5
+        if self.config["polling_interval"] > 0:
+            return self.config["polling_interval"]
+        return 0.5
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")

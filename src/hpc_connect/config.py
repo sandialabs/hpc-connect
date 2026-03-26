@@ -2,10 +2,9 @@
 #
 # SPDX-License-Identifier: MIT
 import argparse
-import dataclasses
+import copy
 import logging
 import os
-import shutil
 import sys
 from typing import Any
 from typing import Literal
@@ -14,141 +13,37 @@ from typing import cast
 import yaml
 
 from .schemas import config_schema
-from .schemas import environment_variable_schema
 from .util import collections
 from .util import safe_loads
+from .util.serialize import deserialize
+from .util.serialize import serialize
 
 ConfigScopes = Literal["site", "global", "local"]
 
 
-@dataclasses.dataclass
-class MPMDConfig:
-    local_options: list[str] = dataclasses.field(default_factory=list)
-    global_options: list[str] = dataclasses.field(default_factory=list)
-
-
-@dataclasses.dataclass
-class LaunchConfig:
-    exec: str
-    numproc_flag: str
-    pre_options: list[str] = dataclasses.field(default_factory=list)
-    default_options: list[str] = dataclasses.field(default_factory=list)
-    mappings: dict[str, str] = dataclasses.field(default_factory=dict)
-    mpmd: MPMDConfig = dataclasses.field(default_factory=MPMDConfig)
-
-
-@dataclasses.dataclass
-class RawLaunchConfig:
-    exec: str = ""
-    numproc_flag: str = ""
-    pre_options: list[str] = dataclasses.field(default_factory=list)
-    default_options: list[str] = dataclasses.field(default_factory=list)
-    mappings: dict[str, str] = dataclasses.field(default_factory=dict)
-    overrides: dict[str, "LaunchConfig"] = dataclasses.field(default_factory=dict)
-    mpmd: MPMDConfig = dataclasses.field(default_factory=MPMDConfig)
-
-    def __post_init__(self) -> None:
-        if not self.exec:
-            self.exec = shutil.which("mpiexec") or "mpiexec"
-        if not self.numproc_flag:
-            self.numproc_flag = "-n"
-
-    def resolve(self, name: str) -> LaunchConfig:
-        if name not in self.overrides:
-            return LaunchConfig(
-                exec=self.exec,
-                numproc_flag=self.numproc_flag,
-                pre_options=self.pre_options,
-                default_options=self.default_options,
-                mappings=self.mappings,
-                mpmd=self.mpmd,
-            )
-        override = self.overrides[name]
-        return LaunchConfig(
-            exec=override.exec or self.exec,
-            numproc_flag=override.numproc_flag or self.numproc_flag,
-            pre_options=override.pre_options or self.pre_options,
-            default_options=override.default_options or self.default_options,
-            mappings=override.mappings or self.mappings,
-            mpmd=override.mpmd or self.mpmd,
-        )
-
-
-@dataclasses.dataclass
-class SubmitConfig:
-    default_options: list[str] = dataclasses.field(default_factory=list)
-    polling_interval: float = dataclasses.field(default=0.0)
-
-
-@dataclasses.dataclass
-class RawSubmitConfig:
-    default_options: list[str] = dataclasses.field(default_factory=list)
-    polling_interval: float = dataclasses.field(default=0.0)
-    overrides: dict[str, "SubmitConfig"] = dataclasses.field(default_factory=dict)
-
-    def resolve(self, name: str) -> SubmitConfig:
-        if name not in self.overrides:
-            return SubmitConfig(
-                default_options=self.default_options, polling_interval=self.polling_interval
-            )
-        override = self.overrides[name]
-        return SubmitConfig(
-            default_options=override.default_options or self.default_options,
-            polling_interval=override.polling_interval or self.polling_interval,
-        )
-
-
-@dataclasses.dataclass
 class Config:
-    debug: bool = False
-    backend: str = ""
-    submit: RawSubmitConfig = dataclasses.field(default_factory=RawSubmitConfig)
-    launch: RawLaunchConfig = dataclasses.field(default_factory=RawLaunchConfig)
-
-    def __post_init__(self) -> None:
-        if not self.backend:
-            self.backend = "local"
-        if self.debug:
-            logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
-
-    @classmethod
-    def from_defaults(
-        cls,
-        files: bool = True,
-        env: bool = True,
-        overrides: dict[str, Any] | None = None,
-    ) -> "Config":
-        data: dict[str, Any] = {}
-        if files:
+    def __init__(self, export: bool = False) -> None:
+        self.data: dict[str, Any]
+        if var := os.getenv("HPC_CONNECT_CFG64"):
+            self.data = self.validate(deserialize(var))
+        else:
+            data: dict[str, Any] = {}
             for name in ("site", "global", "local"):
                 scope = get_config_scope_data(cast(ConfigScopes, name))
-                data = collections.merge(data, scope)  # type: ignore
-        if env:
-            if env_scope := get_env_scope():
-                data = collections.merge(data, env_scope)  # type: ignore
-        if overrides:
-            config_schema.validate(overrides)
-            data = collections.merge(data, overrides)  # type: ignore
-        kwds: dict[str, Any] = {}
-        if fd := data.pop("launch", None):
-            fields = {f.name for f in dataclasses.fields(RawLaunchConfig)}
-            for key in list(fd.keys()):
-                if key not in fields:
-                    o = fd.pop(key)
-                    fd.setdefault("overrides", {}).update({key: RawLaunchConfig(**o)})
-            kwds["launch"] = RawLaunchConfig(**fd)
-        if fd := data.pop("submit", None):
-            fields = {f.name for f in dataclasses.fields(RawSubmitConfig)}
-            for key in list(fd.keys()):
-                if key not in fields:
-                    o = fd.pop(key)
-                    fd.setdefault("overrides", {}).update({key: RawSubmitConfig(**o)})
-            kwds["submit"] = RawSubmitConfig(**fd)
-        if fd := data.pop("mpmd", None):
-            kwds["mpmd"] = MPMDConfig(**fd)
-        kwds.update(data)
-        self = cls(**kwds)
-        return self
+                collections.merge(data, scope)  # type: ignore
+            self.data = self.validate(data)
+        if export:
+            self.export()
+
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.data.get(key, default)
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        validated = config_schema.validate(data)
+        return validated
 
     def set_main_options(self, args: argparse.Namespace) -> None:
         """Set main configuration options based on command-line arguments.
@@ -160,24 +55,52 @@ class Config:
             args: An argparse.Namespace object containing command-line arguments.
         """
         if args.config_mods:
-            data: dict[str, Any] = {}
+            overlay: dict[str, Any] = {}
             for fullpath in args.config_mods:
-                current = data
+                current = overlay
                 components = process_config_path(fullpath)
                 for component in components[:-2]:
                     current = current.setdefault(component, {})
                 current[components[-2]] = safe_loads(components[-1])
-            data = collections.merge(self.data, data)  # type: ignore
-            if data.get("debug"):
+            candidate = copy.deepcopy(self.data)
+            collections.merge(candidate, overlay)  # type: ignore
+            self.data = self.validate(candidate)
+            if self.data.get("debug"):
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
-            if fd := data.pop("launch", None):
-                for key, value in fd.items():
-                    setattr(self.launch, key, value)
-            if fd := data.pop("submit", None):
-                for key, value in fd.items():
-                    setattr(self.submit, key, value)
-            for key, value in data.items():
-                setattr(self, key, value)
+            self.export()
+
+    def set(self, path: str, value: Any) -> None:
+        """Set the configuration value using yaml-like syntax for path.
+
+        Examples:
+
+        >>> config = Config()
+        >>> config.set("backend:default_options", ["--account=ABC123"])
+
+        """
+        # the thing
+        overlay: dict[str, Any] = {}
+        current = overlay
+        components = path.split(":")
+        for component in components[:-1]:
+            current = current.setdefault(component, {})
+        current[components[-1]] = value
+
+        candidate = copy.deepcopy(self.data)
+        collections.merge(candidate, overlay)  # type: ignore
+        self.data = self.validate(candidate)
+        self.export()
+
+    def backend(self, name: str) -> dict[str, Any] | None:
+        for entry in self.data.get("backends") or []:
+            if entry.get("name") == name:
+                return entry
+        return None
+
+    def export(self) -> str:
+        s = serialize(self.data)
+        os.environ["HPC_CONNECT_CFG64"] = s
+        return s
 
 
 def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
@@ -190,7 +113,7 @@ def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     file = get_scope_filename(scope)
     if file is not None and (fd := read_config_file(file)):
         data.update(fd)
-    return config_schema.validate(data)
+    return data
 
 
 def get_scope_filename(scope: str) -> str | None:
@@ -211,19 +134,14 @@ def get_scope_filename(scope: str) -> str | None:
     raise ValueError(f"Could not determine filename for scope {scope!r}")
 
 
-def get_env_scope() -> dict[str, Any]:
-    variables = {key: var for key, var in os.environ.items() if key.startswith("HPC_CONNECT_")}
-    if variables:
-        variables = environment_variable_schema.validate(variables)
-    return variables
-
-
 def read_config_file(file: str) -> dict[str, Any] | None:
     """Load configuration settings from ``file``"""
     if not os.path.exists(file):
         return None
     with open(file) as fh:
         fd = yaml.safe_load(fh)
+        if not isinstance(fd, dict):
+            raise TypeError(f"{file}: expected mapping at top level")
         if "hpc_connect" in fd:
             fd = fd["hpc_connect"]
         return fd
@@ -240,3 +158,33 @@ def process_config_path(path: str) -> list[str]:
             result.append(path)
             return result
     return result
+
+
+_config: Config | None = None
+
+
+def get_config(export: bool = False) -> Config:
+    global _config
+    if _config is None:
+        _config = Config(export=export)
+    elif export:
+        _config.export()
+    assert _config is not None
+    return _config
+
+
+def export() -> str:
+    global _config
+    if _config is None:
+        _config = Config()
+    return _config.export()
+
+
+def reset() -> None:
+    global _config
+    _config = None
+    os.environ.pop("HPC_CONNECT_CFG64", None)
+
+
+def __getattr__(name: str) -> Any:
+    return getattr(get_config(), name)

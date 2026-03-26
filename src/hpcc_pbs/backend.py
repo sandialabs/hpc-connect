@@ -4,6 +4,7 @@
 
 import logging
 import shutil
+from typing import Any
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
@@ -19,8 +20,7 @@ logger = logging.getLogger("hpc_connect.pbs.backend")
 class PBSBackend(hpc_connect.Backend):
     name = "pbs"
 
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        super().__init__(config=config)
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
@@ -30,28 +30,58 @@ class PBSBackend(hpc_connect.Backend):
         qdel = shutil.which("qdel")
         if qdel is None:
             raise ValueError("qdel not found on PATH")
-        self._resource_specs: list[dict]
-        if resources := read_pbsnodes():
-            self._resource_specs = resources
-        else:
-            raise ValueError("Unable to determine system configuration from pbsnodes")
+        self._resource_specs: list[dict] | None = None
+        super().__init__(cfg=cfg)
 
     @property
     def resource_specs(self) -> list[dict]:
+        if self._resource_specs is None:
+            if resources := read_pbsnodes():
+                self._resource_specs = resources
+            else:
+                raise ValueError("Unable to determine system configuration from pbsnodes")
+        assert self._resource_specs is not None
         return self._resource_specs
 
+    @property
+    def valid_launchers(self) -> set[str]:
+        return {"mpi"}
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return {
+            "config": {},
+            "type": cls.name,
+            "launch": {
+                "type": "mpi",
+                "exec": "mpiexec",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "pre_options": [],
+                "mpmd": {
+                    "global_options": [],
+                    "local_options": [],
+                },
+            },
+            "submit": {
+                "default_options": [],
+                "polling_interval": 5.0,
+            },
+        }
+
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        config = self.config.submit.resolve("pbs")
-        return hpc_connect.HPCSubmissionManager(adapter=QsubAdapter(backend=self, config=config))
+        return hpc_connect.HPCSubmissionManager(
+            adapter=QsubAdapter(backend=self, config=self.config["submit"])
+        )
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(
-            adapter=MPIExecAdapter(backend=self, config=self.config.launch.resolve("mpiexec"))
+            adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
         )
 
 
 class QsubAdapter:
-    def __init__(self, backend: PBSBackend, config: hpc_connect.SubmitConfig) -> None:
+    def __init__(self, backend: PBSBackend, config: dict[str, Any]) -> None:
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
@@ -59,7 +89,9 @@ class QsubAdapter:
         self.backend = backend
 
     def polling_interval(self) -> float:
-        return self.config.polling_interval or 5.0
+        if self.config["polling_interval"] > 0:
+            return self.config["polling_interval"]
+        return 5.0
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")
@@ -79,7 +111,7 @@ class QsubAdapter:
             if spec.error:
                 if spec.error != spec.output:
                     fh.write(f"#PBS -e {spec.error}\n")
-            for arg in self.config.default_options:
+            for arg in self.config["default_options"]:
                 fh.write(f"#PBS {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#PBS {arg}\n")

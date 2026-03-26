@@ -1,12 +1,14 @@
 import abc
+import copy
 import io
 import logging
 import math
 from functools import cached_property
 from typing import TYPE_CHECKING
+from typing import Any
 from typing import Generator
 
-from .config import Config
+from .schemas import backend_schema
 from .schemas import resource_schema
 
 if TYPE_CHECKING:
@@ -26,22 +28,44 @@ rtype_aliases: dict[str, list[str]] = {
 class Backend(abc.ABC):
     name: str
 
-    def __init__(self, config: Config | None = None) -> None:
-        self.config = config or Config.from_defaults(overrides={"backend": self.name})
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
+        self._configured: bool = False
+        self.config = self.configure(cfg=cfg)
+        self._configured = True
         self.aliases: dict[str, str] = {
             alias: canonical for canonical, aliases in rtype_aliases.items() for alias in aliases
         }
         self._resource_index: dict[str, list[tuple[dict, str | None]]] | None = None
 
+    @classmethod
+    @abc.abstractmethod
+    def default_config(cls) -> dict[str, Any]:
+        """Return a complete default configuration for this backend."""
+        ...
+
     @property
     @abc.abstractmethod
     def resource_specs(self) -> list[dict]: ...
+
+    @property
+    @abc.abstractmethod
+    def valid_launchers(self) -> set[str]: ...
+
+    @classmethod
+    def matches(cls, arg: str) -> bool:
+        return cls.name == arg
 
     @abc.abstractmethod
     def submission_manager(self) -> "HPCSubmissionManager": ...
 
     @abc.abstractmethod
     def launcher(self) -> "HPCLauncher": ...
+
+    def configure(self, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+        if self._configured:
+            raise RuntimeError("Backend is frozen; configure() is not allowed")
+        cfg = copy.deepcopy(cfg or self.default_config())
+        return backend_schema.validate(cfg)
 
     def describe(self) -> str:
         fp = io.StringIO()
@@ -58,6 +82,9 @@ class Backend(abc.ABC):
         return False
 
     def validate(self) -> None:
+        if self.config["launch"]["type"] not in self.valid_launchers:
+            type = self.config["launch"]["type"]
+            raise ValueError(f"Launcher {type!r} is not supported by {self}")
         for rspec in self.resource_specs:
             self._canonicalize_rspec(rspec)
         resource_schema.validate({"resources": self.resource_specs})

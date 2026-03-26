@@ -1,11 +1,17 @@
 import os
-import shlex
 from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
 
 import hpc_connect
+
+
+import pytest
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_config():
+    hpc_connect.config.reset()
 
 
 @contextmanager
@@ -36,110 +42,78 @@ def envmods(**kwargs):
 mock_bin = os.path.join(os.path.dirname(__file__), "mock")
 
 
-def launch(args, env=True, files=True, **kwargs):
-    config = hpc_connect.Config.from_defaults(env=env, files=files)
-    launcher = hpc_connect.get_launcher(config=config)
-    launcher(args, **kwargs)
+def file_config(backend: str) -> str:
+    cfg = f"""\
+hpc_connect:
+  backend: {backend}
+  backends:
+  - name: my.slurm
+    type: slurm
+    launch:
+      type: mpi
+      numproc_flag: -np
+      exec: mpiexec
+  - name: my.local
+    type: local
+    launch:
+      type: mpi
+      numproc_flag: -np
+      default_options: --map-by ppr:%(np)d:cores
+"""
+    return cfg
 
 
-def test_envar_config(capfd):
-    env = {
-        "HPC_CONNECT_BACKEND": "slurm",
-        "HPC_CONNECT_LAUNCH_EXEC": "srun",
-        "HPC_CONNECT_LAUNCH_NUMPROC_FLAG": "-np",
-    }
-    with envmods(**env):
-        launch(["-n", "4", "-flag", "file", "executable", "--option"], files=False)
-        captured = capfd.readouterr()
-        out = captured.out.strip()
-        assert out == f"{mock_bin}/srun -np 4 -flag file executable --option"
-    env = {
-        "HPC_CONNECT_BACKEND": "local",
-        "HPC_CONNECT_LAUNCH_EXEC": "mpiexec",
-        "HPC_CONNECT_LAUNCH_NUMPROC_FLAG": "-np",
-        "HPC_CONNECT_LAUNCH_DEFAULT_OPTIONS": "--map-by ppr:%(np)d:cores",
-    }
-    with envmods(**env):
-        launch(["-n", "4", "-flag", "file", "executable", "--option"], files=False)
-        captured = capfd.readouterr()
-        out = captured.out.strip()
-        assert out == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
-
-
-def test_file_config(tmpdir, capfd):
-    with envmods(HPC_CONNECT_GLOBAL_CONFIG="hpc_connect.yaml"):
-        workspace = Path(tmpdir.strpath)
+def test_file_config_1(tmpdir, capfd):
+    workspace = Path(tmpdir.strpath)
+    with envmods(HPC_CONNECT_GLOBAL_CONFIG=(workspace / "hpc_connect.yaml").as_posix()):
         with working_dir(workspace):
             with open(workspace / "hpc_connect.yaml", "w") as fh:
-                yaml.dump(
-                    {
-                        "hpc_connect": {
-                            "backend": "slurm",
-                            "launch": {"exec": "srun", "numproc_flag": "-np"},
-                        }
-                    },
-                    fh,
-                )
-            launch(["-n", "4", "-flag", "file", "executable", "--option"], env=False)
+                fh.write(file_config("slurm"))
+            backend = hpc_connect.get_backend()
+            launcher = backend.launcher()
+            launcher(["-n", "4", "-flag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
-            assert out == f"{mock_bin}/srun -np 4 -flag file executable --option"
+            print(captured.err)
+            assert out == f"{mock_bin}/srun -n 4 -flag file executable --option"
 
+
+def test_file_config_2(tmpdir, capfd):
+    workspace = Path(tmpdir.strpath)
+    with envmods(HPC_CONNECT_GLOBAL_CONFIG=(workspace / "hpc_connect.yaml").as_posix()):
+        with working_dir(workspace):
             with open(workspace / "hpc_connect.yaml", "w") as fh:
-                yaml.dump(
-                    {
-                        "hpc_connect": {
-                            "backend": "local",
-                            "launch": {
-                                "exec": "mpiexec",
-                                "numproc_flag": "-np",
-                                "default_options": "--map-by ppr:%(np)d:cores",
-                            },
-                        }
-                    },
-                    fh,
-                )
-            launch(["-n", "4", "-flag", "file", "executable", "--option"], env=False)
+                fh.write(file_config("my.local"))
+            backend = hpc_connect.get_backend()
+            launcher = backend.launcher()
+            launcher(["-np", "4", "-flag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
             assert (
                 out == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
             )
 
-            with open("hpc_connect.yaml", "w") as fh:
-                yaml.dump(
-                    {
-                        "hpc_connect": {
-                            "backend": "slurm",
-                            "launch": {
-                                "exec": "mpiexec",
-                                "numproc_flag": "-np",
-                                "mappings": {"-flag": "-xflag"},
-                            },
-                        }
-                    },
-                    fh,
-                )
-
-            launch(["-n", "4", "-flag", "file", "executable", "--option"], env=False)
+def test_file_config_3(tmpdir, capfd):
+    workspace = Path(tmpdir.strpath)
+    with envmods(HPC_CONNECT_GLOBAL_CONFIG=(workspace / "hpc_connect.yaml").as_posix()):
+        with working_dir(workspace):
+            with open(workspace / "hpc_connect.yaml", "w") as fh:
+                fh.write(file_config("my.slurm"))
+            backend = hpc_connect.get_backend()
+            launcher = backend.launcher()
+            launcher(["-np", "4", "-xflag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
             assert out == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
 
 
 def test_default(capfd):
-    launch(["-n", "4", "-flag", "file", "executable", "--option"])
+    backend = hpc_connect.get_backend("local")
+    launcher = backend.launcher()
+    launcher(["-n", "4", "-flag", "file", "executable", "--option"])
     captured = capfd.readouterr()
     out = captured.out.strip()
     assert out == f"{mock_bin}/mpiexec -n 4 -flag file executable --option"
-
-
-def test_envar_mappings(capfd):
-    with envmods(HPC_CONNECT_LAUNCH_MAPPINGS="-spam:-ham,-eggs:-bacon"):
-        launch(["-n", "4", "-spam", "ham", "-eggs", "bacon", "executable", "--option"])
-        captured = capfd.readouterr()
-        out = captured.out.strip()
-        assert out == f"{mock_bin}/mpiexec -n 4 -ham ham -bacon bacon executable --option"
 
 
 def test_mpmd(capfd, tmpdir):
@@ -149,68 +123,43 @@ def test_mpmd(capfd, tmpdir):
         with open("foo.sh", "a") as fh:
             fh.write("#/usr/bin/env sh\necho $@\n")
         os.chmod("foo.sh", 0o750)
-        launch(["-n", "4", "-flag", "file", "./foo.sh", ":", "-n", "5", "./foo.sh", "-a"])
+        backend = hpc_connect.get_backend("local")
+        launcher = backend.launcher()
+        launcher(["-n", "4", "-flag", "file", "./foo.sh", ":", "-n", "5", "./foo.sh", "-a"])
         captured = capfd.readouterr()
         out = captured.out.strip()
         assert out == f"{mock_bin}/mpiexec -n 4 -flag file ./foo.sh : -n 5 ./foo.sh -a"
 
 
 def test_srun_mpmd(capfd, tmpdir):
+    from hpcc_slurm.backend import SlurmBackend
+
     workspace = Path(tmpdir.strpath)
     with working_dir(workspace):
-        config = hpc_connect.config.Config().from_defaults(
-            overrides={"backend": "slurm", "launch": {"exec": "srun"}}
-        )
+        backend = SlurmBackend()
         with open("foo.sh", "a") as fh:
             fh.write("#/usr/bin/env sh\necho $@\n")
         os.chmod("foo.sh", 0o750)
-        launcher = hpc_connect.get_launcher(config=config)
+        launcher = backend.launcher()
         argv = ["-n", "4", "./foo.sh", ":", "-n", "5", "./foo.sh", "-a"]
         launcher(argv)
         captured = capfd.readouterr()
+        print("HERE I AM", backend.default_config())
+        print("HERE I AM", backend.config)
+        print("HERE I AM", launcher.adapter.config)
         out = captured.out.strip()
+        print(captured.err)
         assert out == f"{mock_bin}/srun -n9 --multi-prog launch-multi-prog.conf"
         with open("launch-multi-prog.conf") as fh:
             text = fh.read().strip()
-            print(text)
             assert text == "0-3 ./foo.sh\n4-8 ./foo.sh -a"
-
-
-def test_mapped(capfd, tmpdir):
-    with working_dir(Path(tmpdir.strpath)):
-        config = hpc_connect.Config.from_defaults(
-            overrides={"launch": {"numproc_flag": "-np", "mappings": {"--x": "--y"}}}
-        )
-        launcher = hpc_connect.get_launcher(config=config)
-        argv = ["--x", "4", "--x=5", "-n=7", "ls"]
-        launcher(argv)
-        captured = capfd.readouterr()
-        out = captured.out.strip()
-        cmd = shlex.split(out)
-        assert os.path.basename(cmd[0]) == "mpiexec"
-        assert " ".join(cmd[1:]) == "--y 4 --y=5 -np=7 ls"
-
-
-def test_mapped_suppressed(capfd, tmpdir):
-    with working_dir(Path(tmpdir.strpath)):
-        config = hpc_connect.Config.from_defaults(
-            overrides={"launch": {"numproc_flag": "-np", "mappings": {"--x": "SUPPRESS"}}}
-        )
-        launcher = hpc_connect.get_launcher(config=config)
-        argv = ["--x", "4", "--x=5", "-n=7", "ls"]
-        launcher(argv)
-        captured = capfd.readouterr()
-        out = captured.out.strip()
-        cmd = shlex.split(out)
-        assert os.path.basename(cmd[0]) == "mpiexec"
-        assert " ".join(cmd[1:]) == "-np=7 ls"
 
 
 def test_count_procs(tmpdir):
     with working_dir(Path(tmpdir.strpath)):
         from hpc_connect.launch import ArgumentParser
 
-        parser = ArgumentParser(mappings={}, numproc_flag="-n")
+        parser = ArgumentParser(numproc_flag="-n")
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)
         assert args[0].processes == 4

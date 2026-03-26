@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: MIT
 
 import logging
-import os
 import shutil
+from typing import Any
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
@@ -21,48 +21,78 @@ logger = logging.getLogger("hpc_connect.slurm.submit")
 class SlurmBackend(hpc_connect.Backend):
     name = "slurm"
 
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        super().__init__(config=config)
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
         sacct = shutil.which("sacct")
         if sacct is None:
             raise ValueError("sacct not found on PATH")
-        self._resource_specs: list[dict]
-        if sinfo := read_sinfo():
-            self._resource_specs = [sinfo]
-        else:
-            raise ValueError("Unable to determine system configuration from sinfo")
+        self._resource_specs: list[dict] | None = None
+        super().__init__(cfg=cfg)
 
     @property
     def resource_specs(self) -> list[dict]:
+        if self._resource_specs is None:
+            if sinfo := read_sinfo():
+                self._resource_specs = [sinfo]
+            else:
+                raise ValueError("Unable to determine system configuration from sinfo")
+        assert self._resource_specs is not None
         return self._resource_specs
 
+    @property
+    def valid_launchers(self) -> set[str]:
+        return {"srun", "mpi"}
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return {
+            "config": {},
+            "type": cls.name,
+            "launch": {
+                "type": "srun",
+                "exec": "srun",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "pre_options": [],
+                "mpmd": {
+                    "global_options": [],
+                    "local_options": [],
+                },
+            },
+            "submit": {
+                "default_options": [],
+                "polling_interval": 15.0,
+            },
+        }
+
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        config = self.config.submit.resolve("slurm")
-        return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter(config=config))
+        return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter(config=self.config["submit"]))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
-        name = os.path.basename(self.config.launch.exec)
-        if name == "srun":
-            config = self.config.launch.resolve("srun")
-            return hpc_connect.HPCLauncher(adapter=SrunAdapter(backend=self, config=config))
-        if name in ("mpiexec", "mpirun"):
-            config = self.config.launch.resolve("mpiexec")
-            return hpc_connect.HPCLauncher(adapter=MPIExecAdapter(backend=self, config=config))
-        raise ValueError(f"{name}: unknown launcher for slurm backend")
+        type = self.config["launch"]["type"]
+        if type == "srun":
+            return hpc_connect.HPCLauncher(
+                adapter=SrunAdapter(backend=self, config=self.config["launch"])
+            )
+        else:
+            return hpc_connect.HPCLauncher(
+                adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
+            )
 
 
 class SbatchAdapter:
-    def __init__(self, config: hpc_connect.SubmitConfig):
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
 
     def polling_interval(self) -> float:
-        return self.config.polling_interval or 15.0
+        if self.config["polling_interval"] > 0:
+            return self.config["polling_interval"]
+        return 15.0
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")
@@ -77,7 +107,7 @@ class SbatchAdapter:
                 fh.write(f"#SBATCH --error={spec.error}\n")
             if spec.output:
                 fh.write(f"#SBATCH --output={spec.output}\n")
-            for arg in self.config.default_options:
+            for arg in self.config["default_options"]:
                 fh.write(f"#SBATCH {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#SBATCH {arg}\n")

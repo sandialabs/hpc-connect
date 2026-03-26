@@ -13,12 +13,11 @@ import time
 import weakref
 from typing import Any
 from typing import TextIO
+from typing import Type
 
 import psutil
 
 from .backend import Backend
-from .config import Config
-from .config import SubmitConfig
 from .hookspec import hookimpl
 from .jobspec import JobSpec
 from .launch import HPCLauncher
@@ -33,22 +32,52 @@ logger = logging.getLogger("hpc_connect.subprocess.backend")
 class LocalBackend(Backend):
     name = "local"
 
-    def __init__(self, config: Config | None = None) -> None:
-        super().__init__(config=config)
-        self._resource_specs = self.discover()
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
+        self._resource_specs: list[dict[str, Any]] | None = None
+        super().__init__(cfg=cfg)
+
+    @classmethod
+    def matches(cls, arg: str) -> bool:
+        return arg in (cls.name, "shell")
 
     @property
     def resource_specs(self) -> list[dict]:
+        if self._resource_specs is None:
+            self._resource_specs = self.discover()
+        assert self._resource_specs is not None
         return self._resource_specs
 
+    @property
+    def valid_launchers(self) -> set[str]:
+        return {"mpi"}
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return {
+            "config": {},
+            "type": cls.name,
+            "launch": {
+                "type": "mpi",
+                "exec": "mpiexec",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "pre_options": [],
+                "mpmd": {
+                    "global_options": [],
+                    "local_options": [],
+                },
+            },
+            "submit": {
+                "default_options": [],
+                "polling_interval": -1.0,
+            },
+        }
+
     def submission_manager(self) -> HPCSubmissionManager:
-        config = self.config.submit.resolve("local")
-        return HPCSubmissionManager(adapter=SubprocessAdapter(config=config))
+        return HPCSubmissionManager(adapter=SubprocessAdapter(config=self.config["submit"]))
 
     def launcher(self) -> HPCLauncher:
-        return HPCLauncher(
-            adapter=MPIExecAdapter(backend=self, config=self.config.launch.resolve("mpiexec"))
-        )
+        return HPCLauncher(adapter=MPIExecAdapter(backend=self, config=self.config["launch"]))
 
     def discover(self) -> list[dict[str, Any]]:
         if file := os.getenv("HPC_CONNECT_HOSTFILE"):
@@ -58,20 +87,27 @@ class LocalBackend(Backend):
             for pattern, rspec in data.items():
                 if fnmatch.fnmatch(host, pattern):
                     return rspec
-        local_resource = {"type": "cpu", "count": psutil.cpu_count()}
-        socket_resource = {"type": "socket", "count": 1, "resources": [local_resource]}
-        return [{"type": "node", "count": 1, "resources": [socket_resource]}]
+        cfg: dict[str, Any] = self.config["config"]
+        cpu_count: int = cfg.get("cores_per_socket") or psutil.cpu_count() or 1
+        sockets_per_node: int = cfg.get("sockets_per_node") or 1
+        node_count: int = cfg.get("nnode") or 1
+
+        local_resource = {"type": "cpu", "count": cpu_count}
+        socket_resource = {"type": "socket", "count": sockets_per_node, "resources": [local_resource]}
+        return [{"type": "node", "count": node_count, "resources": [socket_resource]}]
 
 
 class SubprocessAdapter:
-    def __init__(self, config: SubmitConfig):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
 
     def polling_interval(self) -> float:
-        return self.config.polling_interval or 1.0
+        if self.config["polling_interval"] > 0:
+            return self.config["polling_interval"]
+        return 1.0
 
     def prepare(self, spec: JobSpec) -> JobSpec:
         sh = shutil.which("sh")
@@ -164,7 +200,5 @@ def streamify(arg: str | None) -> TextIO | None:
 
 
 @hookimpl
-def hpc_connect_backend(config: Config) -> "LocalBackend | None":
-    if config.backend in ("local", "shell", "subprocess"):
-        return LocalBackend(config=config)
-    return None
+def hpc_connect_backend() -> Type[LocalBackend]:
+    return LocalBackend

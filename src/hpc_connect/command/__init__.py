@@ -15,18 +15,23 @@ configuration is:
 .. code-block:: yaml
 
    hpc_connect:
-     config:
-       debug: false
-     launch:
-       exec: mpiexec  # the launch backend.
-       numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
-       local_options: []  # Options to pass to the backend before any other arguments.
-       default_options: []  # Options to pass to the backend before any other arguments.
-       pre_options: []  # Command line options placed immediately before program to run
-       mappings: {-n: <numproc_flag>}  # Mapping of flag provided on the command line to flag passed to the backend
-    submit:
-      backend: null
-      default_options: []
+     debug: false
+     backend: my.backend
+     backends:
+     - name: my.backend
+       type: local
+       submit:
+         default_options: []
+       launch:
+         name: openmpi
+         type: mpi
+         exec: mpiexec
+         numproc_flag: -n  # Flag to pass to the backend before giving it the number of processors to run on.
+         default_options: []  # Options to pass to the backend before any other arguments.
+         pre_options: []  # Command line options placed immediately before program to run
+         mpmd:
+           global_options: []
+           local_options: []
 
 Configurations are read from:
 
@@ -37,17 +42,6 @@ Configurations are read from:
 [1] The global configuration will be read from the HPC_CONNECT_GLOBAL_CONFIG environment variable, if set
 [2] The site configuration will be read from the HPC_CONNECT_SITE_CONFIG environment variable, if set
 
-Configuration settings can also be modified through the following environment variables:
-
-* HPCC_LAUNCH_EXEC
-* HPCC_LAUNCH_NUMPROC_FLAG
-* HPCC_LAUNCH_LOCAL_OPTIONS
-* HPCC_LAUNCH_DEFAULT_OPTIONS
-* HPCC_LAUNCH_PRE_OPTIONS
-* HPCC_LAUNCH_MAPPINGS
-* HPCC_SUBMIT_BACKEND
-* HPCC_SUBMIT_DEFAULT_OPTIONS
-
 """
 
 import argparse
@@ -57,7 +51,6 @@ from types import ModuleType
 from ..config import Config
 from . import config
 from . import launch
-from . import submit
 
 _commands: dict[str, ModuleType] = {}
 
@@ -71,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     args.extra_args = extra_args
 
     module = _commands[args.command]
-    cfg = Config.from_defaults()
+    cfg = Config()
     cfg.set_main_options(args)
     module.execute(cfg, args)  # ty: ignore[unresolved-attribute]
     return 0
@@ -90,7 +83,6 @@ def make_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
     add_command(subparsers, launch)
-    add_command(subparsers, submit)
     return parser
 
 

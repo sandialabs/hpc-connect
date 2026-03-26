@@ -2,135 +2,109 @@
 #
 # SPDX-License-Identifier: MIT
 
-import logging
+import copy
 import shlex
-import shutil
-import typing
+from typing import Any
 
-from schema import Optional
+from schema import And
+from schema import Optional as BaseOptional
 from schema import Or
-from schema import Schema
+from schema import Schema as BaseSchema
 from schema import Use
-
-from .util.time import time_in_seconds
-
-logger = logging.getLogger("hpc_connect.schemas")
 
 
 def flag_splitter(arg: list[str] | str) -> list[str]:
     if isinstance(arg, str):
         return shlex.split(arg)
-    elif not isinstance(arg, list) and not all(isinstance(str, _) for _ in arg):
+    elif not isinstance(arg, list) and not all(isinstance(_, str) for _ in arg):
         raise ValueError("expected list[str]")
     return arg
 
 
-def dict_str_str(arg: typing.Any) -> bool:
-    f = isinstance
-    return f(arg, dict) and all([f(_, str) for k, v in arg.items() for _ in (k, v)])
+class Optional(BaseOptional):
+    def __init__(self, *args, default_factory=None, **kwargs):
+        if default_factory is not None and kwargs.get("default"):
+            raise TypeError("Mutually exclusive arguments: 'default' and 'default_factory'")
+        super().__init__(*args, **kwargs)
+        self.default_factory = default_factory
 
 
-class choose_from:
-    def __init__(self, *choices: str | None):
-        self.choices = set(choices)
-
-    def __call__(self, arg: str | None) -> str | None:
-        if arg not in self.choices:
-            raise ValueError(f"Invalid choice {arg!r}, choose from {self.choices!r}")
-        return arg
-
-
-def which(arg: str) -> str:
-    if path := shutil.which(arg):
-        return path
-    logger.debug(f"{arg} not found on PATH")
-    return arg
+class Schema(BaseSchema):
+    def validate(self, data: Any, *args: Any, **kwargs: Any) -> Any:
+        # Apply default_factory for dict schemas before normal validation
+        if isinstance(self._schema, dict) and isinstance(data, dict):
+            data = dict(data)  # shallow copy so we don't mutate caller's dict
+            for key, _subschema in self._schema.items():
+                if isinstance(key, Optional) and (factory := getattr(key, "default_factory", None)):
+                    # schema.Optional stores the raw key in .schema
+                    raw_key = key.schema
+                    if raw_key not in data:
+                        data[raw_key] = copy.deepcopy(factory())
+        return super().validate(data, *args, **kwargs)
 
 
-def boolean(arg: typing.Any) -> bool:
-    if isinstance(arg, str):
-        return arg.lower() not in ("0", "off", "false", "no")
-    return bool(arg)
+list_of_str: And = And(lambda x: isinstance(x, list), lambda x: all(isinstance(_, str) for _ in x))
+dict_str_str: And = And(
+    lambda x: isinstance(x, dict),
+    lambda x: all(isinstance(_, str) for k, v in x.items() for _ in (k, v)),
+)
 
 
-def load_mappings(arg: str) -> dict[str, str]:
-    mappings: dict[str, str] = {}
-    for kv in arg.split(","):
-        k, v = [_.strip() for _ in kv.split(":") if _.split()]
-        mappings[k] = v
-    return mappings
+def mpmd_defaults() -> dict[str, list]:
+    return {"local_options": list(), "global_options": list()}
 
 
-launch_spec = {
-    Optional("exec"): str,
-    Optional("numproc_flag"): str,
-    Optional("default_options"): Use(flag_splitter),
-    Optional("pre_options"): Use(flag_splitter),
-    Optional("mappings"): dict_str_str,
-}
+def submit_defaults() -> dict[str, Any]:
+    return {"default_options": list(), "polling_interval": -1.0}
+
+
+def launch_defaults() -> dict[str, Any]:
+    return {
+        "type": "mpi",
+        "exec": "mpiexec",
+        "numproc_flag": "-n",
+        "default_options": list(),
+        "pre_options": list(),
+        "mpmd": mpmd_defaults(),
+    }
+
+
 launch_schema = Schema(
     {
-        Optional("exec"): Use(which),
-        Optional(str): launch_spec,
-        **launch_spec,
-    }
-)
-submit_schema = Schema(
-    {
-        Optional("default_options"): Use(flag_splitter),
-        Optional("polling_interval"): Use(time_in_seconds),
-        Optional(str): {
-            Optional("default_options"): Use(flag_splitter),
+        "type": str,
+        Optional("name"): str,
+        Optional("exec"): str,
+        Optional("numproc_flag", default="-n"): str,
+        Optional("default_options", default_factory=list): Use(flag_splitter),
+        Optional("pre_options", default_factory=list): Use(flag_splitter),
+        Optional("variables", default_factory=dict): dict_str_str,
+        Optional("mpmd", default_factory=mpmd_defaults): {
+            Optional("local_options", default_factory=list): Use(flag_splitter),
+            Optional("global_options", default_factory=list): Use(flag_splitter),
         },
     },
 )
-mpmd_schema = Schema(
+
+backend_schema = Schema(
     {
-        Optional("local_options"): Use(flag_splitter),
-        Optional("global_options"): Use(flag_splitter),
+        "type": str,
+        Optional("name"): str,
+        Optional("config"): dict,
+        Optional("launch"): launch_schema,
+        Optional("submit"): {
+            Optional("default_options", default_factory=list): list_of_str,
+            Optional("polling_interval", default=-1.0): float,
+        },
     }
 )
 
 
 config_schema = Schema(
     {
-        Optional("debug"): bool,
-        Optional("backend"): Or(str, None),  # type: ignore
-        Optional("submit"): submit_schema,
-        Optional("launch"): launch_schema,
-        Optional("mpmd"): mpmd_schema,
+        Optional("debug", default=False): bool,
+        Optional("backend"): str,
+        Optional("backends", default_factory=list): [backend_schema],
     }
-)
-
-
-class EnvarSchema(Schema):
-    def validate(self, data, is_root_eval=True):
-        data = super().validate(data, is_root_eval=False)
-        if is_root_eval:
-            final = {}
-            for key, value in data.items():
-                name = key[12:].lower()
-                if name.startswith(("launch_", "submit_")):
-                    section, _, field = name.partition("_")
-                    final.setdefault(section, {})[field] = value
-                else:
-                    final[name] = value
-            return final
-        return data
-
-
-environment_variable_schema = EnvarSchema(
-    {
-        Optional("HPC_CONNECT_DEBUG"): Use(boolean),
-        Optional("HPC_CONNECT_BACKEND"): Use(str),
-        Optional("HPC_CONNECT_LAUNCH_EXEC"): Use(which),
-        Optional("HPC_CONNECT_LAUNCH_NUMPROC_FLAG"): Use(str),
-        Optional("HPC_CONNECT_LAUNCH_DEFAULT_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_LAUNCH_MAPPINGS"): Use(load_mappings),
-        Optional("HPC_CONNECT_SUBMIT_DEFAULT_OPTIONS"): Use(flag_splitter),
-        Optional("HPC_CONNECT_SUBMIT_POLLING_INTERVAL"): Use(time_in_seconds),
-    },
-    ignore_extra_keys=True,
 )
 
 

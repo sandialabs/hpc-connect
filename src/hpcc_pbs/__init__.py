@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import Type
+
 import hpc_connect
 
 from .backend import PBSBackend
 
 
 @hpc_connect.hookimpl
-def hpc_connect_backend(config: hpc_connect.Config) -> "hpc_connect.Backend | None":
-    if config.backend in ("qsub", "pbs"):
-        return PBSBackend(config=config)
-    return None
+def hpc_connect_backend() -> Type["hpc_connect.Backend"]:
+    return PBSBackend

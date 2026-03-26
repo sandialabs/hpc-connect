@@ -1,7 +1,9 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import copy
 import logging
+import os
 import shlex
 import shutil
 import subprocess
@@ -9,7 +11,7 @@ from typing import Any
 from typing import Sequence
 
 from .backend import Backend
-from .config import LaunchConfig
+from .schemas import launch_schema
 
 logger = logging.getLogger("hpc_connect.launch")
 
@@ -29,14 +31,17 @@ class HPCLauncher:
         argv = self.adapter.build_argv(args)
         if echo:
             print(f"Command line: {shlex.join(argv)}")
-        return subprocess.run(argv, **kwargs)
+        env = kwargs.get("env") or os.environ.copy()
+        if variables := self.adapter.config.get("variables"):
+            env.update(variables)
+        return subprocess.run(argv, env=env, **kwargs)
 
 
 class LaunchAdapter:
     name: str
 
-    def __init__(self, *, config: "LaunchConfig", backend: "Backend") -> None:
-        self.config = config
+    def __init__(self, *, config: dict[str, Any], backend: "Backend") -> None:
+        self.config = launch_schema.validate(copy.deepcopy(config))
         self.backend = backend
 
     def build_argv(self, args: list[str]) -> list[str]:
@@ -47,9 +52,7 @@ class LaunchAdapter:
         raise NotImplementedError
 
     def parse(self, args: list[str]) -> list["LaunchSpec"]:
-        parser = ArgumentParser(
-            mappings=self.config.mappings, numproc_flag=self.config.numproc_flag or "-n"
-        )
+        parser = ArgumentParser(numproc_flag=self.config["numproc_flag"])
         return parser.parse_args(args)
 
 
@@ -70,24 +73,13 @@ class LaunchSpec:
 
 
 class ArgumentParser:
-    def __init__(self, *, mappings: dict[str, str] | None, numproc_flag: str | None = None) -> None:
-        self.mappings: dict[str, str] = mappings or {}
+    def __init__(self, *, numproc_flag: str | None = None) -> None:
         self.numproc_flag: str = numproc_flag or "-n"
-        if "-n" not in self.mappings:
-            # always map -n to numproc_flag
-            self.mappings["-n"] = self.numproc_flag
-
-    def mapped(self, arg: str) -> str | None:
-        if arg in self.mappings:
-            return self.mappings[arg]
-        # check for the case of long opt: arg=
-        for pat, repl in self.mappings.items():
-            if arg.startswith(f"{pat}="):
-                return arg.replace(pat, repl)
-        return None
 
     def parse_args(self, args: Sequence[str]) -> list[LaunchSpec]:
         """Inspect arguments to launch to infer number of processors requested"""
+        numproc_flags = {"-n", "-np"}
+        numproc_flags.add(self.numproc_flag)
         launchspecs: list[LaunchSpec] = []
         spec: list[str] = []
         processes: int | None = None
@@ -101,19 +93,12 @@ class ArgumentParser:
             if shutil.which(arg):
                 command_seen = True
             if not command_seen:
-                if new := self.mapped(arg):
-                    if new.startswith("SUPPRESS="):
-                        continue
-                    elif new == "SUPPRESS":
-                        next(iter_args)
-                        continue
-                    arg = new
-                if arg == self.numproc_flag:
+                if arg in numproc_flags:
                     s = next(iter_args)
                     processes = int(s)
                     spec.extend([arg, s])
-                elif arg.startswith(f"{self.numproc_flag}="):
-                    i = len(self.numproc_flag) + 1
+                elif any(arg.startswith(f"{f}=") for f in numproc_flags):
+                    i = len(arg.partition("=")[0]) + 1
                     processes = int(arg[i:])
                     spec.append(arg)
                 else:
@@ -140,9 +125,8 @@ def argp(args: list[str]) -> int:
 
 
 def launch(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
-    from . import pluginmanager
-    from .config import Config
+    from . import get_backend
 
-    config = Config.from_defaults()
-    launcher = pluginmanager.get_launcher(config=config)
+    backend = get_backend()
+    launcher = backend.launcher()
     return launcher.submit(args, **kwargs)

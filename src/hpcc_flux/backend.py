@@ -30,42 +30,73 @@ logger = logging.getLogger("hpc_connect.flux.backend_api")
 class FluxBackend(hpc_connect.Backend):
     name = "flux"
 
-    def __init__(self, config: hpc_connect.Config | None = None) -> None:
-        super().__init__(config=config)
-        self._resource_specs: list[dict]
-        if info := read_resource_info():
-            self._resource_specs = [info]
-        else:
-            raise ValueError("Unable to determine system configuration from flux")
+    def __init__(self, cfg: dict[str, Any] | None = None) -> None:
+        self._resource_specs: list[dict] | None = None
         self.flux: FluxExecutor | None = FluxExecutor()
         self.fh = Flux()
+        super().__init__(cfg=cfg)
 
     @property
     def resource_specs(self) -> list[dict]:
+        if self._resource_specs is None:
+            if info := read_resource_info():
+                self._resource_specs = [info]
+            else:
+                raise ValueError("Unable to determine system configuration from flux")
+        assert self._resource_specs is not None
         return self._resource_specs
+
+    @property
+    def valid_launchers(self) -> set[str]:
+        return {"mpi"}
+
+    @classmethod
+    def default_config(cls) -> dict[str, Any]:
+        return {
+            "config": {},
+            "type": cls.name,
+            "launch": {
+                "type": "mpi",
+                "exec": "mpiexec",
+                "numproc_flag": "-n",
+                "default_options": [],
+                "pre_options": [],
+                "mpmd": {
+                    "global_options": [],
+                    "local_options": [],
+                },
+            },
+            "submit": {
+                "default_options": [],
+                "polling_interval": 1.0,
+            },
+        }
 
     def supports_subscheduling(self) -> bool:
         return True
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        config = self.config.submit.resolve("flux")
-        return hpc_connect.HPCSubmissionManager(adapter=FluxAdapter(backend=self, config=config))
+        return hpc_connect.HPCSubmissionManager(
+            adapter=FluxAdapter(backend=self, config=self.config["submit"])
+        )
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(
-            adapter=MPIExecAdapter(backend=self, config=self.config.launch.resolve("mpiexec"))
+            adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
         )
 
 
 class FluxAdapter:
     lock: multiprocessing.synchronize.RLock = multiprocessing.RLock()
 
-    def __init__(self, backend: FluxBackend, config: hpc_connect.SubmitConfig) -> None:
+    def __init__(self, backend: FluxBackend, config: dict[str, Any]) -> None:
         self.config = config
         self.backend = backend
 
     def polling_interval(self) -> float:
-        return self.config.polling_interval or 1.0
+        if self.config["polling_interval"] > 0:
+            return self.config["polling_interval"]
+        return 1.0
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxProcess:
         jobspec = self.prepare(spec, exclusive=exclusive)
@@ -89,7 +120,7 @@ class FluxAdapter:
                 fh.write(f"#flux: --output={spec.output}\n")
             if spec.error:
                 fh.write(f"#flux: --error={spec.output}\n")
-            for arg in self.config.default_options:
+            for arg in self.config["default_options"]:
                 fh.write(f"#flux: {arg}\n")
             for arg in spec.submit_args:
                 fh.write(f"#flux: {arg}\n")

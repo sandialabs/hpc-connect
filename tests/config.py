@@ -7,19 +7,18 @@ def test_config_launch_basic(tmpdir):
     cwd = os.getcwd()
     try:
         os.chdir(tmpdir.strpath)
-        config = hpc_connect.config.Config.from_defaults(
-            overrides={
-                "launch": {
-                    "exec": "my-mpiexec",
-                    "default_options": ["-a", "-b"],
-                    "mappings": {"-e": "-f"},
-                    "mpiexec": {"default_options": ["-c", "-d"]},
-                }
+        config = hpc_connect.config.Config()
+        backend_cfg = {
+            "name": "my-backend",
+            "type": "local",
+            "launch": {
+                "type": "mpi",
+                "default_options": ["-a", "-b"],
             }
-        )
-        assert config.launch.default_options == ["-a", "-b"]
-        assert config.launch.mappings == {"-e": "-f"}
-        assert config.launch.resolve("mpiexec").default_options == ["-c", "-d"]
-        assert config.launch.resolve("mpiexec").mappings == {"-e": "-f"}
+        }
+        config.set("backends", [backend_cfg])
+        backend = config.backend("my-backend")
+        assert backend is not None
+        assert backend["launch"]["default_options"] == ["-a", "-b"]
     finally:
         os.chdir(cwd)
