@@ -30,7 +30,7 @@ logger = logging.getLogger("hpc_connect.subprocess.backend")
 
 
 class LocalBackend(Backend):
-    name = "local"
+    type = "local"
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         self._resource_specs: list[dict[str, Any]] | None = None
@@ -38,7 +38,7 @@ class LocalBackend(Backend):
 
     @classmethod
     def matches(cls, arg: str) -> bool:
-        return arg in (cls.name, "shell")
+        return arg in (cls.type, "shell")
 
     @property
     def resource_specs(self) -> list[dict]:
@@ -55,7 +55,7 @@ class LocalBackend(Backend):
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
-            "type": cls.name,
+            "type": cls.type,
             "launch": {
                 "type": "mpi",
                 "exec": "mpiexec",

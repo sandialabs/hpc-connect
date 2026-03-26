@@ -19,7 +19,7 @@ logger = logging.getLogger("hpc_connect.slurm.submit")
 
 
 class SlurmBackend(hpc_connect.Backend):
-    name = "slurm"
+    type = "slurm"
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         sbatch = shutil.which("sbatch")
@@ -49,7 +49,7 @@ class SlurmBackend(hpc_connect.Backend):
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
-            "type": cls.name,
+            "type": cls.type,
             "launch": {
                 "type": "srun",
                 "exec": "srun",

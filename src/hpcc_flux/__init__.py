@@ -19,7 +19,7 @@ def hpc_connect_backend() -> Type["hpc_connect.Backend"]:
     except (ImportError, ModuleNotFoundError) as e:
 
         class BadFluxBackend(hpc_connect.Backend):
-            name = "flux"
+            type = "flux"
 
             def __init__(self, *args, **kwargs):
                 raise RuntimeError(

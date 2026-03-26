@@ -55,6 +55,18 @@ class LaunchAdapter:
         parser = ArgumentParser(numproc_flag=self.config["numproc_flag"])
         return parser.parse_args(args)
 
+    @staticmethod
+    def expand_inplace(args: list[str], **kwargs: Any) -> None:
+        for i, arg in enumerate(args):
+            args[i] = LaunchAdapter.expand_one(arg, **kwargs)
+
+    @staticmethod
+    def expand_one(arg: str, **kwargs: Any) -> str:
+        try:
+            return str(arg) % kwargs
+        except Exception:
+            return arg
+
 
 class LaunchSpec:
     def __init__(self, args: list[str], processes: int | None = None) -> None:

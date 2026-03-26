@@ -28,7 +28,7 @@ logger = logging.getLogger("hpc_connect.flux.backend_api")
 
 
 class FluxBackend(hpc_connect.Backend):
-    name = "flux"
+    type = "flux"
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         self._resource_specs: list[dict] | None = None
@@ -54,7 +54,7 @@ class FluxBackend(hpc_connect.Backend):
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
-            "type": cls.name,
+            "type": cls.type,
             "launch": {
                 "type": "mpi",
                 "exec": "mpiexec",

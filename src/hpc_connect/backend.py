@@ -26,7 +26,7 @@ rtype_aliases: dict[str, list[str]] = {
 
 
 class Backend(abc.ABC):
-    name: str
+    type: str
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         self._configured: bool = False
@@ -53,7 +53,11 @@ class Backend(abc.ABC):
 
     @classmethod
     def matches(cls, arg: str) -> bool:
-        return cls.name == arg
+        return cls.type == arg
+
+    @property
+    def name(self) -> str:
+        return self.config.get("name") or self.type
 
     @abc.abstractmethod
     def submission_manager(self) -> "HPCSubmissionManager": ...
@@ -70,6 +74,7 @@ class Backend(abc.ABC):
     def describe(self) -> str:
         fp = io.StringIO()
         fp.write(f"Name: {self.name}\n")
+        fp.write(f"Type: {self.type}\n")
         fp.write("Available resources:\n")
         fp.write(f"  Nodes: {self.node_count}\n")
         for rtype in self.resource_types():

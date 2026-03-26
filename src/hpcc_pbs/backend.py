@@ -18,7 +18,7 @@ logger = logging.getLogger("hpc_connect.pbs.backend")
 
 
 class PBSBackend(hpc_connect.Backend):
-    name = "pbs"
+    type = "pbs"
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         qsub = shutil.which("qsub")
@@ -51,7 +51,7 @@ class PBSBackend(hpc_connect.Backend):
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
-            "type": cls.name,
+            "type": cls.type,
             "launch": {
                 "type": "mpi",
                 "exec": "mpiexec",

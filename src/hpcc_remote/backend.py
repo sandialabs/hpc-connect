@@ -15,7 +15,7 @@ logger = logging.getLogger("hpc_connect.remote.backend")
 
 
 class RemoteBackend(hpc_connect.Backend):
-    name = "remote_subprocess"
+    type = "remote_subprocess"
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         ssh = shutil.which("ssh")
@@ -35,7 +35,7 @@ class RemoteBackend(hpc_connect.Backend):
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
-            "type": cls.name,
+            "type": cls.type,
             "launch": {
                 "type": "<none>",
                 "exec": "<none>",

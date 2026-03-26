@@ -1,7 +1,6 @@
 import io
 import os
 import shutil
-from typing import Any
 
 from hpc_connect.launch import LaunchAdapter
 from hpc_connect.launch import LaunchSpec
@@ -25,14 +24,14 @@ class SrunAdapter(LaunchAdapter):
         argv = [os.fsdecode(exec)]
         view = self.backend.resource_view(ranks=spec.processes)
         for opt in self.config["default_options"]:
-            argv.append(self.expand(opt, **view))
+            argv.append(self.expand_one(opt, **view))
         launch_opts, program_opts = spec.partition()
         for opt in launch_opts:
-            argv.append(self.expand(opt, **view))
+            argv.append(self.expand_one(opt, **view))
         for opt in self.config["pre_options"]:
-            argv.append(self.expand(opt, **view))
+            argv.append(self.expand_one(opt, **view))
         for opt in program_opts:
-            argv.append(self.expand(opt, **view))
+            argv.append(self.expand_one(opt, **view))
         return argv
 
     def _join_mpmd(self, exec: str, specs: list["LaunchSpec"]) -> list[str]:
@@ -51,7 +50,7 @@ class SrunAdapter(LaunchAdapter):
             fp.write(ranks)
             view = self.backend.resource_view(ranks=p)
             for opt in self.config["mpmd"]["local_options"]:
-                fp.write(f" {self.expand(opt, **view)}")
+                fp.write(f" {self.expand_one(opt, **view)}")
             iter_opts = iter(launch_opts)
             for opt in iter_opts:
                 if opt == "-n":
@@ -61,11 +60,11 @@ class SrunAdapter(LaunchAdapter):
                 elif opt.startswith(("-n=", "-np=")):
                     continue
                 else:
-                    fp.write(f" {self.expand(opt, **view)}")
+                    fp.write(f" {self.expand_one(opt, **view)}")
             for opt in self.config["pre_options"]:
-                fp.write(f" {self.expand(opt, **view)}")
+                fp.write(f" {self.expand_one(opt, **view)}")
             for opt in program_opts:
-                fp.write(f" {self.expand(opt, **view)}")
+                fp.write(f" {self.expand_one(opt, **view)}")
             fp.write("\n")
         file = "launch-multi-prog.conf"
         with open(file, "w") as fh:
@@ -73,12 +72,8 @@ class SrunAdapter(LaunchAdapter):
         cmd = [os.fsdecode(exec)]
         view = self.backend.resource_view(ranks=np)
         for opt in self.config["mpmd"]["global_options"]:
-            cmd.append(self.expand(opt, **view))
+            cmd.append(self.expand_one(opt, **view))
         for opt in self.config["default_options"]:
-            cmd.append(self.expand(opt, **view))
+            cmd.append(self.expand_one(opt, **view))
         cmd.extend([f"-n{np}", "--multi-prog", file])
         return cmd
-
-    @staticmethod
-    def expand(arg: str, **kwargs: Any) -> str:
-        return str(arg) % kwargs
