@@ -8,7 +8,6 @@ __pycache__
 .mypy_cache
 .canary_cache
 src/*.egg-info/
-src/hpc_connect/version.py
 
 docs/build
 

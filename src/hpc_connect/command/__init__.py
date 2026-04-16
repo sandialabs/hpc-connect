@@ -71,6 +71,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def make_parser() -> argparse.ArgumentParser:
+    from .. import version as _v
+
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--info", action="store_true", help="Show additional information and exit.")
     parser.add_argument(
@@ -79,6 +81,12 @@ def make_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="path",
         help="colon-separated path to config that should be set, e.g. 'config:default:true'",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=_v.version,
+        help="Show hpc connect version and exit",
     )
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
