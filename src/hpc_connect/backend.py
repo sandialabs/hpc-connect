@@ -86,6 +86,9 @@ class Backend(abc.ABC):
     def supports_subscheduling(self) -> bool:
         return False
 
+    def supports_dependencies(self) -> bool:
+        return False
+
     def validate(self) -> None:
         if self.config["launch"]["type"] not in self.valid_launchers:
             type = self.config["launch"]["type"]

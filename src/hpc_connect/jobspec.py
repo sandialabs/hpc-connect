@@ -46,5 +46,10 @@ class JobSpec:
 
     extensions: dict[str, Any] = field(default_factory=dict)
 
+    dependencies: list[str] = field(default_factory=list)
+
+    def with_dependencies(self, dependencies: list[str]) -> "JobSpec":
+        return replace(self, dependencies=dependencies)
+
     def with_updates(self, **kwargs) -> "JobSpec":
         return replace(self, **kwargs)

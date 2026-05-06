@@ -67,6 +67,9 @@ class SlurmBackend(hpc_connect.Backend):
             },
         }
 
+    def supports_dependencies(self) -> bool:
+        return True
+
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
         return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter(config=self.config["submit"]))
 
@@ -107,6 +110,8 @@ class SbatchAdapter:
                 fh.write(f"#SBATCH --error={spec.error}\n")
             if spec.output:
                 fh.write(f"#SBATCH --output={spec.output}\n")
+            if spec.dependencies:
+                fh.write(f"#SBATCH --dependency=afterany:{':'.join(spec.dependencies)}\n")
             for arg in self.config["default_options"]:
                 fh.write(f"#SBATCH {arg}\n")
             for arg in spec.submit_args:
