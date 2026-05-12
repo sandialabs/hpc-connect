@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -26,7 +27,9 @@ def read_sinfo() -> dict[str, Any] | None:
         format = " ".join(opts)
         args = [sinfo, "-o", format]
         try:
-            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
+            proc = subprocess.run(
+                args, check=True, encoding="utf-8", capture_output=True
+            )
         except subprocess.CalledProcessError:
             return None
         else:
@@ -96,9 +99,32 @@ def read_sinfo() -> dict[str, Any] | None:
 def safe_loads(arg: str) -> Any:
     if arg == "(null)":
         return None
+    if ":" in arg:
+        arg = strip_gres_suffixes(arg)
     if arg.endswith("+"):
         return safe_loads(arg[:-1])
     try:
         return json.loads(arg)
     except json.JSONDecodeError:
         return arg
+
+
+def strip_gres_suffix(gres: str) -> str:
+    """Remove trailing socket affinity patterns like (S:0-1) from GRES strings.
+
+    Examples:
+        "gpu:a40:1(S:0-1)" -> "gpu:a40:1"
+        "nic:mlx5:1(S:0)" -> "nic:mlx5:1"
+        "mem:128G(S:0-3)" -> "mem:128G"
+        "gpu:h100:4" -> "gpu:h100:4" (no change)
+    """
+    return re.sub(r"\s*\([^)]*\)\s*$", "", gres)
+
+
+def strip_gres_suffixes(gres_field: str) -> str:
+    """Handle comma-separated GRES fields, stripping suffixes from each.
+
+    Examples:
+        "gpu:a40:1(S:0-1),nic:mlx5:1(S:0)" -> "gpu:a40:1,nic:mlx5:1"
+    """
+    return ",".join(strip_gres_suffix(x.strip()) for x in gres_field.split(","))
