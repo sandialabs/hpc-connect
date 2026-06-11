@@ -27,9 +27,7 @@ def read_sinfo() -> dict[str, Any] | None:
         format = " ".join(opts)
         args = [sinfo, "-o", format]
         try:
-            proc = subprocess.run(
-                args, check=True, encoding="utf-8", capture_output=True
-            )
+            proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
         except subprocess.CalledProcessError:
             return None
         else:
