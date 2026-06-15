@@ -1,12 +1,11 @@
-import pytest
-from types import SimpleNamespace
-
 from hpcc_slurm.discover import (
     read_sinfo,
     strip_gres_suffix,
     strip_gres_suffixes,
     safe_loads,
 )
+import pytest
+from types import SimpleNamespace
 
 
 def test_read_sinfo_parses_first_data_line(monkeypatch):

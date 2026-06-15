@@ -1,13 +1,8 @@
-import os
 from contextlib import contextmanager
-from pathlib import Path
-
-import yaml
-
 import hpc_connect
-
-
+from pathlib import Path
 import pytest
+import os
 
 
 @pytest.fixture(scope="function", autouse=True)
