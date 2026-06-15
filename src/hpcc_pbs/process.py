@@ -46,7 +46,7 @@ class PBSProcess(hpc_connect.HPCProcess):
         with open(script) as fh:
             script_lines = fh.read()
         logger.error(f"    qsub script: {script_lines}")
-        raise SubmissionFailedError
+        raise hpc_connect.SubmissionFailedError
 
     @property
     def returncode(self) -> int | None:
@@ -91,7 +91,3 @@ class PBSProcess(hpc_connect.HPCProcess):
         if qdel is None:
             raise RuntimeError("qdel not found on PATH")
         self.returncode = 1
-
-
-class SubmissionFailedError(Exception):
-    pass

@@ -16,6 +16,7 @@ from .launch import HPCLauncher
 from .launch import LaunchAdapter
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
+from .submit import SubmissionFailedError
 
 __all__ = [
     "Backend",
@@ -29,6 +30,7 @@ __all__ = [
     "HPCProcess",
     "HPCSubmissionManager",
     "JobSpec",
+    "SubmissionFailedError",
 ]
 
 if os.getenv("HPC_CONNECT_DEBUG", "no").lower() in ("yes", "true", "1", "on"):

@@ -52,7 +52,7 @@ class SlurmProcess(hpc_connect.HPCProcess):
             logger.log(logging.ERROR, f"    {line}")
         for line in proc.stderr.split("\n"):
             logger.log(logging.ERROR, f"    {line}")
-        raise SubmissionFailedError
+        raise hpc_connect.SubmissionFailedError
 
     @staticmethod
     def parse_script_args(script: str) -> argparse.Namespace:
@@ -135,7 +135,3 @@ class SlurmProcess(hpc_connect.HPCProcess):
         logger.warning(f"cancelling slurm job {self.jobid}")
         subprocess.run(["scancel", self.jobid, "--clusters=all"])
         self.returncode = 1
-
-
-class SubmissionFailedError(Exception):
-    pass

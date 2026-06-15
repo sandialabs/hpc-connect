@@ -39,11 +39,8 @@ class FluxProcess(hpc_connect.HPCProcess):
                 self.flux_jobid = fut.jobid()
                 self.jobid = str(self.flux_jobid)
                 logger.debug(f"submitted job {self.jobid} for {self.name}")
-            except CancelledError:
+            except (CancelledError, Exception):
                 self.returncode = 1
-            except Exception as e:
-                logger.exception("Submission failed")
-                raise
 
         def set_submittime(fut: FluxExecutorFuture, *args):
             self.submitted = time.time()
