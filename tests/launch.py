@@ -1,8 +1,10 @@
-from contextlib import contextmanager
-import hpc_connect
-from pathlib import Path
-import pytest
 import os
+from contextlib import contextmanager
+from pathlib import Path
+
+import pytest
+
+import hpc_connect
 
 
 @pytest.fixture(scope="function", autouse=True)
