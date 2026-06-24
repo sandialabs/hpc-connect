@@ -3,24 +3,28 @@
 # SPDX-License-Identifier: MIT
 import threading
 import time
+from collections import defaultdict
 from typing import TYPE_CHECKING
 from typing import Callable
 from typing import Generator
 from typing import Iterable
 from typing import List
+from typing import Literal
 from typing import Optional
 
 if TYPE_CHECKING:
     from .process import HPCProcess
 
 
+CallbackEventT = Literal["start", "done", "jobid"]
+valid_callback_events = {"start", "done", "jobid"}
+
+
 class Future:
     def __init__(self, proc: "HPCProcess", polling_interval: float = 1.0):
         self.proc = proc
         self._polling_interval = polling_interval or 1.0
-        self._on_start_callbacks: List[Callable[["Future"], None]] = []
-        self._jobid_callbacks: List[Callable[["Future"], None]] = []
-        self._done_callbacks: List[Callable[["Future"], None]] = []
+        self._callbacks: dict[CallbackEventT, List[Callable[["Future"], None]]] = defaultdict(list)
         self._done = threading.Event()
         self._cancelled = False
         self._lock = threading.Lock()
@@ -28,40 +32,33 @@ class Future:
         # start polling in background
         threading.Thread(target=self._monitor, daemon=True).start()
 
+    def _pop_callbacks(self, event: CallbackEventT) -> list[Callable[["Future"], None]]:
+        with self._lock:
+            return list(self._callbacks.pop(event, []))
+
+    def _safeexec(self, callback: Callable[["Future"], None]) -> None:
+        try:
+            callback(self)
+        except Exception:  # nosec B110
+            pass
+
+    def _exec_callbacks(self, event: CallbackEventT) -> None:
+        callbacks = self._pop_callbacks(event)
+        for cb in callbacks:
+            self._safeexec(cb)
+
     def _monitor(self):
         while True:
-            if self._on_start_callbacks and self.proc.started > 0.0:
-                with self._lock:
-                    callbacks = list(self._on_start_callbacks)
-                    self._on_start_callbacks.clear()
-                for cb in callbacks:
-                    try:
-                        cb(self)
-                    except Exception:  # nosec B110
-                        pass
-            if self._jobid_callbacks and self.proc.jobid != "unset":
-                with self._lock:
-                    callbacks = list(self._jobid_callbacks)
-                    self._jobid_callbacks.clear()
-                for cb in callbacks:
-                    try:
-                        cb(self)
-                    except Exception:  # nosec B110
-                        pass
-            rc = self.proc.poll()
-            if rc is not None:
+            if self.proc.started > 0.0:
+                self._exec_callbacks("start")
+            if self.proc.jobid != "unset":
+                self._exec_callbacks("jobid")
+            if self.proc.poll() is not None:
                 self._done.set()
-                # call callbacks
-                with self._lock:
-                    callbacks = list(self._done_callbacks)
-                for cb in callbacks:
-                    try:
-                        cb(self)
-                    except Exception:  # nosec B110
-                        pass
-                return
+                self._exec_callbacks("done")
+                break
             if self._cancelled:
-                return
+                break
             time.sleep(self._polling_interval)
 
     def done(self) -> bool:
@@ -80,13 +77,10 @@ class Future:
             except Exception:  # nosec B110
                 pass
             self._done.set()
-            # callbacks still fire
-            for cb in self._done_callbacks:
-                try:
-                    cb(self)
-                except Exception:  # nosec B110
-                    pass
-            return True
+            callbacks = list(self._callbacks.pop("done", []))
+        for cb in callbacks:
+            self._safeexec(cb)
+        return True
 
     def result(self, timeout: Optional[float] = None) -> int:
         finished = self._done.wait(timeout=timeout)
@@ -96,21 +90,29 @@ class Future:
         return rc
 
     def add_done_callback(self, fn: Callable[["Future"], None]):
-        with self._lock:
-            self._done_callbacks.append(fn)
-            if self.done():
-                try:
-                    fn(self)
-                except Exception:  # nosec B110
-                    pass
+        self.add_callback("done", fn)
 
     def add_jobstart_callback(self, fn: Callable[["Future"], None]):
-        with self._lock:
-            self._on_start_callbacks.append(fn)
+        self.add_callback("start", fn)
 
     def add_jobid_callback(self, fn: Callable[["Future"], None]):
+        self.add_callback("jobid", fn)
+
+    def add_callback(self, event: CallbackEventT, fn: Callable[["Future"], None]):
+        if event not in valid_callback_events:
+            raise ValueError(f"Unknown callback event: {event!r}")
+        call_now: bool = False
         with self._lock:
-            self._jobid_callbacks.append(fn)
+            if event == "done" and self.done():
+                call_now = True
+            elif event == "start" and self.proc.started > 0.0:
+                call_now = True
+            elif event == "jobid" and self.proc.jobid != "unset":
+                call_now = True
+            else:
+                self._callbacks[event].append(fn)
+        if call_now:
+            self._safeexec(fn)
 
     @property
     def jobid(self) -> str:

@@ -47,7 +47,8 @@ class RemoteSubprocess(hpc_connect.HPCProcess):
             stderr = streamify(error)
         if hasattr(stderr, "write"):
             weakref.finalize(stderr, stderr.close)  # type: ignore
-        self.proc = subprocess.Popen([ssh, host, script], stdout=stdout, stderr=stderr)
+        hostname = "localhost" if host == os.uname().nodename else host
+        self.proc = subprocess.Popen([ssh, hostname, script], stdout=stdout, stderr=stderr)
         self.submitted = self.started = time.time()
         self.jobid = str(self.proc.pid)
 
