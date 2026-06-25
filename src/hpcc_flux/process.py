@@ -20,8 +20,8 @@ logger = logging.getLogger("hpc_connect.flux.submit")
 class FluxProcess(hpc_connect.HPCProcess):
     JOB_TIMEOUT_CODE = 66
 
-    def __init__(self, name: str, future: FluxExecutorFuture) -> None:
-        self.fh = Flux()
+    def __init__(self, name: str, future: FluxExecutorFuture, fh: Flux) -> None:
+        self.fh = fh
         self.name = name
         self.fut: FluxExecutorFuture = future
         self._rc: int | None = None
