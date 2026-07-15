@@ -2,12 +2,10 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-import yaml
+import pytest
 
 import hpc_connect
 
-
-import pytest
 
 @pytest.fixture(scope="function", autouse=True)
 def reset_config():
@@ -92,6 +90,7 @@ def test_file_config_2(tmpdir, capfd):
             assert (
                 out == f"{mock_bin}/mpiexec --map-by ppr:4:cores -np 4 -flag file executable --option"
             )
+
 
 def test_file_config_3(tmpdir, capfd):
     workspace = Path(tmpdir.strpath)

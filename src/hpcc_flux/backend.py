@@ -101,7 +101,7 @@ class FluxAdapter:
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxProcess:
         jobspec = self.prepare(spec, exclusive=exclusive)
         fut = self.backend.flux.submit(jobspec)  # type: ignore
-        return FluxProcess(spec.name, future=fut)
+        return FluxProcess(spec.name, future=fut, fh=self.backend.fh)
 
     def prepare(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> Jobspec:
         duration = int(spec.time_limit + 60)

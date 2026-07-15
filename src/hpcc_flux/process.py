@@ -20,11 +20,12 @@ logger = logging.getLogger("hpc_connect.flux.submit")
 class FluxProcess(hpc_connect.HPCProcess):
     JOB_TIMEOUT_CODE = 66
 
-    def __init__(self, name: str, future: FluxExecutorFuture) -> None:
-        self.fh = Flux()
+    def __init__(self, name: str, future: FluxExecutorFuture, fh: Flux) -> None:
+        self.fh = fh
         self.name = name
         self.fut: FluxExecutorFuture = future
         self._rc: int | None = None
+        self.flux_jobid: flux.job.JobID | None = None
 
         def set_returncode(fut: FluxExecutorFuture):
             try:
@@ -35,13 +36,11 @@ class FluxProcess(hpc_connect.HPCProcess):
 
         def set_jobid(fut: FluxExecutorFuture):
             try:
-                self.jobid = str(fut.jobid())
+                self.flux_jobid = fut.jobid()
+                self.jobid = str(self.flux_jobid)
                 logger.debug(f"submitted job {self.jobid} for {self.name}")
-            except CancelledError:
+            except (CancelledError, Exception):
                 self.returncode = 1
-            except Exception as e:
-                logger.exception("Submission failed")
-                raise
 
         def set_submittime(fut: FluxExecutorFuture, *args):
             self.submitted = time.time()
@@ -68,7 +67,7 @@ class FluxProcess(hpc_connect.HPCProcess):
     def cancel(self) -> None:
         logger.warning(f"Canceling flux job {self.jobid}")
         try:
-            flux.job.cancel(self.fh, int(self.jobid))
+            flux.job.cancel(self.fh, self.flux_jobid)
         except OSError:
             logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
         except Exception:

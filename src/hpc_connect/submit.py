@@ -8,6 +8,10 @@ from .jobspec import JobSpec
 from .process import HPCProcess
 
 
+class SubmissionFailedError(Exception):
+    pass
+
+
 class Adapter(Protocol):
     def submit(self, spec: JobSpec, exclusive: bool = False) -> HPCProcess: ...
     def polling_interval(self) -> float: ...

@@ -14,7 +14,7 @@ def test_config_launch_basic(tmpdir):
             "launch": {
                 "type": "mpi",
                 "default_options": ["-a", "-b"],
-            }
+            },
         }
         config.set("backends", [backend_cfg])
         backend = config.backend("my-backend")
