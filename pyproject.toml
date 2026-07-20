@@ -11,7 +11,10 @@ version = "26.05.11.dev0"
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
-dependencies = ["pluggy", "jinja2", "psutil", "PyYAML", "schema"]
+
+# PLY is not used directly by hpc_connect, but some versions/configurations of the Flux HPC backend
+# depend on it.  Include it defensively to ensure Flux support works when that backend is used.
+dependencies = ["pluggy", "jinja2", "psutil", "PyYAML", "schema", "ply"]
 
 [project.scripts]
 hpc-launch = "hpc_connect.__main__:launch"
