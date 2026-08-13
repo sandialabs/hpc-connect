@@ -13,12 +13,10 @@ from typing import Callable
 
 from psutil import cpu_count
 
-from .tengine import make_template_env
 from .time import hhmmss
 from .time import time_in_seconds
 
 __all__ = [
-    "make_template_env",
     "hhmmss",
     "time_in_seconds",
     "cpu_count",

@@ -8,7 +8,6 @@ import os
 import sys
 from typing import Any
 from typing import Literal
-from typing import cast
 
 import yaml
 
@@ -29,8 +28,8 @@ class Config:
         else:
             data: dict[str, Any] = {}
             for name in ("site", "global", "local"):
-                scope = get_config_scope_data(cast(ConfigScopes, name))
-                collections.merge(data, scope)  # type: ignore
+                scope = get_config_scope_data(name)
+                collections.merge(data, scope)
             self.data = self.validate(data)
         if export:
             self.export()
@@ -63,7 +62,7 @@ class Config:
                     current = current.setdefault(component, {})
                 current[components[-2]] = safe_loads(components[-1])
             candidate = copy.deepcopy(self.data)
-            collections.merge(candidate, overlay)  # type: ignore
+            collections.merge(candidate, overlay)
             self.data = self.validate(candidate)
             if self.data.get("debug"):
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
@@ -87,7 +86,7 @@ class Config:
         current[components[-1]] = value
 
         candidate = copy.deepcopy(self.data)
-        collections.merge(candidate, overlay)  # type: ignore
+        collections.merge(candidate, overlay)
         self.data = self.validate(candidate)
         self.export()
 

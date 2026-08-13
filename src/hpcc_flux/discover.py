@@ -45,14 +45,8 @@ def read_resource_info() -> dict[str, Any] | None:
                         "type": "socket",
                         "count": 1,
                         "resources": [
-                            {
-                                "type": "cpu",
-                                "count": int(totals["cpu"] / nodes),
-                            },
-                            {
-                                "type": "gpu",
-                                "count": int(totals["gpu"] / nodes),
-                            },
+                            {"type": "cpu", "count": int(totals["cpu"] / nodes)},
+                            {"type": "gpu", "count": int(totals["gpu"] / nodes)},
                         ],
                     }
                 ],

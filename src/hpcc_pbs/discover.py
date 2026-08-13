@@ -41,13 +41,8 @@ def read_pbsnodes() -> list[dict[str, Any]] | None:
                         {
                             "type": "socket",
                             "count": 1,
-                            "resources": [
-                                {
-                                    "type": "cpu",
-                                    "count": cpus_on_node,
-                                },
-                            ],
-                        },
+                            "resources": [{"type": "cpu", "count": cpus_on_node}],
+                        }
                     ],
                 }
                 resources.append(resource)

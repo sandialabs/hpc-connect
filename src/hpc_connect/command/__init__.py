@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     module = _commands[args.command]
     cfg = Config()
     cfg.set_main_options(args)
-    module.execute(cfg, args)  # ty: ignore[unresolved-attribute]
+    module.execute(cfg, args)
     return 0
 
 
@@ -83,10 +83,7 @@ def make_parser() -> argparse.ArgumentParser:
         help="colon-separated path to config that should be set, e.g. 'config:default:true'",
     )
     parser.add_argument(
-        "--version",
-        action="version",
-        version=_v.version,
-        help="Show hpc connect version and exit",
+        "--version", action="version", version=_v.version, help="Show hpc connect version and exit"
     )
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
@@ -99,5 +96,5 @@ def add_command(subparsers: argparse._SubParsersAction, module: ModuleType) -> N
     add_help = getattr(module, "add_help", True)
     description = getattr(module, "description", None)
     parser = subparsers.add_parser(name, add_help=add_help, help=description)
-    module.setup_parser(parser)  # ty: ignore[unresolved-attribute]
+    module.setup_parser(parser)
     _commands[name] = module

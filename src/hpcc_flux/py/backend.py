@@ -11,20 +11,17 @@ import shutil
 import time
 from typing import Any
 
-import flux  # type: ignore
-from flux import Flux  # type: ignore
-from flux.job import FluxExecutor  # type: ignore
-from flux.job import Jobspec  # type: ignore
-from flux.job import JobspecV1  # type: ignore
+import flux
+import flux.job
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.util import set_executable
 
-from .discover import read_resource_info
+from ..discover import read_resource_info
 from .process import FluxProcess
 
-logger = logging.getLogger("hpc_connect.flux.backend_api")
+logger = logging.getLogger("hpc_connect.flux.py.backend")
 
 
 class FluxBackend(hpc_connect.Backend):
@@ -32,9 +29,13 @@ class FluxBackend(hpc_connect.Backend):
 
     def __init__(self, cfg: dict[str, Any] | None = None) -> None:
         self._resource_specs: list[dict] | None = None
-        self.flux: FluxExecutor | None = FluxExecutor()
-        self.fh = Flux()
+        self.executor: flux.job.FluxExecutor | None = flux.job.FluxExecutor()
+        self.handle = flux.Flux()
         super().__init__(cfg=cfg)
+
+    @classmethod
+    def matches(cls, arg: str) -> bool:
+        return arg in ("flux", "flux.py", "flux:py")
 
     @property
     def resource_specs(self) -> list[dict]:
@@ -61,15 +62,9 @@ class FluxBackend(hpc_connect.Backend):
                 "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
-                "mpmd": {
-                    "global_options": [],
-                    "local_options": [],
-                },
+                "mpmd": {"global_options": [], "local_options": []},
             },
-            "submit": {
-                "default_options": [],
-                "polling_interval": 1.0,
-            },
+            "submit": {"default_options": [], "polling_interval": 1.0},
         }
 
     def supports_subscheduling(self) -> bool:
@@ -100,14 +95,14 @@ class FluxAdapter:
 
     def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxProcess:
         jobspec = self.prepare(spec, exclusive=exclusive)
-        fut = self.backend.flux.submit(jobspec)  # type: ignore
-        return FluxProcess(spec.name, future=fut, fh=self.backend.fh)
+        fut = self.backend.executor.submit(jobspec)  # type: ignore
+        return FluxProcess(spec.name, future=fut, handle=self.backend.handle)
 
-    def prepare(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> Jobspec:
+    def prepare(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> flux.job.Jobspec:
         duration = int(spec.time_limit + 60)
         sh = shutil.which("sh")
         script = spec.workspace / f"{spec.name}.sh"
-        script.parent.mkdir(exist_ok=True)
+        script.parent.mkdir(exist_ok=True, parents=True)
         alloc = self.get_alloc_settings(spec.cpus, spec.gpus, spec.nodes)
         with open(script, "w") as fh:
             fh.write(f"#!{sh}\n")
@@ -119,7 +114,7 @@ class FluxAdapter:
             if spec.output:
                 fh.write(f"#flux: --output={spec.output}\n")
             if spec.error:
-                fh.write(f"#flux: --error={spec.output}\n")
+                fh.write(f"#flux: --error={spec.error}\n")
             for arg in self.config["default_options"]:
                 fh.write(f"#flux: {arg}\n")
             for arg in spec.submit_args:
@@ -134,7 +129,7 @@ class FluxAdapter:
         set_executable(script)
         kwds: dict[str, Any] = {"command": [str(script)], "exclusive": exclusive}
         kwds.update(alloc)
-        jobspec = JobspecV1.from_nest_command(**kwds)
+        jobspec = flux.job.JobspecV1.from_nest_command(**kwds)
         jobspec.setattr("system.job.name", spec.name)
         jobspec.stdout = spec.output or "job-ouput.txt"
         jobspec.stderr = spec.error or spec.output or "job-error.txt"
@@ -150,10 +145,7 @@ class FluxAdapter:
         return jobspec
 
     def get_alloc_settings(
-        self,
-        cpus: int | None = None,
-        gpus: int | None = None,
-        nodes: int | None = None,
+        self, cpus: int | None = None, gpus: int | None = None, nodes: int | None = None
     ) -> dict[str, Any]:
         alloc: dict[str, Any] = {}
         if nodes is not None:
@@ -178,11 +170,12 @@ class FluxAdapter:
 
     def shutdown(self):
         with self.lock:
-            if self.backend.flux:
+            if self.backend.executor:
                 time.sleep(0.25)
                 if flux.job:
-                    jobs = flux.job.JobList(self.backend.fh, filters=["running", "pending"]).jobs()
+                    job_list = flux.job.JobList(self.backend.handle, filters=["running", "pending"])
+                    jobs = job_list.jobs()
                     if jobs:
                         logger.warning(f"{len(jobs)} active jobs remain after shutdown")
-                self.backend.flux.shutdown(wait=False, cancel_futures=True)
-                self.backend.flux = None
+                self.backend.executor.shutdown(wait=False, cancel_futures=True)
+                self.backend.executor = None

@@ -58,5 +58,5 @@ export MY_VAR=SPAM
 printenv || true
 ls""")
         fh.seek(0)
-        ns = hpcc_slurm.process.SlurmProcess.parse_script_args(fh.name)
+        ns = hpcc_slurm.process.parse_script_args(fh.name)
         assert ns.clusters == "flight,eclipse"

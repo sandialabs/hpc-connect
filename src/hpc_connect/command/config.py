@@ -12,9 +12,7 @@ def setup_parser(parser: argparse.ArgumentParser) -> None:
     parent = parser.add_subparsers(dest="subcommand")
     p = parent.add_parser("show")
     p.add_argument(
-        "--scope",
-        default=None,
-        help="Add settings to this config scope [default: %(default)s]",
+        "--scope", default=None, help="Add settings to this config scope [default: %(default)s]"
     )
     p = parent.add_parser("add")
     p.add_argument(

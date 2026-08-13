@@ -10,21 +10,15 @@ import hpc_connect
 logger = logging.getLogger("hpc_connect.flux")
 
 
-@hpc_connect.hookimpl
-def hpc_connect_backend() -> Type["hpc_connect.Backend"]:
-    try:
-        from .backend import FluxBackend
+@hpc_connect.hookimpl(specname="hpc_connect_backend")
+def flux_backend() -> Type["hpc_connect.Backend"]:
+    from .py import FluxBackend
 
-        return FluxBackend
-    except (ImportError, ModuleNotFoundError) as e:
+    return FluxBackend
 
-        class BadFluxBackend(hpc_connect.Backend):
-            type = "flux"
 
-            def __init__(self, *args, **kwargs):
-                raise RuntimeError(
-                    "Flux backed was requested, but the 'flux' Python package "
-                    "is not installed or not importable",
-                )
+@hpc_connect.hookimpl(specname="hpc_connect_backend")
+def flux_shell_backend() -> Type["hpc_connect.Backend"]:
+    from .shell import FluxBackend
 
-        return BadFluxBackend
+    return FluxBackend

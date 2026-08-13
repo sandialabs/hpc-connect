@@ -122,6 +122,19 @@ class Future:
     def returncode(self) -> Optional[int]:
         return self.proc.returncode
 
+    def proc_info(self, timeout: float | None = None) -> dict:
+        """
+        Return scheduler/process metadata captured when the job completed.
+
+        If the future is not complete, wait up to `timeout` seconds for it to
+        complete before returning the captured information.
+        """
+        self.result(timeout=timeout)
+        info = getattr(self.proc, "completion_info", None)
+        if info is None:
+            return {}
+        return info
+
 
 def as_completed(
     futures: Iterable["Future"],

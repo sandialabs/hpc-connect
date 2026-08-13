@@ -7,21 +7,25 @@ import multiprocessing
 import multiprocessing.synchronize
 import time
 from concurrent.futures import CancelledError
+from typing import TYPE_CHECKING
 
-import flux  # type: ignore
-from flux import Flux  # type: ignore
-from flux.job import FluxExecutorFuture  # type: ignore
+import flux
+import flux.job
+from flux.job import FluxExecutorFuture
+
+if TYPE_CHECKING:
+    from flux.core.handle import Flux as FluxHandle
 
 import hpc_connect
 
-logger = logging.getLogger("hpc_connect.flux.submit")
+logger = logging.getLogger("hpc_connect.flux.py.process")
 
 
 class FluxProcess(hpc_connect.HPCProcess):
     JOB_TIMEOUT_CODE = 66
 
-    def __init__(self, name: str, future: FluxExecutorFuture, fh: Flux) -> None:
-        self.fh = fh
+    def __init__(self, name: str, future: FluxExecutorFuture, handle: "FluxHandle") -> None:
+        self.handle = handle
         self.name = name
         self.fut: FluxExecutorFuture = future
         self._rc: int | None = None
@@ -29,10 +33,14 @@ class FluxProcess(hpc_connect.HPCProcess):
 
         def set_returncode(fut: FluxExecutorFuture):
             try:
-                info = flux.job.result(self.fh, fut.jobid())
+                info = flux.job.result(self.handle, fut.jobid())
                 self.returncode = info.returncode
             except (CancelledError, Exception):
                 self.returncode = 1
+
+        def set_proc_info(fut: FluxExecutorFuture):
+            job = flux.job.get_job(self.handle, flux.job.JobID(self.jobid))
+            self.completion_info = dict(job)
 
         def set_jobid(fut: FluxExecutorFuture):
             try:
@@ -50,6 +58,7 @@ class FluxProcess(hpc_connect.HPCProcess):
 
         self.fut.add_jobid_callback(set_jobid)
         self.fut.add_done_callback(set_returncode)
+        self.fut.add_done_callback(set_proc_info)
         self.fut.add_event_callback("submit", set_submittime)
         self.fut.add_event_callback("start", set_starttime)
 
@@ -66,20 +75,19 @@ class FluxProcess(hpc_connect.HPCProcess):
 
     def cancel(self) -> None:
         logger.warning(f"Canceling flux job {self.jobid}")
-        try:
-            flux.job.cancel(self.fh, self.flux_jobid)
-        except OSError:
-            logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
-        except Exception:
-            logger.error(f"Failed to cancel job {self.jobid}")
+        if self.flux_jobid is not None:
+            try:
+                flux.job.cancel(self.handle, self.flux_jobid)
+            except OSError:
+                logger.debug(f"Job {self.jobid} is inactive, cannot cancel")
+            except Exception:
+                logger.error(f"Failed to cancel job {self.jobid}")
         self.returncode = 1
 
 
 class FluxMultiProcess(hpc_connect.HPCProcess):
     def __init__(
-        self,
-        lock: multiprocessing.synchronize.RLock,
-        procs: list[FluxProcess] | None = None,
+        self, lock: multiprocessing.synchronize.RLock, procs: list[FluxProcess] | None = None
     ) -> None:
         self.lock = lock
         self.procs = procs or []
@@ -89,7 +97,7 @@ class FluxMultiProcess(hpc_connect.HPCProcess):
         rcs = [p.returncode for p in self.procs if p is not None]
         if not rcs:
             return None
-        return max(rcs)  # type: ignore
+        return max(rcs)
 
     @returncode.setter
     def returncode(self, arg: int) -> None:
@@ -107,9 +115,11 @@ class FluxMultiProcess(hpc_connect.HPCProcess):
                 proc.cancel()
 
     def poll(self) -> int | None:
-        stat: list[int | None] = []
+        returncodes: list[int] = []
+        pending = False
         for proc in self.procs:
-            stat.append(proc.poll())
-        if any([_ is None for _ in stat]):
-            return None
-        return max(stat)  # type: ignore
+            if (rc := proc.poll()) is None:
+                pending = True
+            else:
+                returncodes.append(rc)
+        return None if pending else max(returncodes)

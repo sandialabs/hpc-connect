@@ -26,11 +26,7 @@ def streamify(arg: str | None) -> TextIO | None:
 
 class RemoteSubprocess(hpc_connect.HPCProcess):
     def __init__(
-        self,
-        host: str,
-        script: str,
-        output: str | None = None,
-        error: str | None = None,
+        self, host: str, script: str, output: str | None = None, error: str | None = None
     ) -> None:
         ssh = shutil.which("ssh")
         if ssh is None:

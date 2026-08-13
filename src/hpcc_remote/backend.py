@@ -42,15 +42,9 @@ class RemoteBackend(hpc_connect.Backend):
                 "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
-                "mpmd": {
-                    "global_options": [],
-                    "local_options": [],
-                },
+                "mpmd": {"global_options": [], "local_options": []},
             },
-            "submit": {
-                "default_options": [],
-                "polling_interval": 0.5,
-            },
+            "submit": {"default_options": [], "polling_interval": 0.5},
         }
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:

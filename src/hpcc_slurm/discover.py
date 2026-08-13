@@ -62,12 +62,7 @@ def read_sinfo() -> dict[str, Any] | None:
                     {
                         "type": "socket",
                         "count": sockets_per_node,
-                        "resources": [
-                            {
-                                "type": "cpu",
-                                "count": cores_per_socket,
-                            },
-                        ],
+                        "resources": [{"type": "cpu", "count": cores_per_socket}],
                     }
                 ],
                 "additional_properties": {
@@ -83,10 +78,7 @@ def read_sinfo() -> dict[str, Any] | None:
                 if not res:
                     continue
                 parts = res.split(":")
-                resource: dict[str, Any] = {
-                    "type": parts[0],
-                    "count": safe_loads(parts[-1]),
-                }
+                resource: dict[str, Any] = {"type": parts[0], "count": safe_loads(parts[-1])}
                 if len(parts) > 2:
                     resource["gres"] = ":".join(parts[1:-1])
                 info["resources"].append(resource)

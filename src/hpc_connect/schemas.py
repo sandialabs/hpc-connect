@@ -82,7 +82,7 @@ launch_schema = Schema(
             Optional("local_options", default_factory=list): Use(flag_splitter),
             Optional("global_options", default_factory=list): Use(flag_splitter),
         },
-    },
+    }
 )
 
 backend_schema = Schema(

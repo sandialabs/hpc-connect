@@ -76,13 +76,7 @@ def deploy(*, twine_username: str | None = None, twine_password: str | None = No
             raise MissingEnvironmentVariableError("TWINE_PASSWORD")
         subprocess.run([env.bin.python3, "-m", "pip", "install", "twine"], check=True)
         wheels = glob.glob("./dist/*.whl")
-        cmd = [
-            env.bin.python3,
-            "-m",
-            "twine",
-            "upload",
-            "--skip-existing",
-        ]
+        cmd = [env.bin.python3, "-m", "twine", "upload", "--skip-existing"]
         cmd.extend(wheels)
         subprocess.run(cmd, check=True)
     logger.info("Done deploying")

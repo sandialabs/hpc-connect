@@ -1,10 +1,12 @@
 import abc
+from typing import Any
 
 
 class HPCProcess(abc.ABC):
     _jobid: str = "unset"
     _submitted: float = -1.0
     _started: float = -1.0
+    completion_info: dict[str, Any] | None = None
 
     def __init__(self, args: list[str], output: str | None, error: str | None) -> None: ...
 
@@ -45,3 +47,6 @@ class HPCProcess(abc.ABC):
 
     @abc.abstractmethod
     def cancel(self) -> None: ...
+
+    def capture_completion_info(self) -> None:
+        pass

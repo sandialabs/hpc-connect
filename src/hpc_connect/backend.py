@@ -234,13 +234,7 @@ class Backend(abc.ABC):
         if "socket" not in self.resource_index:
             raise ValueError("resource_view assumes socket-based topology")
 
-        view: dict[str, int] = {
-            "np": 0,
-            "ranks": 0,
-            "ranks_per_socket": 0,
-            "nodes": 0,
-            "sockets": 0,
-        }
+        view: dict[str, int] = {"np": 0, "ranks": 0, "ranks_per_socket": 0, "nodes": 0, "sockets": 0}
 
         if not ranks and not ranks_per_socket:
             return view
@@ -256,7 +250,7 @@ class Backend(abc.ABC):
             assert ranks is not None
             assert ranks_per_socket is not None
             nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-        sockets = int(math.ceil(ranks / ranks_per_socket))  # ty: ignore[unsupported-operator]
+        sockets = int(math.ceil(ranks / ranks_per_socket))
         view["np"] = ranks
         view["ranks"] = ranks
         view["ranks_per_socket"] = ranks_per_socket
