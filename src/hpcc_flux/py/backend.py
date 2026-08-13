@@ -11,8 +11,8 @@ import shutil
 import time
 from typing import Any
 
-import flux
-import flux.job
+import flux  # type: ignore[ty:unresolved-import, import-not-found]
+import flux.job  # type: ignore[ty:unresolved-import, import-not-found]
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter

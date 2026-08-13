@@ -2,20 +2,25 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import Any
+
+import hpc_connect
+
+FluxBackend: type[Any]
+
 try:
     from .backend import FluxBackend as _FluxBackend
 
     FluxBackend = _FluxBackend
 
-except (ImportError, ModuleNotFoundError) as e:
-    import hpc_connect
+except (ImportError, ModuleNotFoundError):
 
     class BadFluxBackend(hpc_connect.Backend):
         type = "flux"
 
         def __init__(self, *args, **kwargs):
             raise RuntimeError(
-                "Flux backed was requested, but the 'flux' Python package "
+                "Flux backend was requested, but the 'flux' Python package "
                 "is not installed or not importable"
             )
 

@@ -9,12 +9,12 @@ import time
 from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING
 
-import flux
-import flux.job
-from flux.job import FluxExecutorFuture
+import flux  # type: ignore[ty:unresolved-import, import-not-found]
+import flux.job  # type: ignore[ty:unresolved-import, import-not-found]
+from flux.job import FluxExecutorFuture  # type: ignore[ty:unresolved-import, import-not-found]
 
 if TYPE_CHECKING:
-    from flux.core.handle import Flux as FluxHandle
+    import flux.core.handle  # type: ignore[ty:unresolved-import, import-not-found]
 
 import hpc_connect
 
@@ -24,7 +24,9 @@ logger = logging.getLogger("hpc_connect.flux.py.process")
 class FluxProcess(hpc_connect.HPCProcess):
     JOB_TIMEOUT_CODE = 66
 
-    def __init__(self, name: str, future: FluxExecutorFuture, handle: "FluxHandle") -> None:
+    def __init__(
+        self, name: str, future: FluxExecutorFuture, handle: "flux.core.handle.FLux"
+    ) -> None:
         self.handle = handle
         self.name = name
         self.fut: FluxExecutorFuture = future
@@ -94,10 +96,14 @@ class FluxMultiProcess(hpc_connect.HPCProcess):
 
     @property
     def returncode(self) -> int | None:
-        rcs = [p.returncode for p in self.procs if p is not None]
-        if not rcs:
-            return None
-        return max(rcs)
+        rcs: list[int] = []
+        for proc in self.procs:
+            if proc is None:
+                continue
+            rc = proc.returncode
+            if rc is not None:
+                rcs.append(rc)
+        return max(rcs) if rcs else None
 
     @returncode.setter
     def returncode(self, arg: int) -> None:

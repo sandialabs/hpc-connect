@@ -8,6 +8,7 @@ import os
 import subprocess
 from enum import IntEnum
 from types import TracebackType
+from typing import Literal
 from typing import Sequence
 
 logger = logging.getLogger("hpc_connect.flux.allocation")
@@ -59,7 +60,7 @@ class FluxAllocation:
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         exc_traceback: TracebackType | None,
-    ) -> bool:
+    ) -> Literal[False]:
         self.close()
         return False
 
