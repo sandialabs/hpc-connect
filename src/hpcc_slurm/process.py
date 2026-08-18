@@ -107,9 +107,10 @@ def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
         if not parts:
             continue
         row: dict[str, Any] = dict(zip(query_keys, parts[: len(query_keys)]))
-        print(f"{line=}")
-        print(f"{row=}")
-        returncode, signal = _parse_slurm_exitcode(row["exitcode"])
+        try:
+            returncode, signal = _parse_slurm_exitcode(row["exitcode"])
+        except Exception as e:
+            raise ValueError(f"Failed to obtain returncode:signal from {line=}, {row=}") from e
         row["returncode"] = returncode
         row["signal"] = signal
         id = str(row.pop("jobid"))
