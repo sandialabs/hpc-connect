@@ -28,6 +28,13 @@ except (ImportError, ModuleNotFoundError):
         def matches(cls, arg: str) -> bool:
             return arg in ("flux", "flux.py", "flux:py")
 
+        @classmethod
+        def default_config(cls) -> dict[str, Any]:
+            raise RuntimeError(
+                "Flux backend was requested, but the 'flux' Python package "
+                "is not installed or not importable"
+            )
+
     FluxBackend = BadFluxBackend
 
 

@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: MIT
 import atexit
 import logging
-import math
 import os
 import subprocess
 from enum import IntEnum
@@ -27,23 +26,19 @@ class FluxAllocation:
     nodes : int
         Number of nodes to allocate.
 
-    time_limit : float | str
-        Allocation time limit.
-        If a float or int is provided, it is interpreted as seconds.
-
+    Notes
+    -----
+    ``FluxAllocation`` stores only the allocation request shape and active
+    allocation state. Runtime options such as time limit, queue timeout, and
+    extra ``flux alloc`` arguments are supplied to ``open()``.
     """
 
-    def __init__(
-        self, *, nodes: int = 1, time_limit: float | int = 3600.0, queue_timeout: float | int = 1200.0
-    ) -> None:
+    def __init__(self, nodes: int = 1) -> None:
         if nodes <= 0:
             raise ValueError(f"{nodes=} must be > 0")
-        if isinstance(time_limit, (float, int)) and time_limit <= 0:
-            raise ValueError(f"{time_limit=} must be > 0")
 
         self.nodes = nodes
-        self.time_limit = time_limit
-        self.queue_timeout = queue_timeout
+
         self.jobid: str | None = None
         self.uri: str | None = None
         self.state: State = State.INACTIVE
@@ -52,7 +47,8 @@ class FluxAllocation:
         self._atexit_registered: bool = False
 
     def __enter__(self) -> "FluxAllocation":
-        self.start()
+        if self.state != State.ACTIVE:
+            raise RuntimeError("FluxAllocation must be opened before entering context")
         return self
 
     def __exit__(
@@ -70,19 +66,19 @@ class FluxAllocation:
         except Exception:
             pass
 
-    def start(self, timeout: float | int | None = None) -> None:
-        if timeout is None:
-            timeout = self.queue_timeout
+    def open(self, args: Sequence[str], timeout: float | int = 1200.0) -> "FluxAllocation":
         if self.state != State.INACTIVE:
             raise RuntimeError("FluxAllocation already active")
+
         try:
-            self.jobid = alloc(nodes=self.nodes, time_limit=self.time_limit, timeout=timeout)
+            self.jobid = alloc(args, nodes=self.nodes, timeout=timeout)
             self.uri = uri(self.jobid)
             self._parent_uri = os.environ.get("FLUX_URI")
             os.environ["FLUX_URI"] = self.uri
             self.state = State.ACTIVE
             self._register_atexit()
             logger.info("Started Flux allocation %s with URI %s", self.jobid, self.uri)
+
         except Exception as e:
             logger.debug("Flux allocation startup failed", exc_info=True)
             jobid = self.jobid or "<unknown>"
@@ -91,19 +87,26 @@ class FluxAllocation:
             except Exception:
                 logger.debug("Flux allocation cleanup after startup failure failed", exc_info=True)
             raise FluxAllocationStartupError(f"Failed to start Flux allocation {jobid}") from e
+
         if self.uri is None:
             raise FluxAllocationStartupError(f"Failed to obtain a Flux URI for job {self.jobid}")
+
+        return self
 
     def close(self) -> None:
         if self.state != State.ACTIVE and self.jobid is None:
             return
+
         jobid = self.jobid
         self._unregister_atexit()
+
         try:
             self._restore_parent_uri()
+
             if jobid:
                 logger.debug("Stopping Flux allocation job %s", jobid)
                 kill(jobid)
+
         finally:
             self.jobid = None
             self.uri = None
@@ -124,6 +127,7 @@ class FluxAllocation:
     def _unregister_atexit(self) -> None:
         if not self._atexit_registered:
             return
+
         try:
             atexit.unregister(self.close)
         except Exception:
@@ -132,14 +136,7 @@ class FluxAllocation:
             self._atexit_registered = False
 
 
-def alloc(
-    nodes: int = 1,
-    time_limit: float | int = 60.0,
-    queue: str | None = None,
-    job_name: str | None = None,
-    timeout: float | None = None,
-    extra_args: Sequence[str] | None = None,
-) -> str:
+def alloc(args: Sequence[str], nodes: int = 1, timeout: float | None = None) -> str:
     """
     Create a Flux allocation and return the Flux job ID.
 
@@ -148,22 +145,10 @@ def alloc(
     nodes : int
         Number of nodes to allocate.
 
-    time_limit : float | str
-        Allocation time limit in seconds.
-
-    queue : str, optional
-        Flux queue/partition name, if required.
-
-    job_name : str, optional
-        Name for the allocation job.
-
     timeout : float, optional
         Maximum number of seconds to wait for the `flux alloc` command to
         return a job ID. This is a Python subprocess timeout, not the Flux
         allocation time limit.
-
-    extra_args : sequence of str, optional
-        Additional arguments to pass directly to `flux alloc`.
 
     Returns
     -------
@@ -178,17 +163,9 @@ def alloc(
     if nodes < 1:
         raise ValueError("nodes must be >= 1")
     # Flux prefers minutes
-    minutes = math.ceil(float(time_limit) / 60.0)
-    args = ["flux", "alloc", "--bg", f"-N{nodes}", f"-t{minutes}"]
-    if queue:
-        args.extend(["--queue", queue])
-    if job_name:
-        args.extend(["--job-name", job_name])
-    if extra_args:
-        args.extend(extra_args)
     try:
         cp = subprocess.run(
-            args,
+            ["flux", "alloc", "--bg", f"-N{nodes}", *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
