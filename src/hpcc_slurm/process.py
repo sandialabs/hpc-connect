@@ -70,7 +70,7 @@ class SlurmProcess(hpc_connect.HPCProcess):
         logger.warning(f"cancelling slurm job {self.jobid}")
         scancel(self.jobid, clusters=self.clusters)
         data = sacct(self.jobid, clusters=self.clusters)
-        if data is not None:
+        if data:
             job = Job.from_accounting_data(data, self.jobid)
             if job is not None:
                 self.completion_info = job.data
@@ -93,23 +93,29 @@ def scancel(jobid: str, clusters: str | None = None) -> None:
 
 
 def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
-    args = [which("sacct"), "-j", jobid, "--json"]
+    query_keys = ("jobid", "partition", "elapsed", "state", "exitcode")
+    args = [which("sacct"), "-n", "-p", "-j", jobid, f"--format={','.join(query_keys)}"]
     if clusters is not None:
         args.append(f"--clusters={clusters}")
     cp = subprocess.run(args, text=True, capture_output=True, check=False)
     if cp.returncode != 0:
         logger.warning("%s: returned non-zero status %s", shlex.join(args), cp.returncode)
         return None
-    out = cp.stdout.strip()
-    if not out:
-        return None
-    try:
-        data = json.loads(out)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"invalid sacct JSON from {shlex.join(args)}:\n{out}") from exc
-    if "jobs" not in data:
-        raise RuntimeError(f"missing 'jobs' key in sacct output from {shlex.join(args)}")
-    return data
+    data: dict[str, dict] = {}
+    for line in cp.stdout.split("\n"):
+        parts = line.strip().rstrip("|").split("|")
+        if not parts:
+            continue
+        row: dict[str, Any] = dict(zip(query_keys, parts[: len(query_keys)]))
+        returncode, signal = _parse_slurm_exitcode(row["exitcode"])
+        row["returncode"] = returncode
+        row["signal"] = signal
+        id = str(row.pop("jobid"))
+        if id == jobid:
+            data[id] = row
+        else:
+            data.setdefault(id, row)
+    return data or None
 
 
 def sbatch(script: str) -> str:
@@ -163,6 +169,15 @@ def wait(jobid: str, clusters: str | None = None, tries: int = 20, delay: float 
     )
 
 
+def _parse_slurm_exitcode(exitcode: str) -> tuple[int, int]:
+    try:
+        rc, sig = exitcode.split(":", 1)
+        return int(rc), int(sig)
+    except Exception:
+        logger.debug("Could not parse Slurm exitcode %r", exitcode)
+        return -1, 0
+
+
 class Job:
     def __init__(self, data: dict[str, Any]) -> None:
         self.data = data
@@ -176,14 +191,12 @@ class Job:
 
     @property
     def state(self) -> str:
-        return self.data["state"]["current"][0].upper()
+        return self.data["state"].upper()
 
     @property
     def returncode(self) -> int:
-        exit_code = self.data["exit_code"]
-        return exit_code["return_code"]["number"]
+        return self.data["returncode"]
 
     @property
     def signal(self) -> int:
-        exit_code = self.data["exit_code"]
-        return exit_code["signal"]["id"]["number"]
+        return self.data["signal"]
