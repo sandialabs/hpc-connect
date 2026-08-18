@@ -92,7 +92,7 @@ def scancel(jobid: str, clusters: str | None = None) -> None:
     subprocess.run(args, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 
-def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
+def sacct(jobid: str, clusters: str | None = None) -> list[dict] | None:
     query_keys = ("jobid", "partition", "elapsed", "state", "exitcode")
     args = [which("sacct"), "-n", "-p", "-j", jobid, f"--format={','.join(query_keys)}"]
     if clusters is not None:
@@ -101,7 +101,7 @@ def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
     if cp.returncode != 0:
         logger.warning("%s: returned non-zero status %s", shlex.join(args), cp.returncode)
         return None
-    data: dict[str, dict] = {}
+    data: list[dict] = []
     for raw_line in cp.stdout.split("\n"):
         line = raw_line.strip().rstrip("|")
         if not line:
@@ -117,11 +117,7 @@ def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
             raise ValueError(f"Failed to obtain returncode:signal from {line=}, {row=}") from e
         row["returncode"] = returncode
         row["signal"] = signal
-        id = str(row.pop("jobid"))
-        if id == jobid:
-            data[id] = row
-        else:
-            data.setdefault(id, row)
+        data.append(row)
     return data or None
 
 
@@ -161,7 +157,7 @@ def wait(jobid: str, clusters: str | None = None, tries: int = 20, delay: float 
         raise ValueError(f"{tries=} must be > 0")
     if delay < 0:
         raise ValueError(f"{delay=} must be >= 0")
-    last_data: dict[str, Any] | None = None
+    last_data: list[dict] | None = None
     for attempt in range(1, tries + 1):
         last_data = sacct(jobid, clusters=clusters)
         if last_data:
@@ -190,9 +186,9 @@ class Job:
         self.data = data
 
     @classmethod
-    def from_accounting_data(cls, data: dict[str, Any], jobid: str) -> "Job | None":
-        for job in data["jobs"]:
-            if str(job["job_id"]) == jobid:
+    def from_accounting_data(cls, data: list[dict], jobid: str) -> "Job | None":
+        for job in data:
+            if str(job["jobid"]) == jobid:
                 return Job(job)
         return None
 
