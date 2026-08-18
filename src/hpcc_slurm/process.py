@@ -144,14 +144,23 @@ def parse_script_args(script: str) -> argparse.Namespace:
 
 
 def wait(jobid: str, clusters: str | None = None, tries: int = 20, delay: float = 0.5) -> "Job":
-    for _ in range(tries):
-        data = sacct(jobid, clusters=clusters)
-        if data is not None:
-            job = Job.from_accounting_data(data, jobid)
+    if tries <= 0:
+        raise ValueError(f"{tries=} must be > 0")
+    if delay < 0:
+        raise ValueError(f"{delay=} must be >= 0")
+    last_data: dict[str, Any] | None = None
+    for attempt in range(1, tries + 1):
+        last_data = sacct(jobid, clusters=clusters)
+        if last_data:
+            job = Job.from_accounting_data(last_data, jobid)
             if job is not None:
                 return job
-        time.sleep(delay)
-    raise RuntimeError(f"Could not determine state from sacct for job {jobid}")
+        if attempt < tries:
+            time.sleep(delay)
+    raise RuntimeError(
+        f"Could not determine Slurm accounting state for job {jobid!r} "
+        f"after {tries} attempt(s); last_data={last_data!r}"
+    )
 
 
 class Job:
