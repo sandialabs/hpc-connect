@@ -107,6 +107,8 @@ def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
         if not parts:
             continue
         row: dict[str, Any] = dict(zip(query_keys, parts[: len(query_keys)]))
+        print(f"{line=}")
+        print(f"{row=}")
         returncode, signal = _parse_slurm_exitcode(row["exitcode"])
         row["returncode"] = returncode
         row["signal"] = signal
