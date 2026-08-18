@@ -102,9 +102,13 @@ def sacct(jobid: str, clusters: str | None = None) -> dict[str, Any] | None:
         logger.warning("%s: returned non-zero status %s", shlex.join(args), cp.returncode)
         return None
     data: dict[str, dict] = {}
-    for line in cp.stdout.split("\n"):
-        parts = line.strip().rstrip("|").split("|")
-        if not parts:
+    for raw_line in cp.stdout.split("\n"):
+        line = raw_line.strip().rstrip("|")
+        if not line:
+            continue
+        parts = [_.strip() for _ in line.split("|")]
+        if len(parts) < len(query_keys):
+            logger.debug("Skipping malformed sacct row for %s: %r", jobid, raw_line)
             continue
         row: dict[str, Any] = dict(zip(query_keys, parts[: len(query_keys)]))
         try:
