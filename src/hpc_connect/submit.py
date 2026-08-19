@@ -24,3 +24,6 @@ class HPCSubmissionManager:
     def submit(self, spec: JobSpec, exclusive: bool = True) -> Future:
         proc = self.adapter.submit(spec, exclusive=exclusive)
         return Future(proc, polling_interval=self.adapter.polling_interval() or 1.0)
+
+    def popen(self, spec: JobSpec, exclusive: bool = True) -> HPCProcess:
+        return self.adapter.submit(spec, exclusive=exclusive)
