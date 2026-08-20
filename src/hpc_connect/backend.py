@@ -13,7 +13,7 @@ from .schemas import resource_schema
 
 if TYPE_CHECKING:
     from .launch import HPCLauncher
-    from .submit import HPCSubmissionManager
+    from .submit import SubmissionManagerProtocol
 
 logger = logging.getLogger("hpc_connect.backend")
 
@@ -60,7 +60,7 @@ class Backend(abc.ABC):
         return self.config.get("name") or self.type
 
     @abc.abstractmethod
-    def submission_manager(self) -> "HPCSubmissionManager": ...
+    def submission_manager(self) -> "SubmissionManagerProtocol": ...
 
     @abc.abstractmethod
     def launcher(self) -> "HPCLauncher": ...
