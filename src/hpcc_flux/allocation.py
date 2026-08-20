@@ -77,7 +77,7 @@ class FluxAllocation:
             os.environ["FLUX_URI"] = self.uri
             self.state = State.ACTIVE
             self._register_atexit()
-            logger.info("Started Flux allocation %s with URI %s", self.jobid, self.uri)
+            logger.debug("Started Flux allocation %s with URI %s", self.jobid, self.uri)
 
         except Exception as e:
             logger.debug("Flux allocation startup failed", exc_info=True)

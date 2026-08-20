@@ -41,6 +41,9 @@ class FluxProcess(hpc_connect.HPCProcess):
         self.fut.add_event_callback("submit", self._callback("submit_time", self._set_submittime))
         self.fut.add_event_callback("start", self._callback("start_time", self._set_starttime))
 
+        self.started: float = -1.0
+        self.submitted: float = -1.0
+
     def _callback(self, name: str, fn: Callable[..., None]) -> Callable[..., None]:
         def wrapper(fut: FluxExecutorFuture, *args: Any) -> None:
             try:

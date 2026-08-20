@@ -19,9 +19,22 @@ from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.util import set_executable
 
 from ..discover import read_resource_info
+from .futures import FluxFuture
 from .process import FluxProcess
 
 logger = logging.getLogger("hpc_connect.flux.py.backend")
+
+
+class FluxSubmissionManager:
+    def __init__(self, *, adapter: "FluxAdapter") -> None:
+        self.adapter = adapter
+
+    def submit(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxFuture:
+        proc = self.adapter.submit(spec, exclusive=exclusive)
+        return FluxFuture(proc, polling_interval=self.adapter.polling_interval())
+
+    def popen(self, spec: hpc_connect.JobSpec, exclusive: bool = True) -> FluxProcess:
+        return self.adapter.submit(spec, exclusive=exclusive)
 
 
 class FluxBackend(hpc_connect.Backend):
@@ -70,10 +83,8 @@ class FluxBackend(hpc_connect.Backend):
     def supports_subscheduling(self) -> bool:
         return True
 
-    def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(
-            adapter=FluxAdapter(backend=self, config=self.config["submit"])
-        )
+    def submission_manager(self) -> "FluxSubmissionManager":
+        return FluxSubmissionManager(adapter=FluxAdapter(backend=self, config=self.config["submit"]))
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(
