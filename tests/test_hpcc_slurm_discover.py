@@ -35,21 +35,8 @@ def test_read_sinfo_parses_first_data_line(monkeypatch):
         "type": "node",
         "count": 16,
         "resources": [
-            {
-                "type": "socket",
-                "count": 2,
-                "resources": [
-                    {
-                        "type": "cpu",
-                        "count": 64,
-                    },
-                ],
-            },
-            {
-                "type": "gpu",
-                "count": 1,
-                "gres": "a40",
-            },
+            {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 64}]},
+            {"type": "gpu", "count": 1, "gres": "a40"},
         ],
         "additional_properties": {
             "/usr/bin/sinfo -o '%X %Y %Z %c %D %G'": "2 64 1 128 16 gpu:a40:1(S:0-1)",
@@ -101,13 +88,6 @@ def test_strip_gres_suffix_affinity(gres, expected):
     assert strip_gres_suffix(gres) == expected
 
 
-@pytest.mark.parametrize(
-    "gres",
-    [
-        "gpu:h100:4",
-        "nic:mlx5:2",
-        "mem:64G",
-    ],
-)
+@pytest.mark.parametrize("gres", ["gpu:h100:4", "nic:mlx5:2", "mem:64G"])
 def test_strip_gres_suffix_no_affinity(gres):
     assert strip_gres_suffix(gres) == gres

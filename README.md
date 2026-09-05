@@ -11,6 +11,7 @@ python3 -m pip install hpc-connect
 
 ```python
 import hpc_connect
+
 # Select by backend instance name or backend type (see config below)
 backend = hpc_connect.get_backend("slurm")
 ```

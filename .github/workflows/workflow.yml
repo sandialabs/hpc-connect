@@ -37,7 +37,7 @@ jobs:
        run: |
          BRANCH_NAME=${GITHUB_REF#refs/heads/}
          echo "Building for branch: $BRANCH_NAME"
-         docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file docker/slurm/Dockerfile --tag slurm-test ./docker/slurm
+         docker build --build-arg BRANCH_NAME=$BRANCH_NAME --file .ci/slurm/Dockerfile --tag slurm-test ./.ci/slurm
      - name: Run Slurm tests
        run: |
          docker run --rm slurm-test /bin/bash -c "./test.sh"
@@ -53,7 +53,7 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm --user root -v /home/runner/work/hpc-connect/hpc-connect/docker/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
+          docker run --rm --user root -v /home/runner/work/hpc-connect/hpc-connect/.ci/flux/test.sh:/home/fluxuser/test.sh -e BRANCH_NAME=$BRANCH_NAME fluxrm/flux-sched:latest env flux start --test-size=3 "./test.sh $BRANCH_NAME"
 
   pbs:
     runs-on: ubuntu-latest
@@ -66,7 +66,7 @@ jobs:
         run: |
           BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "Building for branch: $BRANCH_NAME"
-          docker run --rm --user root -h pbs -v /home/runner/work/hpc-connect/hpc-connect/docker/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
+          docker run --rm --user root -h pbs -v /home/runner/work/hpc-connect/hpc-connect/.ci/pbs/test.sh:/tmp/testing/test.sh -e BRANCH_NAME=$BRANCH_NAME -e PBS_START_MOM=1 pbspro/pbspro:latest /tmp/testing/test.sh
 
   lint:
     runs-on: ubuntu-latest
