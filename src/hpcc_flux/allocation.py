@@ -63,7 +63,7 @@ class FluxAllocation:
     def __del__(self) -> None:
         try:
             self.close()
-        except Exception:
+        except Exception:  # nosec B110 - __del__ must never raise
             pass
 
     def open(self, args: Sequence[str], timeout: float | int = 1200.0) -> "FluxAllocation":
