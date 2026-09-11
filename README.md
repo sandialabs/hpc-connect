@@ -320,6 +320,17 @@ mybackend = "my_package"
 The bundled backends (`hpcc_slurm`, `hpcc_pbs`, `hpcc_flux`, `hpcc_remote`) are
 registered the same way and serve as reference implementations.
 
+## Development
+
+Before committing, run:
+
+```console
+$ hpcc pre-commit
+```
+
+It runs the test suite and, if the tests pass, updates the version in
+`pyproject.toml`.
+
 ## License
 
 Distributed under the MIT License. See `COPYRIGHT` and `LICENSE` for details.

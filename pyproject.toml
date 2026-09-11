@@ -2,12 +2,18 @@
 #
 # SPDX-License-Identifier: MIT
 [build-system]
-requires = ["setuptools>=64", "setuptools-scm[toml]>=6.2.3"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "hpc-connect"
-version = "26.09.02.dev0"
+# The version is a plain, static string of the form YY.M.D (year minus 2000).
+# It is maintained by `hpcc pre-commit` (see README) rather than derived from
+# git at build time, so builds from a source tree with `.git` stripped (e.g.
+# Spack) still produce the correct version.  Runtime code (hpc_connect.version)
+# reads this via importlib.metadata for installed packages and augments it with
+# a git label only for editable/source checkouts.
+version = "26.9.11"
 readme = "README.md"
 description = "hpc_connect: lightweight HPC submission and launching interfaces"
 requires-python = ">=3.10"
@@ -28,9 +34,6 @@ hpcc_flux = "hpcc_flux"
 hpcc_pbs = "hpcc_pbs"
 hpcc_slurm = "hpcc_slurm"
 hpcc_remote = "hpcc_remote"
-
-[tool.setuptools.dynamic]
-version = {attr = "hpc_connect.util.dynamic_version.__generate_dynamic_version__"}
 
 [[tool.mypy.overrides]]
 module = "pkg_resources.*"

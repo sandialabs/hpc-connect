@@ -10,6 +10,30 @@ env:
   ACTIONS_RUNNER_DEBUG: "true"
 
 jobs:
+  version-check:
+    # The date-based version only has to be correct in what actually lands on
+    # main (and in what gets published from a release tag).  On pull_request
+    # runs, actions/checkout builds an ephemeral merge commit dated "now", so a
+    # branch that was stamped on an earlier day would spuriously fail.  Enforce
+    # only on push to main, where HEAD is the real commit with a stable date.
+    # If this fails after main moved ahead, just `git merge main`, re-run
+    # `hpcc pre-commit`, and push again.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Verify pyproject.toml version matches the commit date
+        run: |
+          pip install .
+          # The static version must equal the HEAD commit's date (YY.M.D).
+          COMMIT_DATE=$(git log -1 --date=short --pretty=format:%ad)
+          echo "HEAD commit date: $COMMIT_DATE"
+          hpcc pre-commit --check --no-tests --date "$COMMIT_DATE"
+
   unit-tests:
 
     runs-on: ubuntu-latest

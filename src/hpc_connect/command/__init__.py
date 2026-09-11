@@ -51,6 +51,7 @@ from types import ModuleType
 from ..config import Config
 from . import config
 from . import launch
+from . import pre_commit
 
 _commands: dict[str, ModuleType] = {}
 
@@ -88,11 +89,12 @@ def make_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
     add_command(subparsers, launch)
+    add_command(subparsers, pre_commit)
     return parser
 
 
 def add_command(subparsers: argparse._SubParsersAction, module: ModuleType) -> None:
-    name = module.__name__.split(".")[-1].lower()
+    name = getattr(module, "command_name", None) or module.__name__.split(".")[-1].lower()
     add_help = getattr(module, "add_help", True)
     description = getattr(module, "description", None)
     parser = subparsers.add_parser(name, add_help=add_help, help=description)
