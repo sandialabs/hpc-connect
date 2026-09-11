@@ -87,16 +87,37 @@ class QsubAdapter:
             return self.config["polling_interval"]
         return 5.0
 
+    def gpus_per_node(self, spec: hpc_connect.JobSpec) -> int:
+        """Number of GPUs to request on each node of the allocation.
+
+        canary reserves whole nodes, so if the job requests any GPUs at all we
+        request every GPU the node exposes.  Returns 0 when the node has no GPUs
+        or the job requested none, in which case no ``:gpus=`` resource is added
+        to the ``-l nodes`` line (keeps CPU-only PBS targets unchanged).
+        """
+        per_node = self.backend.count_per_node("gpu", default=0)
+        if per_node <= 0:
+            return 0
+        # gpus is None => request unknown; assume a whole-node GPU job.
+        # gpus == 0 => explicitly no GPUs.  Any positive request => reserve them.
+        if spec.gpus is None or spec.gpus > 0:
+            return per_node
+        return 0
+
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")
         script = spec.workspace / f"{spec.name}.sh"
         script.parent.mkdir(exist_ok=True)
         cpus_per_node = self.backend.count_per_node("cpu")
+        gpus_per_node = self.gpus_per_node(spec)
+        resource_line = f"nodes={spec.nodes}:ppn={cpus_per_node}"
+        if gpus_per_node > 0:
+            resource_line += f":gpus={gpus_per_node}"
         with open(script, "w") as fh:
             fh.write(f"#!{sh}\n")
             fh.write("#PBS -V\n")
             fh.write(f"#PBS -N {spec.name}\n")
-            fh.write(f"#PBS -l nodes={spec.nodes}:ppn={cpus_per_node}\n")
+            fh.write(f"#PBS -l {resource_line}\n")
             fh.write(f"#PBS -l walltime={hhmmss(spec.time_limit * 1.25, threshold=0)}\n")
             if spec.output:
                 if spec.output == spec.error:

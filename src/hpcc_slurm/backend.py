@@ -65,7 +65,9 @@ class SlurmBackend(hpc_connect.Backend):
         return True
 
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        return hpc_connect.HPCSubmissionManager(adapter=SbatchAdapter(config=self.config["submit"]))
+        return hpc_connect.HPCSubmissionManager(
+            adapter=SbatchAdapter(backend=self, config=self.config["submit"])
+        )
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         type = self.config["launch"]["type"]
@@ -80,8 +82,9 @@ class SlurmBackend(hpc_connect.Backend):
 
 
 class SbatchAdapter:
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, backend: SlurmBackend, config: dict[str, Any]) -> None:
         self.config = config
+        self.backend = backend
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
@@ -91,15 +94,37 @@ class SbatchAdapter:
             return self.config["polling_interval"]
         return 15.0
 
+    def gpus_per_node(self, spec: hpc_connect.JobSpec) -> int:
+        """Number of GPUs to request on each node of the allocation.
+
+        canary reserves whole nodes, so if the job requests any GPUs at all we
+        request every GPU the node exposes (discovered from ``sinfo`` GRES).
+        Returns 0 when the node has no GPUs or the job requested none, in which
+        case no ``--gres`` directive is emitted (keeps CPU-only Slurm targets
+        unchanged).
+        """
+        per_node = self.backend.count_per_node("gpu", default=0)
+        if per_node <= 0:
+            return 0
+        # gpus is None => resource request unknown; assume a whole-node GPU job
+        # (this is how the flux backend behaves).  gpus == 0 => explicitly no
+        # GPUs.  Any positive request => reserve the node's GPUs.
+        if spec.gpus is None or spec.gpus > 0:
+            return per_node
+        return 0
+
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")
         script = spec.workspace / f"{spec.name}.sh"
         script.parent.mkdir(exist_ok=True)
+        gpus_per_node = self.gpus_per_node(spec)
         with open(script, "w") as fh:
             fh.write(f"#!{sh}\n")
             fh.write(f"#SBATCH --nodes={spec.nodes}\n")
             fh.write(f"#SBATCH --time={hhmmss(spec.time_limit * 1.25, threshold=0)}\n")
             fh.write(f"#SBATCH --job-name={spec.name}\n")
+            if gpus_per_node > 0:
+                fh.write(f"#SBATCH --gres=gpu:{gpus_per_node}\n")
             if spec.error:
                 fh.write(f"#SBATCH --error={spec.error}\n")
             if spec.output:
