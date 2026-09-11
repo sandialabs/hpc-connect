@@ -55,8 +55,8 @@ import hpc_connect
 # single configured backend / the configured default.
 backend = hpc_connect.get_backend("slurm")
 
-print(backend.describe())        # human-readable resource summary
-print(backend.node_count)        # discovered node count
+print(backend.describe())  # human-readable resource summary
+print(backend.node_count)  # discovered node count
 print(backend.count_per_node("cpu"))
 ```
 
@@ -88,7 +88,7 @@ job = hpc_connect.JobSpec(
     nodes=2,
     cpus=64,
     gpus=0,
-    time_limit=1800.0,                 # seconds
+    time_limit=1800.0,  # seconds
     env={"OMP_NUM_THREADS": "4"},
     output="solve.out",
     error="solve.err",
@@ -101,8 +101,8 @@ future.add_jobid_callback(lambda f: print("queued as", f.jobid))
 future.add_jobstart_callback(lambda f: print("running"))
 future.add_done_callback(lambda f: print("done", f.returncode))
 
-returncode = future.result()           # blocks until the job finishes
-info = future.proc_info()              # scheduler/process metadata
+returncode = future.result()  # blocks until the job finishes
+info = future.proc_info()  # scheduler/process metadata
 ```
 
 `JobSpec` is immutable; derive variants with `job.with_updates(...)` or
@@ -153,10 +153,10 @@ Backends expose helpers for planning allocations from a machine's discovered
 topology:
 
 ```python
-backend.node_count                     # total nodes
-backend.count_per_node("gpu")          # GPUs per node
-backend.nodes_required(cpu=256)        # nodes needed for 256 CPU tasks
-backend.resource_view(ranks=128)       # {np, ranks, nodes, sockets, ranks_per_socket}
+backend.node_count  # total nodes
+backend.count_per_node("gpu")  # GPUs per node
+backend.nodes_required(cpu=256)  # nodes needed for 256 CPU tasks
+backend.resource_view(ranks=128)  # {np, ranks, nodes, sockets, ranks_per_socket}
 ```
 
 ## Command-line tools
@@ -287,26 +287,23 @@ scheduler can be added from a separate distribution without modifying
 ```python
 import hpc_connect
 
+
 class MyBackend(hpc_connect.Backend):
     type = "mybackend"
 
     @classmethod
-    def default_config(cls) -> dict:
-        ...
+    def default_config(cls) -> dict: ...
 
     @property
-    def resource_specs(self) -> list[dict]:
-        ...
+    def resource_specs(self) -> list[dict]: ...
 
     @property
-    def valid_launchers(self) -> set[str]:
-        ...
+    def valid_launchers(self) -> set[str]: ...
 
-    def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
-        ...
+    def submission_manager(self) -> hpc_connect.HPCSubmissionManager: ...
 
-    def launcher(self) -> hpc_connect.HPCLauncher:
-        ...
+    def launcher(self) -> hpc_connect.HPCLauncher: ...
+
 
 @hpc_connect.hookimpl
 def hpc_connect_backend():
