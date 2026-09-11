@@ -1,9 +1,24 @@
 FROM rockylinux:9.3
 
+# ---------------------------------------------------------------------------
+# Base Slurm image for hpc-connect CI.
+#
+# This image contains a fully built and configured Slurm installation plus
+# all system dependencies (MariaDB accounting, munge, MPICH, Python 3.12).
+# It intentionally does NOT install hpc-connect (or canary) itself -- those
+# are installed at CI runtime from the branch/PR under test (see
+# .ci/slurm/test.sh), so a single image can be built once and reused by every
+# CI run.
+#
+# The image is functionally identical to (and interchangeable with) the
+# canary-slurm base image published at ghcr.io/sandialabs/canary-slurm, which
+# is what the `slurm` job in .github/workflows/workflow.yml pulls. See
+# .ci/slurm/README.md for details.
+# ---------------------------------------------------------------------------
+
 ARG SLURM_VERSION=23.02.7
 ARG SLURM_ROOT=/opt/slurm-${SLURM_VERSION}
 ARG SLURM_CONFDIR=${SLURM_ROOT}/etc
-ARG BRANCH_NAME
 
 ENV SLURM_VERSION   ${SLURM_VERSION}
 ENV SLURM_ROOT      ${SLURM_ROOT}
@@ -88,13 +103,6 @@ RUN chmod g-w /etc && \
     chmod +t /etc && \
     chown slurm:slurm /opt/slurm-23.02.7/etc/cgroup.conf && \
     chown -R mysql:mysql /var/lib/mysql
-
-# Canary install
-RUN python3 -m venv canary && \
-    . canary/bin/activate && \
-    python -m pip install --upgrade pip==25.1.1 && \
-    python3 -m pip install "canary-wm@git+https://git@github.com/sandialabs/canary" && \
-    python3 -m pip install "hpc-connect@git+https://git@github.com/sandialabs/hpc-connect@$BRANCH_NAME"
 
 WORKDIR /root
 
