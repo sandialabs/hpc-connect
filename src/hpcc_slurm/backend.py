@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import logging
+import os
 import shutil
+import sys
 from typing import Any
 
 import hpc_connect
@@ -16,6 +18,15 @@ from .launch import SrunAdapter
 from .process import SlurmProcess
 
 logger = logging.getLogger("hpc_connect.slurm.submit")
+
+
+def _hpc_connect_version() -> str:
+    try:
+        from hpc_connect import version
+
+        return str(version.version)
+    except Exception:
+        return "unknown"
 
 
 class SlurmBackend(hpc_connect.Backend):
@@ -105,12 +116,33 @@ class SbatchAdapter:
         """
         per_node = self.backend.count_per_node("gpu", default=0)
         if per_node <= 0:
+            logger.debug(
+                "gpus_per_node: backend %r reports count_per_node('gpu')=%s (<=0); "
+                "no --gres will be requested for job %r (spec.gpus=%r)",
+                self.backend.name,
+                per_node,
+                spec.name,
+                spec.gpus,
+            )
             return 0
         # gpus is None => resource request unknown; assume a whole-node GPU job
         # (this is how the flux backend behaves).  gpus == 0 => explicitly no
         # GPUs.  Any positive request => reserve the node's GPUs.
         if spec.gpus is None or spec.gpus > 0:
+            logger.debug(
+                "gpus_per_node: job %r requests spec.gpus=%r; node exposes %s GPU(s); "
+                "will request --gres=gpu:%s",
+                spec.name,
+                spec.gpus,
+                per_node,
+                per_node,
+            )
             return per_node
+        logger.debug(
+            "gpus_per_node: job %r explicitly requested spec.gpus=%r; no --gres requested",
+            spec.name,
+            spec.gpus,
+        )
         return 0
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
@@ -118,6 +150,18 @@ class SbatchAdapter:
         script = spec.workspace / f"{spec.name}.sh"
         script.parent.mkdir(exist_ok=True)
         gpus_per_node = self.gpus_per_node(spec)
+        logger.debug(
+            "Writing Slurm batch script for job %r: hpc_connect %s from %s "
+            "(python %s); nodes=%s cpus=%s gpus=%s -> --gres=gpu:%s",
+            spec.name,
+            _hpc_connect_version(),
+            os.path.dirname(hpc_connect.__file__),
+            sys.executable,
+            spec.nodes,
+            spec.cpus,
+            spec.gpus,
+            gpus_per_node if gpus_per_node > 0 else "(none)",
+        )
         with open(script, "w") as fh:
             fh.write(f"#!{sh}\n")
             fh.write(f"#SBATCH --nodes={spec.nodes}\n")
