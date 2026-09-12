@@ -141,7 +141,5 @@ def _load_dev_command(subparsers: argparse._SubParsersAction) -> None:
     except Exception as exc:
         import warnings
 
-        warnings.warn(
-            f"Failed to load developer command from {dev_file!r}: {exc}", stacklevel=2
-        )
+        warnings.warn(f"Failed to load developer command from {dev_file!r}: {exc}", stacklevel=2)
 
