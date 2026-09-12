@@ -66,20 +66,44 @@ def test_write_pyproject_version_missing_raises(tmp_path):
 def test_run_check_passes_when_current(tmp_path, monkeypatch):
     _write_pyproject(tmp_path, "26.9.11")
     monkeypatch.chdir(tmp_path)
-    rc = pre_commit.run(check=True, run_tests=False, date="2026-09-11")
+    rc = pre_commit.run(
+        check=True,
+        do_format=False,
+        do_lint=False,
+        do_security=False,
+        do_typecheck=False,
+        run_tests=False,
+        date="2026-09-11",
+    )
     assert rc == 0
 
 
 def test_run_check_fails_when_stale(tmp_path, monkeypatch):
     _write_pyproject(tmp_path, "26.9.2")
     monkeypatch.chdir(tmp_path)
-    rc = pre_commit.run(check=True, run_tests=False, date="2026-09-11")
+    rc = pre_commit.run(
+        check=True,
+        do_format=False,
+        do_lint=False,
+        do_security=False,
+        do_typecheck=False,
+        run_tests=False,
+        date="2026-09-11",
+    )
     assert rc == 1
 
 
 def test_run_stamps_version(tmp_path, monkeypatch):
     p = _write_pyproject(tmp_path, "26.9.2")
     monkeypatch.chdir(tmp_path)
-    rc = pre_commit.run(check=False, run_tests=False, date="2026-09-11")
+    rc = pre_commit.run(
+        check=False,
+        do_format=False,
+        do_lint=False,
+        do_security=False,
+        do_typecheck=False,
+        run_tests=False,
+        date="2026-09-11",
+    )
     assert rc == 0
     assert pre_commit.read_pyproject_version(str(p)) == "26.9.11"

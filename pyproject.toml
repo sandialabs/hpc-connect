@@ -27,7 +27,7 @@ hpc-launch = "hpc_connect.__main__:launch"
 hpcc = "hpc_connect.__main__:main"
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy", "pytest"]
+dev = ["ruff", "mypy", "bandit", "pytest", "pytest-cov"]
 
 [project.entry-points."hpc_connect"]
 hpcc_flux = "hpcc_flux"
@@ -85,7 +85,7 @@ output = "coverage.xml"
 
 [tool.coverage.run]
 branch = true
-source = ["hpc_connect"]
+source = ["hpc_connect", "hpcc_slurm", "hpcc_pbs", "hpcc_remote", "hpcc_flux"]
 command_line = "-m pytest"
 
 [tool.coverage.html]
@@ -105,6 +105,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "yaml"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tomli"
 ignore_missing_imports = true
 
 [tool.bandit]
