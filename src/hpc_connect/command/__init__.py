@@ -142,4 +142,3 @@ def _load_dev_command(subparsers: argparse._SubParsersAction) -> None:
         import warnings
 
         warnings.warn(f"Failed to load developer command from {dev_file!r}: {exc}", stacklevel=2)
-
