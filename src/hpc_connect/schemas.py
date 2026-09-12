@@ -16,7 +16,7 @@ from schema import Use
 def flag_splitter(arg: list[str] | str) -> list[str]:
     if isinstance(arg, str):
         return shlex.split(arg)
-    elif not isinstance(arg, list) and not all(isinstance(_, str) for _ in arg):
+    elif not isinstance(arg, list) or not all(isinstance(_, str) for _ in arg):
         raise ValueError("expected list[str]")
     return arg
 

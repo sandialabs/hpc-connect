@@ -180,7 +180,8 @@ def as_completed(
     """
     pending = set(futures)
     start_time = time.monotonic()
-    polling_interval = max(polling_interval, max([f._polling_interval for f in pending]))
+    if pending:
+        polling_interval = max(polling_interval, max(f._polling_interval for f in pending))
 
     try:
         while pending:
