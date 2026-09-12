@@ -3,10 +3,25 @@
 # SPDX-License-Identifier: MIT
 
 import datetime
+import importlib.util
+import os
 
 import pytest
 
-from hpc_connect.command import pre_commit
+
+def _load_pre_commit():
+    """Load dev/pre_commit.py from the repo root regardless of install mode."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.normpath(os.path.join(here, ".."))
+    dev_file = os.path.join(repo_root, "dev", "pre_commit.py")
+    spec = importlib.util.spec_from_file_location("hpc_connect_dev.pre_commit", dev_file)
+    assert spec is not None and spec.loader is not None, f"Cannot load {dev_file}"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+pre_commit = _load_pre_commit()
 
 
 def test_date_based_version_maps_year_minus_2000():
@@ -68,3 +83,4 @@ def test_run_stamps_version(tmp_path, monkeypatch):
     rc = pre_commit.run(check=False, run_tests=False, date="2026-09-11")
     assert rc == 0
     assert pre_commit.read_pyproject_version(str(p)) == "26.9.11"
+

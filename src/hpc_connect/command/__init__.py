@@ -45,13 +45,15 @@ Configurations are read from:
 """
 
 import argparse
+import importlib.resources as ir
+import importlib.util
+import os
 import sys
 from types import ModuleType
 
 from ..config import Config
 from . import config
 from . import launch
-from . import pre_commit
 
 _commands: dict[str, ModuleType] = {}
 
@@ -89,7 +91,7 @@ def make_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
     add_command(subparsers, launch)
-    add_command(subparsers, pre_commit)
+    _load_dev_command(subparsers)
     return parser
 
 
@@ -100,3 +102,47 @@ def add_command(subparsers: argparse._SubParsersAction, module: ModuleType) -> N
     parser = subparsers.add_parser(name, add_help=add_help, help=description)
     module.setup_parser(parser)
     _commands[name] = module
+
+
+def _load_dev_command(subparsers: argparse._SubParsersAction) -> None:
+    """Load ``dev/pre_commit.py`` when running from an editable checkout.
+
+    Detection: resolve the ``hpc_connect`` package root via
+    ``importlib.resources``, walk one level up to the repo root, and check
+    for both a ``.git/`` directory (editable install) and a
+    ``dev/pre_commit.py`` file.  If both are present the module is loaded
+    with ``importlib.util`` and registered as a subcommand exactly as if it
+    had been passed to :func:`add_command`.
+
+    This is intentionally silent: if either condition is not met (installed
+    release, no ``.git``, or no ``dev/pre_commit.py``) the function does
+    nothing.
+    """
+    try:
+        pkg_path = str(ir.files("hpc_connect"))
+        repo_root = os.path.normpath(os.path.join(pkg_path, "../.."))
+    except Exception:
+        return
+
+    if not os.path.isdir(os.path.join(repo_root, ".git")):
+        return
+
+    dev_file = os.path.join(repo_root, "dev", "pre_commit.py")
+    if not os.path.isfile(dev_file):
+        return
+
+    try:
+        spec = importlib.util.spec_from_file_location("hpc_connect_dev.pre_commit", dev_file)
+        if spec is None or spec.loader is None:
+            return
+        mod: ModuleType = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        add_command(subparsers, mod)
+    except Exception as exc:
+        import warnings
+
+        warnings.warn(
+            f"Failed to load developer command from {dev_file!r}: {exc}",
+            stacklevel=2,
+        )
+
