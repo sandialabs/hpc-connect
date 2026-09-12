@@ -83,4 +83,3 @@ def test_run_stamps_version(tmp_path, monkeypatch):
     rc = pre_commit.run(check=False, run_tests=False, date="2026-09-11")
     assert rc == 0
     assert pre_commit.read_pyproject_version(str(p)) == "26.9.11"
-
