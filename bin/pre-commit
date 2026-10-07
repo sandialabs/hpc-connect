@@ -1,32 +1,58 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-export CANARY_CACHE_DIR=/dev/null
+cd "$(git rev-parse --show-toplevel)"
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+python - <<'PY'
+from __future__ import annotations
 
-cd $SCRIPT_DIR/..
+import datetime
+import re
+from pathlib import Path
 
-echo "=========================="
-echo "ruff: formatting source"
-echo "=========================="
-ruff format src
-ruff check --fix src
+pyproject = Path("pyproject.toml")
+text = pyproject.read_text(encoding="utf-8")
 
-echo "=========================="
-echo "ruff: formatting scripts"
-echo "=========================="
-ruff format bin/
-ruff check --fix bin/
+today = datetime.date.today()
+expected = f"{today.year - 2000}.{today.month}.{today.day}"
 
-echo "=========================="
-echo "mypy: type checking source"
-echo "=========================="
+project_section = re.search(
+    r"(?ms)^(\[project\]\s*)(.*?)(?=^\[|\Z)",
+    text,
+)
+
+if project_section is None:
+    raise SystemExit("Could not find [project] section in pyproject.toml")
+
+section = project_section.group(0)
+
+new_section, count = re.subn(
+    r'(?m)^(\s*version\s*=\s*)(["\'])(.*?)(\2)(.*)$',
+    rf"\g<1>\g<2>{expected}\g<4>\g<5>",
+    section,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit("Could not find version entry in [project] section of pyproject.toml")
+
+if new_section != section:
+    updated = text[: project_section.start()] + new_section + text[project_section.end() :]
+    pyproject.write_text(updated, encoding="utf-8")
+    print(f"Updated pyproject.toml version to {expected}")
+else:
+    print(f"pyproject.toml version already current: {expected}")
+PY
+
+ruff format src tests
+ruff check --fix src tests
 mypy src
-
-
-echo "=========================="
-echo "pytest: running tests"
-echo "=========================="
+bandit -c pyproject.toml -r src
 pytest tests
+
+p=$(python3 -m site --user-site)
+ty check --extra-search-path=$p || true
+
+# Include the version bump in the commit automatically.
+git add pyproject.toml

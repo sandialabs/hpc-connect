@@ -189,7 +189,8 @@ class Subprocess(HPCProcess):
 def streamify(arg: str | None) -> TextIO | None:
     if arg is None:
         return None
-    os.makedirs(os.path.dirname(arg), exist_ok=True)
+    if dirname := os.path.dirname(arg):
+        os.makedirs(dirname, exist_ok=True)
     return open(arg, mode="w")
 
 
