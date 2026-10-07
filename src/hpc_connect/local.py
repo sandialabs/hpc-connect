@@ -71,8 +71,11 @@ class LocalBackend(Backend):
     def submission_manager(self) -> HPCSubmissionManager:
         return HPCSubmissionManager(adapter=SubprocessAdapter(config=self.config["submit"]))
 
+    def launch_adapter(self) -> MPIExecAdapter:
+        return MPIExecAdapter(backend=self, config=self.config["launch"])
+
     def launcher(self) -> HPCLauncher:
-        return HPCLauncher(adapter=MPIExecAdapter(backend=self, config=self.config["launch"]))
+        return HPCLauncher(adapter=self.launch_adapter())
 
     def discover(self) -> list[dict[str, Any]]:
         if file := os.getenv("HPC_CONNECT_HOSTFILE"):

@@ -14,6 +14,7 @@ from .topology import Topology
 
 if TYPE_CHECKING:
     from .launch import HPCLauncher
+    from .launch import LaunchAdapter
     from .submit import SubmissionManagerProtocol
 
 logger = logging.getLogger("hpc_connect.backend")
@@ -67,11 +68,20 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     def launcher(self) -> "HPCLauncher": ...
 
+    @abc.abstractmethod
+    def launch_adapter(self) -> "LaunchAdapter": ...
+
     def configure(self, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
         if self._configured:
             raise RuntimeError("Backend is frozen; configure() is not allowed")
         cfg = copy.deepcopy(cfg or self.default_config())
         return backend_schema.validate(cfg)
+
+    def build_launch_argv(self, args: list[str]) -> list[str]:
+        return self.launch_adapter().build_argv(args)
+
+    def launch(self, args: list[str], **kwargs: Any):
+        return self.launcher().submit(args, **kwargs)
 
     def describe(self) -> str:
         fp = io.StringIO()

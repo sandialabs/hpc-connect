@@ -69,10 +69,11 @@ class PBSBackend(hpc_connect.Backend):
             adapter=QsubAdapter(backend=self, config=self.config["submit"])
         )
 
+    def launch_adapter(self) -> MPIExecAdapter:
+        return MPIExecAdapter(backend=self, config=self.config["launch"])
+
     def launcher(self) -> hpc_connect.HPCLauncher:
-        return hpc_connect.HPCLauncher(
-            adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
-        )
+        return hpc_connect.HPCLauncher(adapter=self.launch_adapter())
 
 
 class QsubAdapter(SubmissionAdapter):

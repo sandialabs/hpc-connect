@@ -51,6 +51,9 @@ class RemoteBackend(hpc_connect.Backend):
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
         return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter(config=self.config["submit"]))
 
+    def launch_adapter(self) -> hpc_connect.LaunchAdapter:
+        raise NotImplementedError
+
     def launcher(self) -> hpc_connect.HPCLauncher:
         raise NotImplementedError
 

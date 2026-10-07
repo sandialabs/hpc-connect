@@ -41,6 +41,9 @@ class FakeBackend(hpc_connect.Backend):
     def submission_manager(self):
         raise NotImplementedError
 
+    def launch_adapter(self):
+        raise NotImplementedError
+
     def launcher(self):
         raise NotImplementedError
 

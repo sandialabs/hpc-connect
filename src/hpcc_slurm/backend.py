@@ -81,16 +81,14 @@ class SlurmBackend(hpc_connect.Backend):
             adapter=SbatchAdapter(backend=self, config=self.config["submit"])
         )
 
-    def launcher(self) -> hpc_connect.HPCLauncher:
+    def launch_adapter(self):
         type = self.config["launch"]["type"]
         if type == "srun":
-            return hpc_connect.HPCLauncher(
-                adapter=SrunAdapter(backend=self, config=self.config["launch"])
-            )
-        else:
-            return hpc_connect.HPCLauncher(
-                adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
-            )
+            return SrunAdapter(backend=self, config=self.config["launch"])
+        return MPIExecAdapter(backend=self, config=self.config["launch"])
+
+    def launcher(self) -> hpc_connect.HPCLauncher:
+        return hpc_connect.HPCLauncher(adapter=self.launch_adapter())
 
 
 class SbatchAdapter(SubmissionAdapter):

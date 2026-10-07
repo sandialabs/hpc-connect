@@ -34,8 +34,7 @@ def execute(config: "Config", args: "argparse.Namespace") -> None:
     from .. import get_backend
 
     backend = get_backend(config["backend"])
-    launcher = backend.launcher()
-    cmd = launcher.adapter.build_argv(list(args.extra_args))
+    cmd = backend.build_launch_argv(list(args.extra_args))
     if args.dryrun:
         print(shlex.join(cmd))
         return

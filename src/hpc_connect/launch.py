@@ -19,6 +19,7 @@ logger = logging.getLogger("hpc_connect.launch")
 class HPCLauncher:
     def __init__(self, adapter: "LaunchAdapter") -> None:
         self.adapter = adapter
+        self.backend = adapter.backend
 
     def __call__(
         self, args: list[str], echo: bool = False, **kwargs: Any
@@ -28,7 +29,7 @@ class HPCLauncher:
     def submit(
         self, args: list[str], echo: bool = False, **kwargs: Any
     ) -> subprocess.CompletedProcess:
-        argv = self.adapter.build_argv(args)
+        argv = self.backend.build_launch_argv(args)
         if echo:
             print(f"Command line: {shlex.join(argv)}")
         env = kwargs.get("env") or os.environ.copy()
