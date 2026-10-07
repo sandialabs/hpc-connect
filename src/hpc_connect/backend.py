@@ -121,6 +121,21 @@ class Backend(abc.ABC):
     def make_topology(self) -> Topology:
         return Topology.from_resource_specs(self.resource_specs)
 
+    def is_homogeneous(self) -> bool:
+        return self.topology.is_homogeneous()
+
+    def total_resources(self, rtype: str) -> int:
+        return self.topology.total(self.canonical_type_name(rtype))
+
+    def max_per_node(self, rtype: str) -> int:
+        return self.topology.max_per_node(self.canonical_type_name(rtype))
+
+    def min_per_node(self, rtype: str) -> int:
+        return self.topology.min_per_node(self.canonical_type_name(rtype))
+
+    def uniform_per_node(self, rtype: str) -> int:
+        return self.topology.uniform_per_node(self.canonical_type_name(rtype))
+
     @property
     def resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
         if self._resource_index is None:

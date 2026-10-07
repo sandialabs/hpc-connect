@@ -173,6 +173,27 @@ def test_topology_uniform_per_node_homogeneous():
     assert topology.total("gpu") == 12
 
 
+def test_backend_explicit_topology_helpers_homogeneous():
+    backend = FakeBackend(
+        [
+            {
+                "type": "node",
+                "count": 3,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
+                    {"type": "gpu", "count": 4},
+                ],
+            }
+        ]
+    )
+
+    assert backend.is_homogeneous() is True
+    assert backend.uniform_per_node("cpu") == 16
+    assert backend.max_per_node("cpu") == 16
+    assert backend.min_per_node("cpu") == 16
+    assert backend.total_resources("cpu") == 48
+
+
 def test_topology_uniform_per_node_heterogeneous_raises():
     topology = Topology.from_resource_specs(
         [
@@ -190,6 +211,27 @@ def test_topology_uniform_per_node_heterogeneous_raises():
         topology.uniform_per_node("cpu")
     except HeterogeneousTopologyError as exc:
         assert "not uniform" in str(exc)
+    else:
+        raise AssertionError("expected HeterogeneousTopologyError")
+
+
+def test_backend_explicit_topology_helpers_heterogeneous():
+    backend = FakeBackend(
+        [
+            {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 8}]},
+        ]
+    )
+
+    assert backend.is_homogeneous() is False
+    assert backend.max_per_node("cpu") == 8
+    assert backend.min_per_node("cpu") == 4
+    assert backend.total_resources("cpu") == 16
+
+    try:
+        backend.uniform_per_node("cpu")
+    except HeterogeneousTopologyError:
+        pass
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
 
