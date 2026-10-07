@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import hpc_connect
+from hpc_connect.topology import HeterogeneousTopologyError
 from hpc_connect.topology import Topology
 
 
@@ -144,3 +145,60 @@ def test_topology_from_resource_specs_heterogeneous_entries():
     assert [entry.count for entry in cpus] == [4, 8]
     assert cpus[0].parent_counts == (2, 4)
     assert cpus[1].parent_counts == (1, 8)
+
+
+def test_topology_uniform_per_node_homogeneous():
+    topology = Topology.from_resource_specs(
+        [
+            {
+                "type": "node",
+                "count": 3,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
+                    {"type": "gpu", "count": 4},
+                ],
+            }
+        ]
+    )
+
+    assert topology.is_homogeneous() is True
+    assert topology.uniform_per_node("cpu") == 16
+    assert topology.uniform_per_node("gpu") == 4
+    assert topology.max_per_node("cpu") == 16
+    assert topology.min_per_node("cpu") == 16
+    assert topology.total("cpu") == 48
+    assert topology.total("gpu") == 12
+
+
+def test_topology_uniform_per_node_heterogeneous_raises():
+    topology = Topology.from_resource_specs(
+        [
+            {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 8}]},
+        ]
+    )
+
+    assert topology.is_homogeneous() is False
+    assert topology.max_per_node("cpu") == 8
+    assert topology.min_per_node("cpu") == 4
+    assert topology.total("cpu") == 16
+
+    try:
+        topology.uniform_per_node("cpu")
+    except HeterogeneousTopologyError as exc:
+        assert "not uniform" in str(exc)
+    else:
+        raise AssertionError("expected HeterogeneousTopologyError")
+
+
+def test_topology_node_groups_returns_node_entries():
+    topology = Topology.from_resource_specs(
+        [
+            {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 8}]},
+        ]
+    )
+
+    groups = topology.node_groups()
+    assert [group.type for group in groups] == ["node", "node"]
+    assert [group.count for group in groups] == [2, 1]
