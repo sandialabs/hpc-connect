@@ -58,6 +58,7 @@ backend = hpc_connect.get_backend("slurm")
 print(backend.describe())  # human-readable resource summary
 print(backend.node_count)  # discovered node count
 print(backend.count_per_node("cpu"))
+print(backend.is_homogeneous())
 ```
 
 `get_backend(name)` resolves `name` against the configuration in this order:
@@ -158,6 +159,25 @@ backend.count_per_node("gpu")  # GPUs per node
 backend.nodes_required(cpu=256)  # nodes needed for 256 CPU tasks
 backend.resource_view(ranks=128)  # {np, ranks, nodes, sockets, ranks_per_socket}
 ```
+
+For new code, prefer the explicit topology helpers when the machine description
+may be heterogeneous:
+
+```python
+backend.is_homogeneous()          # True when all node groups share one shape
+backend.uniform_per_node("cpu")  # homogeneous-only; raises if node groups differ
+backend.max_per_node("cpu")      # largest per-node CPU count across node groups
+backend.min_per_node("cpu")      # smallest per-node CPU count across node groups
+backend.total_resources("cpu")   # total CPUs across the whole topology
+```
+
+Notes:
+
+- `count_per_node()` is preserved for backward compatibility.
+- `uniform_per_node()` is the preferred helper when callers require a single
+  consistent per-node value.
+- `max_per_node()`, `min_per_node()`, and `total_resources()` are the safer
+  choices for heterogeneous systems.
 
 ## Command-line tools
 
