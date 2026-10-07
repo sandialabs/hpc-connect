@@ -179,11 +179,5 @@ def export() -> str:
     return _config.export()
 
 
-def reset() -> None:
-    global _config
-    _config = None
-    os.environ.pop("HPC_CONNECT_CFG64", None)
-
-
 def __getattr__(name: str) -> Any:
     return getattr(get_config(), name)

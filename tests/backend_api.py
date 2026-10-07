@@ -16,7 +16,7 @@ def test_backends_returns_backend_type_strings():
     assert all(isinstance(name, str) for name in names)
 
 
-def test_get_backend_type_match_uses_configured_overrides(tmpdir):
+def test_get_backend_type_match_uses_configured_overrides(tmpdir, clear_config_cache):
     workspace = Path(tmpdir.strpath)
     cfg = workspace / "hpc_connect.yaml"
     cfg.write_text(
@@ -46,10 +46,10 @@ hpc_connect:
     old = os.environ.get("HPC_CONNECT_GLOBAL_CONFIG")
     try:
         os.environ["HPC_CONNECT_GLOBAL_CONFIG"] = str(cfg)
-        hpc_connect.config.reset()
+        clear_config_cache()
         backend = hpc_connect.get_backend("local")
     finally:
-        hpc_connect.config.reset()
+        clear_config_cache()
         if old is None:
             os.environ.pop("HPC_CONNECT_GLOBAL_CONFIG", None)
         else:
@@ -60,7 +60,7 @@ hpc_connect:
     assert backend.count_per_socket("cpu") == 5
 
 
-def test_get_backend_named_instance_keeps_name_specific_overrides(tmpdir):
+def test_get_backend_named_instance_keeps_name_specific_overrides(tmpdir, clear_config_cache):
     workspace = Path(tmpdir.strpath)
     cfg = workspace / "hpc_connect.yaml"
     cfg.write_text(
@@ -80,10 +80,10 @@ hpc_connect:
     old = os.environ.get("HPC_CONNECT_GLOBAL_CONFIG")
     try:
         os.environ["HPC_CONNECT_GLOBAL_CONFIG"] = str(cfg)
-        hpc_connect.config.reset()
+        clear_config_cache()
         backend = hpc_connect.get_backend("my.local")
     finally:
-        hpc_connect.config.reset()
+        clear_config_cache()
         if old is None:
             os.environ.pop("HPC_CONNECT_GLOBAL_CONFIG", None)
         else:

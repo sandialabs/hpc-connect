@@ -2,14 +2,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-import pytest
-
 import hpc_connect
-
-
-@pytest.fixture(scope="function", autouse=True)
-def reset_config():
-    hpc_connect.config.reset()
 
 
 @contextmanager
