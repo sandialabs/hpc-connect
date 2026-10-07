@@ -10,6 +10,7 @@ from typing import Generator
 
 from .schemas import backend_schema
 from .schemas import resource_schema
+from .topology import Topology
 
 if TYPE_CHECKING:
     from .launch import HPCLauncher
@@ -36,6 +37,7 @@ class Backend(abc.ABC):
             alias: canonical for canonical, aliases in rtype_aliases.items() for alias in aliases
         }
         self._resource_index: dict[str, list[tuple[dict, str | None]]] | None = None
+        self._topology: Topology | None = None
 
     @classmethod
     @abc.abstractmethod
@@ -96,9 +98,18 @@ class Backend(abc.ABC):
         for rspec in self.resource_specs:
             self._canonicalize_rspec(rspec)
         resource_schema.validate({"resources": self.resource_specs})
-        nodes = self.resource_index.get("node", [])
+        nodes = self.topology.by_type("node")
         if not nodes:
             raise ValueError("Backend must define node resources")
+
+    @property
+    def topology(self) -> Topology:
+        if self._topology is None:
+            self._topology = self.make_topology()
+        return self._topology
+
+    def make_topology(self) -> Topology:
+        return Topology.from_resource_specs(self.resource_specs)
 
     @property
     def resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
@@ -161,8 +172,8 @@ class Backend(abc.ABC):
 
     @cached_property
     def node_count(self) -> int:
-        nodes = self.resource_index.get("node", [])
-        count = sum(spec["count"] for spec, _ in nodes)
+        nodes = self.topology.by_type("node")
+        count = sum(entry.count for entry in nodes)
         if count:
             return count
         raise ValueError("Unable to determine node count")

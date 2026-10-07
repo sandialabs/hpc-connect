@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import hpc_connect
+from hpc_connect.topology import Topology
 
 
 class FakeBackend(hpc_connect.Backend):
@@ -107,3 +108,39 @@ def test_resource_view_requires_socket_topology():
         assert "socket-based topology" in str(exc)
     else:
         raise AssertionError("expected ValueError for non-socket topology")
+
+
+def test_topology_from_resource_specs_homogeneous_entries():
+    topology = Topology.from_resource_specs(
+        [
+            {
+                "type": "node",
+                "count": 3,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
+                    {"type": "gpu", "count": 4},
+                ],
+            }
+        ]
+    )
+
+    assert [entry.type for entry in topology.by_type("node")] == ["node"]
+    assert [entry.count for entry in topology.by_type("socket")] == [2]
+    assert [entry.count for entry in topology.by_type("cpu")] == [8]
+    assert [entry.count for entry in topology.by_type("gpu")] == [4]
+
+
+def test_topology_from_resource_specs_heterogeneous_entries():
+    topology = Topology.from_resource_specs(
+        [
+            {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 8}]},
+        ]
+    )
+
+    nodes = topology.by_type("node")
+    cpus = topology.by_type("cpu")
+    assert [entry.count for entry in nodes] == [2, 1]
+    assert [entry.count for entry in cpus] == [4, 8]
+    assert cpus[0].parent_counts == (2, 4)
+    assert cpus[1].parent_counts == (1, 8)
