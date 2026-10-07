@@ -24,6 +24,7 @@ from .launch import HPCLauncher
 from .mpi import MPIExecAdapter
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
+from .submit import SubmissionAdapter
 from .util import set_executable
 
 logger = logging.getLogger("hpc_connect.subprocess.backend")
@@ -91,17 +92,12 @@ class LocalBackend(Backend):
         return [{"type": "node", "count": node_count, "resources": [socket_resource]}]
 
 
-class SubprocessAdapter:
+class SubprocessAdapter(SubmissionAdapter):
     def __init__(self, config: dict[str, Any]):
-        self.config = config
+        super().__init__(config=config)
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
-
-    def polling_interval(self) -> float:
-        if self.config["polling_interval"] > 0:
-            return self.config["polling_interval"]
-        return 1.0
 
     def prepare(self, spec: JobSpec) -> JobSpec:
         sh = shutil.which("sh")

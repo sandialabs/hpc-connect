@@ -8,6 +8,7 @@ from typing import Any
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.submit import SubmissionAdapter
 from hpc_connect.util import set_executable
 from hpc_connect.util.time import hhmmss
 
@@ -74,18 +75,16 @@ class PBSBackend(hpc_connect.Backend):
         )
 
 
-class QsubAdapter:
+class QsubAdapter(SubmissionAdapter):
     def __init__(self, backend: PBSBackend, config: dict[str, Any]) -> None:
         qsub = shutil.which("qsub")
         if qsub is None:
             raise ValueError("qsub not found on PATH")
-        self.config = config
+        super().__init__(config=config)
         self.backend = backend
 
     def polling_interval(self) -> float:
-        if self.config["polling_interval"] > 0:
-            return self.config["polling_interval"]
-        return 5.0
+        return super().polling_interval() or 5.0
 
     def gpus_per_node(self, spec: hpc_connect.JobSpec) -> int:
         """Number of GPUs to request on each node of the allocation.
