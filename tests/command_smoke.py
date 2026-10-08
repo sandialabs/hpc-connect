@@ -94,7 +94,9 @@ def test_command_main_info_subcommand_shows_backend_node_groups(tmpdir, monkeypa
     assert "cpu per node:" in out
 
 
-def test_command_main_info_subcommand_works_without_backend_key_when_one_backend(tmpdir, monkeypatch, capsys):
+def test_command_main_info_subcommand_works_without_backend_key_when_one_backend(
+    tmpdir, monkeypatch, capsys
+):
     root = Path(tmpdir.strpath)
     cfg = root / "hpc_connect.yaml"
     cfg.write_text(
@@ -179,7 +181,9 @@ hpc_connect:
     assert "Name: first.local" not in out
 
 
-def test_command_main_info_subcommand_honors_top_level_backend_type_override(tmpdir, monkeypatch, capsys):
+def test_command_main_info_subcommand_honors_top_level_backend_type_override(
+    tmpdir, monkeypatch, capsys
+):
     root = Path(tmpdir.strpath)
     cfg = root / "hpc_connect.yaml"
     cfg.write_text(
