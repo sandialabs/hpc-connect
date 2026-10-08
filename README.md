@@ -169,11 +169,11 @@ For new code, prefer the explicit topology helpers when the machine description
 may be heterogeneous:
 
 ```python
-backend.is_homogeneous()          # True when all node groups share one shape
+backend.is_homogeneous()  # True when all node groups share one shape
 backend.uniform_per_node("cpu")  # homogeneous-only; raises if node groups differ
-backend.max_per_node("cpu")      # largest per-node CPU count across node groups
-backend.min_per_node("cpu")      # smallest per-node CPU count across node groups
-backend.total_resources("cpu")   # total CPUs across the whole topology
+backend.max_per_node("cpu")  # largest per-node CPU count across node groups
+backend.min_per_node("cpu")  # smallest per-node CPU count across node groups
+backend.total_resources("cpu")  # total CPUs across the whole topology
 ```
 
 Notes:
