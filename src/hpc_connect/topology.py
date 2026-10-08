@@ -83,23 +83,6 @@ class Topology:
             raise ValueError("topology has no node groups")
         return _per_node_count(node_groups[0].data, rtype)
 
-    def uniform_per_socket(self, rtype: str) -> int:
-        sockets = [entry for entry in self.by_type(rtype) if entry.parent_type == "socket"]
-        if not sockets:
-            raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
-        if not self.is_homogeneous():
-            raise HeterogeneousTopologyError(
-                f"resource {rtype!r} is not uniform across sockets because the topology is heterogeneous; "
-                "use the per-node topology helpers or inspect node_groups() instead"
-            )
-        values = {int(entry.count) for entry in sockets}
-        if len(values) != 1:
-            raise HeterogeneousTopologyError(
-                f"resource {rtype!r} is not uniform across sockets; "
-                "use the per-node topology helpers or inspect node_groups() instead"
-            )
-        return next(iter(values))
-
 
 def _signature(rspec: dict[str, Any]) -> tuple[Any, ...]:
     children = tuple(_signature(child) for child in rspec.get("resources", []) or [])

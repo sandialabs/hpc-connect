@@ -162,7 +162,7 @@ topology:
 backend.node_count  # total nodes
 backend.count_per_node("gpu")  # GPUs per node
 backend.nodes_required(cpu=256)  # nodes needed for 256 CPU tasks
-backend.resource_view(ranks=128)  # {np, ranks, nodes, sockets, ranks_per_socket}
+backend.resource_view(ranks=128)  # {np, ranks, nodes, ranks_per_node}
 ```
 
 For new code, prefer the explicit topology helpers when the machine description

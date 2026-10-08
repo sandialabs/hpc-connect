@@ -88,7 +88,7 @@ def test_flux_py_alloc_settings_raise_on_heterogeneous_nodes_for_uniform_cpu():
         raise AssertionError("expected HeterogeneousTopologyError")
 
 
-def test_flux_shell_run_uses_node_level_launch_view_without_sockets(monkeypatch):
+def test_flux_shell_run_uses_node_level_resource_view_without_sockets(monkeypatch):
     backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 8}]}])
     adapter = FluxShellRunAdapter(
         backend=backend,
@@ -101,7 +101,7 @@ def test_flux_shell_run_uses_node_level_launch_view_without_sockets(monkeypatch)
     assert argv == ["flux", "run", "--nodes=2", "-n", "17", "app"]
 
 
-def test_flux_py_run_uses_node_level_launch_view_without_sockets(monkeypatch):
+def test_flux_py_run_uses_node_level_resource_view_without_sockets(monkeypatch):
     backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 8}]}])
     adapter = FluxPyRunAdapter(
         backend=backend,

@@ -51,10 +51,7 @@ def test_count_per_node_homogeneous_topology():
             {
                 "type": "node",
                 "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 4},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 4}],
             }
         ]
     )
@@ -62,7 +59,6 @@ def test_count_per_node_homogeneous_topology():
     assert backend.node_count == 3
     assert backend.count_per_node("cpu") == 16
     assert backend.count_per_node("gpu") == 4
-    assert backend.count_per_socket("cpu") == 8
 
 
 def test_nodes_required_homogeneous_topology():
@@ -71,10 +67,7 @@ def test_nodes_required_homogeneous_topology():
             {
                 "type": "node",
                 "count": 4,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 2},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 2}],
             }
         ]
     )
@@ -92,10 +85,7 @@ def test_nodes_required_backward_compatible_max_names():
             {
                 "type": "node",
                 "count": 4,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 2},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 2}],
             }
         ]
     )
@@ -125,99 +115,32 @@ def test_count_per_node_heterogeneous_topology_raises():
         raise AssertionError("expected HeterogeneousTopologyError")
 
 
-def test_resource_view_requires_socket_topology():
-    backend = FakeBackend([{"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 8}]}])
-
-    try:
-        backend.resource_view(ranks=4)
-    except ValueError as exc:
-        assert "socket-based topology" in str(exc)
-    else:
-        raise AssertionError("expected ValueError for non-socket topology")
-
-
-def test_resource_view_heterogeneous_topology_raises_actionable_error():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 2,
-                "resources": [
-                    {"type": "socket", "count": 1, "resources": [{"type": "cpu", "count": 4}]}
-                ],
-            },
-            {
-                "type": "node",
-                "count": 1,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            },
-        ]
-    )
-
-    try:
-        backend.resource_view(ranks=4)
-    except HeterogeneousTopologyError as exc:
-        text = str(exc)
-        assert "homogeneous topology" in text
-        assert "node_groups" in text
-    else:
-        raise AssertionError("expected HeterogeneousTopologyError")
-
-
-def test_resource_view_homogeneous_topology_defaults_from_cpu_socket_shape():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            }
-        ]
-    )
+def test_resource_view_defaults_to_node_level_capacity_view():
+    backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 16}]}])
 
     view = backend.resource_view(ranks=17)
-    assert view == {"np": 17, "ranks": 17, "ranks_per_socket": 8, "nodes": 2, "sockets": 3}
-
-
-def test_launch_view_homogeneous_topology_defaults_from_cpu_node_shape():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            }
-        ]
-    )
-
-    view = backend.launch_view(ranks=17)
     assert view == {"np": 17, "ranks": 17, "nodes": 2, "ranks_per_node": 16}
 
 
-def test_resource_view_explicit_ranks_per_socket():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            }
-        ]
-    )
+def test_resource_view_homogeneous_topology_defaults_from_cpu_node_shape():
+    backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 16}]}])
 
-    view = backend.resource_view(ranks=17, ranks_per_socket=4)
-    assert view == {"np": 17, "ranks": 17, "ranks_per_socket": 4, "nodes": 3, "sockets": 5}
+    view = backend.resource_view(ranks=17)
+    assert view == {"np": 17, "ranks": 17, "nodes": 2, "ranks_per_node": 16}
 
 
-def test_launch_view_heterogeneous_topology_raises():
+def test_resource_view_rejects_socket_specific_requests():
+    backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 16}]}])
+
+    try:
+        backend.resource_view(ranks=17, ranks_per_socket=4)
+    except ValueError as exc:
+        assert "no longer computes socket-based layouts" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_resource_view_heterogeneous_topology_raises():
     backend = FakeBackend(
         [
             {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
@@ -226,7 +149,7 @@ def test_launch_view_heterogeneous_topology_raises():
     )
 
     try:
-        backend.launch_view(ranks=4)
+        backend.resource_view(ranks=4)
     except HeterogeneousTopologyError as exc:
         text = str(exc)
         assert "homogeneous topology" in text
@@ -235,50 +158,34 @@ def test_launch_view_heterogeneous_topology_raises():
         raise AssertionError("expected HeterogeneousTopologyError")
 
 
-def test_count_per_socket_homogeneous_topology():
+def test_count_per_socket_reports_socket_metadata_is_not_generic_topology():
     backend = FakeBackend(
         [
             {
                 "type": "node",
                 "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 4},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 4}],
             }
-        ]
-    )
-
-    assert backend.count_per_socket("cpu") == 8
-
-
-def test_count_per_socket_heterogeneous_topology_raises():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 1,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            },
-            {
-                "type": "node",
-                "count": 1,
-                "resources": [
-                    {"type": "socket", "count": 4, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            },
         ]
     )
 
     try:
         backend.count_per_socket("cpu")
-    except HeterogeneousTopologyError as exc:
-        text = str(exc)
-        assert "per-node topology helpers" in text or "node_groups" in text
+    except ValueError as exc:
+        assert "no longer models socket counts" in str(exc)
     else:
-        raise AssertionError("expected HeterogeneousTopologyError")
+        raise AssertionError("expected ValueError")
+
+
+def test_count_per_socket_default_still_allows_callers_to_supply_fallback():
+    backend = FakeBackend(
+        [
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 16}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 32}]},
+        ]
+    )
+
+    assert backend.count_per_socket("cpu", default=0) == 0
 
 
 def test_topology_from_resource_specs_homogeneous_entries():
@@ -287,17 +194,14 @@ def test_topology_from_resource_specs_homogeneous_entries():
             {
                 "type": "node",
                 "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 4},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 4}],
             }
         ]
     )
 
     assert [entry.type for entry in topology.by_type("node")] == ["node"]
-    assert [entry.count for entry in topology.by_type("socket")] == [2]
-    assert [entry.count for entry in topology.by_type("cpu")] == [8]
+    assert topology.by_type("socket") == []
+    assert [entry.count for entry in topology.by_type("cpu")] == [16]
     assert [entry.count for entry in topology.by_type("gpu")] == [4]
 
 
@@ -323,10 +227,7 @@ def test_topology_uniform_per_node_homogeneous():
             {
                 "type": "node",
                 "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 4},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 4}],
             }
         ]
     )
@@ -346,10 +247,7 @@ def test_backend_explicit_topology_helpers_homogeneous():
             {
                 "type": "node",
                 "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]},
-                    {"type": "gpu", "count": 4},
-                ],
+                "resources": [{"type": "cpu", "count": 16}, {"type": "gpu", "count": 4}],
             }
         ]
     )
@@ -419,22 +317,6 @@ def test_nodes_required_heterogeneous_topology_raises():
         assert "node_groups" in text
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
-
-
-def test_backend_sockets_per_node_uses_uniform_semantics():
-    backend = FakeBackend(
-        [
-            {
-                "type": "node",
-                "count": 3,
-                "resources": [
-                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
-                ],
-            }
-        ]
-    )
-
-    assert backend.sockets_per_node == 2
 
 
 def test_topology_node_groups_returns_node_entries():

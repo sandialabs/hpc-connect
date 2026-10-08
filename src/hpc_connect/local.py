@@ -79,13 +79,16 @@ class LocalBackend(Backend):
                 if fnmatch.fnmatch(host, pattern):
                     return rspec
         cfg: dict[str, Any] = self.config["config"]
-        cpu_count: int = cfg.get("cores_per_socket") or psutil.cpu_count() or 1
-        sockets_per_node: int = cfg.get("sockets_per_node") or 1
+        cpu_count: int | None = cfg.get("cpus_per_node")
+        if cpu_count is None:
+            cpu_count = cfg.get("cores_per_socket")
+            if cpu_count is not None:
+                cpu_count *= cfg.get("sockets_per_node") or 1
+        cpu_count = cpu_count or psutil.cpu_count() or 1
         node_count: int = cfg.get("nnode") or 1
 
         local_resource = {"type": "cpu", "count": cpu_count}
-        socket_resource = {"type": "socket", "count": sockets_per_node, "resources": [local_resource]}
-        return [{"type": "node", "count": node_count, "resources": [socket_resource]}]
+        return [{"type": "node", "count": node_count, "resources": [local_resource]}]
 
 
 class SubprocessAdapter(SubmissionAdapter):

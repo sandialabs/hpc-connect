@@ -29,13 +29,7 @@ def _parse_sinfo_line(line: str, cmd_line: str) -> dict[str, Any]:
     info: dict[str, Any] = {
         "type": "node",
         "count": node_count,
-        "resources": [
-            {
-                "type": "socket",
-                "count": sockets_per_node,
-                "resources": [{"type": "cpu", "count": cores_per_socket}],
-            }
-        ],
+        "resources": [{"type": "cpu", "count": cpus_per_node}],
         "additional_properties": {
             cmd_line: line,
             "sockets_per_node": sockets_per_node,

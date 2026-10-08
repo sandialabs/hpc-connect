@@ -21,9 +21,7 @@ def test_default_resource_set_psutil_fallback(monkeypatch):
     node = result[0]
     assert node["type"] == "node"
     assert node["count"] == 1
-    sockets = node["resources"]
-    assert sockets[0]["type"] == "socket"
-    cpus = sockets[0]["resources"]
+    cpus = node["resources"]
     assert cpus[0]["type"] == "cpu"
     assert isinstance(cpus[0]["count"], int)
     assert cpus[0]["count"] > 0

@@ -29,13 +29,11 @@ hpc_connect:
         default_options: [--named]
       config:
         nnode: 1
-        sockets_per_node: 1
-        cores_per_socket: 2
+        cpus_per_node: 2
     - type: local
       config:
         nnode: 3
-        sockets_per_node: 2
-        cores_per_socket: 5
+        cpus_per_node: 10
 """,
         encoding="utf-8",
     )
@@ -53,8 +51,7 @@ hpc_connect:
             os.environ["HPC_CONNECT_GLOBAL_CONFIG"] = old
 
     assert backend.node_count == 3
-    assert backend.sockets_per_node == 2
-    assert backend.count_per_socket("cpu") == 5
+    assert backend.count_per_node("cpu") == 10
 
 
 def test_get_backend_named_instance_keeps_name_specific_overrides(tmpdir, clear_config_cache):
@@ -68,8 +65,7 @@ hpc_connect:
       type: local
       config:
         nnode: 4
-        sockets_per_node: 2
-        cores_per_socket: 7
+        cpus_per_node: 14
 """,
         encoding="utf-8",
     )
@@ -87,5 +83,4 @@ hpc_connect:
             os.environ["HPC_CONNECT_GLOBAL_CONFIG"] = old
 
     assert backend.node_count == 4
-    assert backend.sockets_per_node == 2
-    assert backend.count_per_socket("cpu") == 7
+    assert backend.count_per_node("cpu") == 14

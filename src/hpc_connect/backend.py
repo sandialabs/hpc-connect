@@ -146,17 +146,6 @@ class Backend(abc.ABC):
                 f"Unable to determine count_per_node for {rtype!r} from {self.resource_specs}"
             ) from None
 
-    def count_per_socket(self, rtype: str, default: int | None = None) -> int:
-        rtype = self.canonical_type_name(rtype)
-        try:
-            return self.topology.uniform_per_socket(rtype)
-        except HeterogeneousTopologyError:
-            raise
-        except ValueError:
-            if default is not None:
-                return default
-            raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
-
     @cached_property
     def node_count(self) -> int:
         nodes = self.topology.by_type("node")
@@ -165,23 +154,36 @@ class Backend(abc.ABC):
             return count
         raise ValueError("Unable to determine node count")
 
-    @cached_property
-    def sockets_per_node(self) -> int:
-        try:
-            count = self.uniform_per_node("socket")
-            return count or 1
-        except ValueError:
-            return 1
+    def count_per_socket(self, rtype: str, default: int | None = None) -> int:
+        if default is not None:
+            return default
+        raise ValueError(
+            f"Generic topology no longer models socket counts for {rtype!r}; "
+            "query backend metadata instead"
+        )
 
-    def launch_view(self, *, ranks: int | None = None) -> dict[str, int]:
-        """Return a node-level launch view for common resource planning."""
+    def resource_view(
+        self, *, ranks: int | None = None, ranks_per_socket: int | None = None
+    ) -> dict[str, int]:
+        """Return a node-level resource view for common planning.
+
+        Socket-aware placement is intentionally not modeled by the generic
+        topology layer. Advanced placement should be handled via backend
+        metadata and explicit backend-specific options.
+        """
+        if ranks_per_socket is not None:
+            raise ValueError(
+                "resource_view() no longer computes socket-based layouts; "
+                "use backend metadata and explicit backend-specific options for advanced placement"
+            )
+
         view: dict[str, int] = {"np": 0, "ranks": 0, "nodes": 0, "ranks_per_node": 0}
         if not ranks:
             return view
 
         if not self.is_homogeneous():
             raise HeterogeneousTopologyError(
-                "launch_view() requires a homogeneous topology with uniform per-node resource counts; "
+                "resource_view() requires a homogeneous topology with uniform per-node resource counts; "
                 "for heterogeneous systems, inspect node_groups() and compute the launch layout explicitly"
             )
 
@@ -224,63 +226,3 @@ class Backend(abc.ABC):
         if canonical := self.aliases.get(rtype):
             return canonical
         return rtype
-
-    def resource_view(
-        self, *, ranks: int | None = None, ranks_per_socket: int | None = None
-    ) -> dict[str, int]:
-        """Return basic information about how to allocate resources on this machine for a job
-        requiring `ranks` ranks.
-
-        Parameters
-        ----------
-        ranks : int
-            The number of ranks to use for a job
-        ranks_per_socket : int
-            Number of ranks per socket, for performance use
-
-        Returns
-        -------
-        view:
-          view['np']
-          view['ranks']
-          view['nodes']
-          view['sockets']
-          view['ranks_per_socket']
-
-        """
-        if ranks is None and ranks_per_socket is not None:
-            # Raise an error since there is no reliable way of finding the number of
-            # available nodes
-            raise ValueError("ranks_per_socket requires ranks also be defined")
-        if not self.topology.by_type("socket"):
-            raise ValueError("resource_view assumes socket-based topology")
-        if not self.is_homogeneous():
-            raise HeterogeneousTopologyError(
-                "resource_view() requires a homogeneous topology with uniform socket counts; "
-                "for heterogeneous systems, inspect node_groups() and compute the launch layout explicitly"
-            )
-
-        view: dict[str, int] = {"np": 0, "ranks": 0, "ranks_per_socket": 0, "nodes": 0, "sockets": 0}
-
-        if not ranks and not ranks_per_socket:
-            return view
-
-        nodes: int
-        if ranks is None and ranks_per_socket is None:
-            ranks = ranks_per_socket = 1
-            nodes = 1
-        elif ranks is not None and ranks_per_socket is None:
-            cpus_per_socket = self.count_per_socket("cpu")
-            ranks_per_socket = min(ranks, cpus_per_socket)
-            nodes = int(math.ceil(ranks / cpus_per_socket / self.sockets_per_node))
-        else:
-            assert ranks is not None
-            assert ranks_per_socket is not None
-            nodes = int(math.ceil(ranks / ranks_per_socket / self.sockets_per_node))
-        sockets = int(math.ceil(ranks / ranks_per_socket))
-        view["np"] = ranks
-        view["ranks"] = ranks
-        view["ranks_per_socket"] = ranks_per_socket
-        view["nodes"] = nodes
-        view["sockets"] = sockets
-        return view
