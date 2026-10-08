@@ -72,15 +72,18 @@ def get_backend(arg: str | None = None) -> Backend:
     else:
         raise TypeError("missing required argument: 'arg'")
 
+    matched_entry: dict[str, object] | None = None
+    type_match: str | None = None
     for entry in config["backends"]:
-        if entry.get("name") == name:
+        selector = entry.get("name") or entry["type"]
+        if selector == name:
+            matched_entry = entry
             type = entry["type"]
             break
         elif entry["type"] == name:
-            type = entry["type"]
-            break
+            type_match = entry["type"]
     else:
-        type = name
+        type = type_match or name
 
     pm = get_pluginmanager()
     backend_t: Type[Backend] | None
@@ -94,8 +97,8 @@ def get_backend(arg: str | None = None) -> Backend:
     defaults = copy.deepcopy(backend_t.default_config())
     backend_config = backend_schema.validate(defaults)
 
-    if overrides := config.backend(name):
-        collections.merge(backend_config, overrides)
+    if matched_entry is not None:
+        collections.merge(backend_config, matched_entry)
         backend_config = backend_schema.validate(backend_config)
 
     return backend_t(cfg=backend_config)
@@ -105,4 +108,4 @@ def backends() -> list[str]:
     from .pluginmanager import get_pluginmanager
 
     pm = get_pluginmanager()
-    return [b.name for b in pm.hook.hpc_connect_backend() if b is not None]
+    return [b.type for b in pm.hook.hpc_connect_backend() if b is not None]

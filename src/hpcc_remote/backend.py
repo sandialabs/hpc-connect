@@ -7,6 +7,7 @@ import shutil
 from typing import Any
 
 import hpc_connect
+from hpc_connect.submit import SubmissionAdapter
 from hpc_connect.util import set_executable
 
 from .process import RemoteSubprocess
@@ -27,19 +28,12 @@ class RemoteBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         raise NotImplementedError
 
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"<none>"}
-
     @classmethod
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "<none>",
-                "exec": "<none>",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},
@@ -50,18 +44,19 @@ class RemoteBackend(hpc_connect.Backend):
     def submission_manager(self) -> hpc_connect.HPCSubmissionManager:
         return hpc_connect.HPCSubmissionManager(adapter=RemoteAdapter(config=self.config["submit"]))
 
+    def launch_adapter(self) -> hpc_connect.LaunchAdapter:
+        raise NotImplementedError
+
     def launcher(self) -> hpc_connect.HPCLauncher:
         raise NotImplementedError
 
 
-class RemoteAdapter:
+class RemoteAdapter(SubmissionAdapter):
     def __init__(self, config: dict[str, Any]) -> None:
-        self.config = config
+        super().__init__(config=config)
 
     def polling_interval(self) -> float:
-        if self.config["polling_interval"] > 0:
-            return self.config["polling_interval"]
-        return 0.5
+        return super().polling_interval() or 0.5
 
     def prepare(self, spec: hpc_connect.JobSpec) -> hpc_connect.JobSpec:
         sh = shutil.which("sh")

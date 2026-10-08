@@ -22,15 +22,7 @@ ConfigScopes = Literal["site", "global", "local"]
 
 class Config:
     def __init__(self, export: bool = False) -> None:
-        self.data: dict[str, Any]
-        if var := os.getenv("HPC_CONNECT_CFG64"):
-            self.data = self.validate(deserialize(var))
-        else:
-            data: dict[str, Any] = {}
-            for name in ("site", "global", "local"):
-                scope = get_config_scope_data(name)
-                collections.merge(data, scope)
-            self.data = self.validate(data)
+        self.data = self.validate(load_config_data())
         if export:
             self.export()
 
@@ -54,18 +46,12 @@ class Config:
             args: An argparse.Namespace object containing command-line arguments.
         """
         if args.config_mods:
-            overlay: dict[str, Any] = {}
-            for fullpath in args.config_mods:
-                current = overlay
-                components = process_config_path(fullpath)
-                for component in components[:-2]:
-                    current = current.setdefault(component, {})
-                current[components[-2]] = safe_loads(components[-1])
-            candidate = copy.deepcopy(self.data)
-            collections.merge(candidate, overlay)
-            self.data = self.validate(candidate)
+            self.data = self.validate(apply_config_mods(self.data, args.config_mods))
             if self.data.get("debug"):
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
+            self.export()
+        if getattr(args, "backend", None):
+            self.data["backend"] = args.backend
             self.export()
 
     def set(self, path: str, value: Any) -> None:
@@ -115,6 +101,34 @@ def get_config_scope_data(scope: ConfigScopes) -> dict[str, Any]:
     return data
 
 
+def load_config_data() -> dict[str, Any]:
+    if var := os.getenv("HPC_CONNECT_CFG64"):
+        return deserialize(var)
+
+    data: dict[str, Any] = {}
+    for name in ("site", "global", "local"):
+        scope = get_config_scope_data(name)
+        collections.merge(data, scope)
+    return data
+
+
+def overlay_from_mods(config_mods: list[str]) -> dict[str, Any]:
+    overlay: dict[str, Any] = {}
+    for fullpath in config_mods:
+        current = overlay
+        components = process_config_path(fullpath)
+        for component in components[:-2]:
+            current = current.setdefault(component, {})
+        current[components[-2]] = safe_loads(components[-1])
+    return overlay
+
+
+def apply_config_mods(data: dict[str, Any], config_mods: list[str]) -> dict[str, Any]:
+    candidate = copy.deepcopy(data)
+    collections.merge(candidate, overlay_from_mods(config_mods))
+    return candidate
+
+
 def get_scope_filename(scope: str) -> str | None:
     if scope == "site":
         if var := os.getenv("HPC_CONNECT_SITE_CONFIG"):
@@ -144,6 +158,21 @@ def read_config_file(file: str) -> dict[str, Any] | None:
         if "hpc_connect" in fd:
             fd = fd["hpc_connect"]
         return fd
+
+
+def write_config_file(file: str, data: dict[str, Any]) -> None:
+    path = os.path.abspath(file)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        yaml.safe_dump({"hpc_connect": data}, fh, default_flow_style=False, sort_keys=False)
+
+
+def set_scope_data(scope: ConfigScopes, data: dict[str, Any]) -> str:
+    file = get_scope_filename(scope)
+    if file is None:
+        raise ValueError(f"Could not determine filename for scope {scope!r}")
+    write_config_file(file, data)
+    return file
 
 
 def process_config_path(path: str) -> list[str]:
@@ -177,12 +206,6 @@ def export() -> str:
     if _config is None:
         _config = Config()
     return _config.export()
-
-
-def reset() -> None:
-    global _config
-    _config = None
-    os.environ.pop("HPC_CONNECT_CFG64", None)
 
 
 def __getattr__(name: str) -> Any:

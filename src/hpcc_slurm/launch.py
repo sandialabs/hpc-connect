@@ -7,21 +7,24 @@ from hpc_connect.launch import LaunchSpec
 
 
 class SrunAdapter(LaunchAdapter):
+    def executable(self) -> str:
+        exec = shutil.which("srun")
+        if exec is None:
+            raise ValueError("srun: executable not found on PATH")
+        return os.fsdecode(exec)
+
     def join_specs(self, specs: list["LaunchSpec"]) -> list[str]:
         """Count the total number of processes and write a srun.conf file to
         split the jobs across ranks
 
         """
-        name = self.config.get("exec") or "srun"
-        exec = shutil.which(name)
-        if exec is None:
-            raise ValueError(f"{name}: executable not found on PATH")
+        exec = self.executable()
         if len(specs) > 1:
             return self._join_mpmd(exec, specs)
         return self._join_spmd(exec, specs[0])
 
     def _join_spmd(self, exec: str, spec: LaunchSpec) -> list[str]:
-        argv = [os.fsdecode(exec)]
+        argv = [exec]
         view = self.backend.resource_view(ranks=spec.processes)
         for opt in self.config["default_options"]:
             argv.append(self.expand_one(opt, **view))
@@ -69,7 +72,7 @@ class SrunAdapter(LaunchAdapter):
         file = "launch-multi-prog.conf"
         with open(file, "w") as fh:
             fh.write(fp.getvalue())
-        cmd = [os.fsdecode(exec)]
+        cmd = [exec]
         view = self.backend.resource_view(ranks=np)
         for opt in self.config["mpmd"]["global_options"]:
             cmd.append(self.expand_one(opt, **view))

@@ -15,7 +15,9 @@ import flux  # type: ignore[ty:unresolved-import, import-not-found]
 import flux.job  # type: ignore[ty:unresolved-import, import-not-found]
 
 import hpc_connect
-from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.launch import LaunchAdapter
+from hpc_connect.launch import LaunchSpec
+from hpc_connect.topology import HeterogeneousTopologyError
 from hpc_connect.util import set_executable
 
 from ..discover import read_resource_info
@@ -54,15 +56,11 @@ class FluxBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         if self._resource_specs is None:
             if info := read_resource_info():
-                self._resource_specs = [info]
+                self._resource_specs = info
             else:
                 raise ValueError("Unable to determine system configuration from flux")
         assert self._resource_specs is not None
         return self._resource_specs
-
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"mpi"}
 
     @classmethod
     def default_config(cls) -> dict[str, Any]:
@@ -70,9 +68,6 @@ class FluxBackend(hpc_connect.Backend):
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "mpi",
-                "exec": "mpiexec",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},
@@ -86,10 +81,11 @@ class FluxBackend(hpc_connect.Backend):
     def submission_manager(self) -> "FluxSubmissionManager":
         return FluxSubmissionManager(adapter=FluxAdapter(backend=self, config=self.config["submit"]))
 
+    def launch_adapter(self) -> "FluxRunAdapter":
+        return FluxRunAdapter(backend=self, config=self.config["launch"])
+
     def launcher(self) -> hpc_connect.HPCLauncher:
-        return hpc_connect.HPCLauncher(
-            adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
-        )
+        return hpc_connect.HPCLauncher(adapter=self.launch_adapter())
 
 
 class FluxAdapter:
@@ -161,9 +157,14 @@ class FluxAdapter:
         alloc: dict[str, Any] = {}
         if nodes is not None:
             if cpus is None:
-                cpus = nodes * self.backend.count_per_node("cpu")
+                cpus = nodes * self.backend.uniform_per_node("cpu")
             if gpus is None:
-                gpus = nodes * self.backend.count_per_node("gpu", default=0)
+                try:
+                    gpus = nodes * self.backend.uniform_per_node("gpu")
+                except HeterogeneousTopologyError:
+                    raise
+                except ValueError:
+                    gpus = 0
         else:
             cpus = cpus or 1
             gpus = gpus or 0
@@ -190,3 +191,30 @@ class FluxAdapter:
                         logger.warning(f"{len(jobs)} active jobs remain after shutdown")
                 self.backend.executor.shutdown(wait=False, cancel_futures=True)
                 self.backend.executor = None
+
+
+class FluxRunAdapter(LaunchAdapter):
+    def executable(self) -> list[str]:
+        exec = shutil.which("flux")
+        if exec is None:
+            raise ValueError("flux: executable not found on PATH")
+        return [os.fsdecode(exec), "run"]
+
+    def join_specs(self, specs: list["LaunchSpec"]) -> list[str]:
+        if len(specs) > 1:
+            raise ValueError("flux run launch does not support generic MPMD syntax")
+        return self._join_spmd(specs[0])
+
+    def _join_spmd(self, spec: LaunchSpec) -> list[str]:
+        argv = self.executable()
+        view = self.backend.resource_view(ranks=spec.processes)
+        for opt in self.config["default_options"]:
+            argv.append(self.expand_one(opt, **view))
+        launch_opts, program_opts = spec.partition()
+        for opt in launch_opts:
+            argv.append(self.expand_one(opt, **view))
+        for opt in self.config["pre_options"]:
+            argv.append(self.expand_one(opt, **view))
+        for opt in program_opts:
+            argv.append(self.expand_one(opt, **view))
+        return argv

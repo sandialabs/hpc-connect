@@ -41,8 +41,8 @@ Requires Python 3.10 or newer.
 - **`Future`** — a handle to a submitted job. It exposes the job id, return
   code, completion metadata, and start/jobid/done callbacks, and can be waited
   on individually or with `as_completed`.
-- **launcher** — builds and runs the parallel-launch command line
-  (`mpiexec`, `srun`, …) for an application.
+- **launcher** — builds and runs the backend's opinionated parallel-launch
+  command line for an application (for example `mpirun`, `srun`, or `flux run`).
 
 ## Python usage
 
@@ -58,6 +58,7 @@ backend = hpc_connect.get_backend("slurm")
 print(backend.describe())  # human-readable resource summary
 print(backend.node_count)  # discovered node count
 print(backend.count_per_node("cpu"))
+print(backend.is_homogeneous())
 ```
 
 `get_backend(name)` resolves `name` against the configuration in this order:
@@ -143,9 +144,14 @@ The command line is assembled roughly as:
 <exec> <default_options> [user options] <pre_options> <application> [app options]
 ```
 
-The launcher infers the process count from `-n`/`-np` (or the backend's
-`numproc_flag`) and supports MPMD job specifications (segments separated by
-`:`).
+The launcher infers the process count from common `-n` / `-np` spellings and
+supports MPMD job specifications (segments separated by `:`). Launcher choice
+is backend-owned and not user-configurable:
+
+- local: `mpirun` (falls back to `mpiexec` if needed)
+- slurm: `srun`
+- flux: `flux run`
+- pbs: `mpirun` (falls back to `mpiexec` if needed)
 
 ### Sizing resources
 
@@ -156,8 +162,27 @@ topology:
 backend.node_count  # total nodes
 backend.count_per_node("gpu")  # GPUs per node
 backend.nodes_required(cpu=256)  # nodes needed for 256 CPU tasks
-backend.resource_view(ranks=128)  # {np, ranks, nodes, sockets, ranks_per_socket}
+backend.resource_view(ranks=128)  # {np, ranks, nodes, ranks_per_node}
 ```
+
+For new code, prefer the explicit topology helpers when the machine description
+may be heterogeneous:
+
+```python
+backend.is_homogeneous()  # True when all node groups share one shape
+backend.uniform_per_node("cpu")  # homogeneous-only; raises if node groups differ
+backend.max_per_node("cpu")  # largest per-node CPU count across node groups
+backend.min_per_node("cpu")  # smallest per-node CPU count across node groups
+backend.total_resources("cpu")  # total CPUs across the whole topology
+```
+
+Notes:
+
+- `count_per_node()` is preserved for backward compatibility.
+- `uniform_per_node()` is the preferred helper when callers require a single
+  consistent per-node value.
+- `max_per_node()`, `min_per_node()`, and `total_resources()` are the safer
+  choices for heterogeneous systems.
 
 ## Command-line tools
 
@@ -175,6 +200,14 @@ hpcc -c backend:slurm launch -- ./my_app --flag
 ```
 
 Configuration can be overridden inline with `-c path:to:key:value`.
+
+You can also persist settings to a config scope:
+
+```console
+hpcc config add --scope local backend:local
+hpcc config add --scope local backends:[{"type":"local"}]
+hpcc config show
+```
 
 ### `hpc-launch`
 
@@ -212,9 +245,6 @@ hpc_connect:
 
       # How applications are launched under this backend.
       launch:
-        type: srun            # e.g. "mpi" or "srun"
-        exec: srun            # launch executable (backend may default this)
-        numproc_flag: -n      # flag preceding the process count
         default_options: []   # options placed before user arguments
         pre_options: []       # options placed immediately before the application
         variables: {}         # environment overrides (name -> value)
@@ -252,7 +282,7 @@ earlier ones):
 
 ### Example configurations
 
-Local machine with an MPICH-style launcher:
+Local machine with the default launcher settings:
 
 ```yaml
 hpc_connect:
@@ -260,9 +290,9 @@ hpc_connect:
   backends:
     - type: local
       launch:
-        type: mpi
-        exec: mpiexec
-        numproc_flag: -np
+        default_options:
+          - --map-by
+          - ppr:%(np)d:cores
 ```
 
 Slurm with `srun`:
@@ -273,8 +303,8 @@ hpc_connect:
   backends:
     - type: slurm
       launch:
-        type: srun
-        exec: srun
+        default_options:
+          - --cpu-bind=cores
 ```
 
 ## Extending: writing a backend plugin

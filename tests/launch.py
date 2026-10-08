@@ -2,14 +2,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-import pytest
-
 import hpc_connect
-
-
-@pytest.fixture(scope="function", autouse=True)
-def reset_config():
-    hpc_connect.config.reset()
 
 
 @contextmanager
@@ -48,14 +41,10 @@ hpc_connect:
   - name: my.slurm
     type: slurm
     launch:
-      type: mpi
-      numproc_flag: -np
-      exec: mpiexec
+      default_options: []
   - name: my.local
     type: local
     launch:
-      type: mpi
-      numproc_flag: -np
       default_options: --map-by ppr:%(np)d:cores
 """
     return cfg
@@ -103,7 +92,7 @@ def test_file_config_3(tmpdir, capfd):
             launcher(["-np", "4", "-xflag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
-            assert out == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
+            assert out == f"{mock_bin}/srun -np 4 -xflag file executable --option"
 
 
 def test_default(capfd):
@@ -158,7 +147,7 @@ def test_count_procs(tmpdir):
     with working_dir(Path(tmpdir.strpath)):
         from hpc_connect.launch import ArgumentParser
 
-        parser = ArgumentParser(numproc_flag="-n")
+        parser = ArgumentParser()
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)
         assert args[0].processes == 4

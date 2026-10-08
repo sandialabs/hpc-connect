@@ -20,7 +20,7 @@ def test_read_sinfo_parses_first_data_line(monkeypatch):
         return "/usr/bin/sinfo"
 
     def mock_run(args, check, encoding, capture_output):
-        assert args == ["/usr/bin/sinfo", "-o", "%X %Y %Z %c %D %G"]
+        assert args == ["/usr/bin/sinfo", "-e", "-o", "%X %Y %Z %c %D %G"]
         assert check is True
         assert encoding == "utf-8"
         assert capture_output is True
@@ -31,22 +31,47 @@ def test_read_sinfo_parses_first_data_line(monkeypatch):
 
     result = read_sinfo()
 
-    assert result == {
-        "type": "node",
-        "count": 16,
-        "resources": [
-            {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 64}]},
-            {"type": "gpu", "count": 1, "gres": "a40"},
-        ],
-        "additional_properties": {
-            "/usr/bin/sinfo -o '%X %Y %Z %c %D %G'": "2 64 1 128 16 gpu:a40:1(S:0-1)",
-            "sockets_per_node": 2,
-            "cores_per_socket": 64,
-            "threads_per_core": 1,
-            "cpus_per_node": 128,
-            "gres": "gpu:a40:1",
+    assert result == [
+        {
+            "type": "node",
+            "count": 16,
+            "resources": [{"type": "cpu", "count": 128}, {"type": "gpu", "count": 1, "gres": "a40"}],
+            "additional_properties": {
+                "/usr/bin/sinfo -e -o '%X %Y %Z %c %D %G'": "2 64 1 128 16 gpu:a40:1(S:0-1)",
+                "sockets_per_node": 2,
+                "cores_per_socket": 64,
+                "threads_per_core": 1,
+                "cpus_per_node": 128,
+                "gres": "gpu:a40:1",
+            },
         },
-    }
+        {
+            "type": "node",
+            "count": 32,
+            "resources": [{"type": "cpu", "count": 128}, {"type": "gpu", "count": 4, "gres": "100"}],
+            "additional_properties": {
+                "/usr/bin/sinfo -e -o '%X %Y %Z %c %D %G'": "2 64 1 128 32 gpu:100:4(S:0-1)",
+                "sockets_per_node": 2,
+                "cores_per_socket": 64,
+                "threads_per_core": 1,
+                "cpus_per_node": 128,
+                "gres": "gpu:100:4",
+            },
+        },
+        {
+            "type": "node",
+            "count": 1445,
+            "resources": [{"type": "cpu", "count": 32}],
+            "additional_properties": {
+                "/usr/bin/sinfo -e -o '%X %Y %Z %c %D %G'": "2 16+ 1 32+ 1445 (null)",
+                "sockets_per_node": 2,
+                "cores_per_socket": 16,
+                "threads_per_core": 1,
+                "cpus_per_node": 32,
+                "gres": "None",
+            },
+        },
+    ]
 
 
 @pytest.mark.parametrize(

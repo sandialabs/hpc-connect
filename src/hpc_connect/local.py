@@ -24,6 +24,7 @@ from .launch import HPCLauncher
 from .mpi import MPIExecAdapter
 from .process import HPCProcess
 from .submit import HPCSubmissionManager
+from .submit import SubmissionAdapter
 from .util import set_executable
 
 logger = logging.getLogger("hpc_connect.subprocess.backend")
@@ -47,19 +48,12 @@ class LocalBackend(Backend):
         assert self._resource_specs is not None
         return self._resource_specs
 
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"mpi"}
-
     @classmethod
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "mpi",
-                "exec": "mpiexec",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},
@@ -70,8 +64,11 @@ class LocalBackend(Backend):
     def submission_manager(self) -> HPCSubmissionManager:
         return HPCSubmissionManager(adapter=SubprocessAdapter(config=self.config["submit"]))
 
+    def launch_adapter(self) -> MPIExecAdapter:
+        return MPIExecAdapter(backend=self, config=self.config["launch"])
+
     def launcher(self) -> HPCLauncher:
-        return HPCLauncher(adapter=MPIExecAdapter(backend=self, config=self.config["launch"]))
+        return HPCLauncher(adapter=self.launch_adapter())
 
     def discover(self) -> list[dict[str, Any]]:
         if file := os.getenv("HPC_CONNECT_HOSTFILE"):
@@ -82,26 +79,24 @@ class LocalBackend(Backend):
                 if fnmatch.fnmatch(host, pattern):
                     return rspec
         cfg: dict[str, Any] = self.config["config"]
-        cpu_count: int = cfg.get("cores_per_socket") or psutil.cpu_count() or 1
-        sockets_per_node: int = cfg.get("sockets_per_node") or 1
+        cpu_count: int | None = cfg.get("cpus_per_node")
+        if cpu_count is None:
+            cpu_count = cfg.get("cores_per_socket")
+            if cpu_count is not None:
+                cpu_count *= cfg.get("sockets_per_node") or 1
+        cpu_count = cpu_count or psutil.cpu_count() or 1
         node_count: int = cfg.get("nnode") or 1
 
         local_resource = {"type": "cpu", "count": cpu_count}
-        socket_resource = {"type": "socket", "count": sockets_per_node, "resources": [local_resource]}
-        return [{"type": "node", "count": node_count, "resources": [socket_resource]}]
+        return [{"type": "node", "count": node_count, "resources": [local_resource]}]
 
 
-class SubprocessAdapter:
+class SubprocessAdapter(SubmissionAdapter):
     def __init__(self, config: dict[str, Any]):
-        self.config = config
+        super().__init__(config=config)
         sh = shutil.which("sh")
         if sh is None:
             raise ValueError("sh not found on PATH")
-
-    def polling_interval(self) -> float:
-        if self.config["polling_interval"] > 0:
-            return self.config["polling_interval"]
-        return 1.0
 
     def prepare(self, spec: JobSpec) -> JobSpec:
         sh = shutil.which("sh")
@@ -189,7 +184,8 @@ class Subprocess(HPCProcess):
 def streamify(arg: str | None) -> TextIO | None:
     if arg is None:
         return None
-    os.makedirs(os.path.dirname(arg), exist_ok=True)
+    if dirname := os.path.dirname(arg):
+        os.makedirs(dirname, exist_ok=True)
     return open(arg, mode="w")
 
 

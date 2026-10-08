@@ -9,7 +9,7 @@ import sys
 from typing import Any
 
 import hpc_connect
-from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.submit import SubmissionAdapter
 from hpc_connect.util import set_executable
 from hpc_connect.util.time import hhmmss
 
@@ -46,15 +46,11 @@ class SlurmBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         if self._resource_specs is None:
             if sinfo := read_sinfo():
-                self._resource_specs = [sinfo]
+                self._resource_specs = sinfo
             else:
                 raise ValueError("Unable to determine system configuration from sinfo")
         assert self._resource_specs is not None
         return self._resource_specs
-
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"srun", "mpi"}
 
     @classmethod
     def default_config(cls) -> dict[str, Any]:
@@ -62,9 +58,6 @@ class SlurmBackend(hpc_connect.Backend):
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "srun",
-                "exec": "srun",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},
@@ -80,30 +73,23 @@ class SlurmBackend(hpc_connect.Backend):
             adapter=SbatchAdapter(backend=self, config=self.config["submit"])
         )
 
+    def launch_adapter(self):
+        return SrunAdapter(backend=self, config=self.config["launch"])
+
     def launcher(self) -> hpc_connect.HPCLauncher:
-        type = self.config["launch"]["type"]
-        if type == "srun":
-            return hpc_connect.HPCLauncher(
-                adapter=SrunAdapter(backend=self, config=self.config["launch"])
-            )
-        else:
-            return hpc_connect.HPCLauncher(
-                adapter=MPIExecAdapter(backend=self, config=self.config["launch"])
-            )
+        return hpc_connect.HPCLauncher(adapter=self.launch_adapter())
 
 
-class SbatchAdapter:
+class SbatchAdapter(SubmissionAdapter):
     def __init__(self, backend: SlurmBackend, config: dict[str, Any]) -> None:
-        self.config = config
+        super().__init__(config=config)
         self.backend = backend
         sbatch = shutil.which("sbatch")
         if sbatch is None:
             raise ValueError("sbatch not found on PATH")
 
     def polling_interval(self) -> float:
-        if self.config["polling_interval"] > 0:
-            return self.config["polling_interval"]
-        return 15.0
+        return super().polling_interval() or 15.0
 
     def gpus_per_node(self, spec: hpc_connect.JobSpec) -> int:
         """Number of GPUs to request on each node of the allocation.

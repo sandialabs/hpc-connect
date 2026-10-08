@@ -14,7 +14,43 @@ from typing import Any
 logger = logging.getLogger("hpc_connect.slurm.discover")
 
 
-def read_sinfo() -> dict[str, Any] | None:
+def _parse_sinfo_line(line: str, cmd_line: str) -> dict[str, Any]:
+    parts = line.split()
+    if len(parts) < 5:
+        raise ValueError(f"Unable to parse sinfo output line: {line!r}")
+
+    data = [safe_loads(part) for part in parts]
+    sockets_per_node = data[0]
+    cores_per_socket = data[1]
+    threads_per_core = data[2]
+    cpus_per_node = data[3]
+    node_count = data[4]
+    gres = data[5:]
+    info: dict[str, Any] = {
+        "type": "node",
+        "count": node_count,
+        "resources": [{"type": "cpu", "count": cpus_per_node}],
+        "additional_properties": {
+            cmd_line: line,
+            "sockets_per_node": sockets_per_node,
+            "cores_per_socket": cores_per_socket,
+            "threads_per_core": threads_per_core,
+            "cpus_per_node": cpus_per_node,
+            "gres": " ".join(str(_) for _ in gres),
+        },
+    }
+    for res in gres:
+        if not res:
+            continue
+        parts = res.split(":")
+        resource: dict[str, Any] = {"type": parts[0], "count": safe_loads(parts[-1])}
+        if len(parts) > 2:
+            resource["gres"] = ":".join(parts[1:-1])
+        info["resources"].append(resource)
+    return info
+
+
+def read_sinfo() -> list[dict[str, Any]] | None:
     if sinfo := shutil.which("sinfo"):
         opts = [
             "%X",  # Number of sockets per node
@@ -25,64 +61,35 @@ def read_sinfo() -> dict[str, Any] | None:
             "%G",  # General resources
         ]
         format = " ".join(opts)
-        args = [sinfo, "-o", format]
+        args = [sinfo, "-e", "-o", format]
         try:
             proc = subprocess.run(args, check=True, encoding="utf-8", capture_output=True)
         except subprocess.CalledProcessError:
             return None
         else:
-            sockets_per_node: int
-            cores_per_socket: int
-            threads_per_core: int
-            cpus_per_node: int
-            node_count: int
+            resources: list[dict[str, Any]] = []
             for line in proc.stdout.split("\n"):
                 parts = line.split()
                 if not parts:
                     continue
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
-                data = [safe_loads(part) for part in parts]
-                sockets_per_node = data[0]
-                cores_per_socket = data[1]
-                threads_per_core = data[2]
-                cpus_per_node = data[3]
-                node_count = data[4]
-                gres = data[5:]
-                break
-            else:
+                cmd_line = shlex.join(args)
+                resources.append(_parse_sinfo_line(line, cmd_line))
+
+            if not resources:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")
+
             if var := os.getenv("SLURM_NNODES"):
-                node_count = int(var)
-            cmd_line = shlex.join(args)
-            info: dict[str, Any] = {
-                "type": "node",
-                "count": node_count,
-                "resources": [
-                    {
-                        "type": "socket",
-                        "count": sockets_per_node,
-                        "resources": [{"type": "cpu", "count": cores_per_socket}],
-                    }
-                ],
-                "additional_properties": {
-                    cmd_line: line,
-                    "sockets_per_node": sockets_per_node,
-                    "cores_per_socket": cores_per_socket,
-                    "threads_per_core": threads_per_core,
-                    "cpus_per_node": cpus_per_node,
-                    "gres": " ".join(str(_) for _ in gres),
-                },
-            }
-            for res in gres:
-                if not res:
-                    continue
-                parts = res.split(":")
-                resource: dict[str, Any] = {"type": parts[0], "count": safe_loads(parts[-1])}
-                if len(parts) > 2:
-                    resource["gres"] = ":".join(parts[1:-1])
-                info["resources"].append(resource)
-            return info
+                if len(resources) == 1:
+                    resources[0]["count"] = int(var)
+                else:
+                    logger.debug(
+                        "Ignoring SLURM_NNODES=%s for heterogeneous sinfo output with %d node groups",
+                        var,
+                        len(resources),
+                    )
+            return resources
     return None
 
 
