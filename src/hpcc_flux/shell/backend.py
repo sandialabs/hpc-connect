@@ -54,7 +54,6 @@ class FluxBackend(hpc_connect.Backend):
             "launch": {
                 "type": "srun",
                 "exec": "srun",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

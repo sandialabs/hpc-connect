@@ -17,7 +17,6 @@ hpc_connect:
       launch:
         type: mpi
         exec: mpiexec
-        numproc_flag: -n
 """,
         encoding="utf-8",
     )

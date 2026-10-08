@@ -144,9 +144,8 @@ The command line is assembled roughly as:
 <exec> <default_options> [user options] <pre_options> <application> [app options]
 ```
 
-The launcher infers the process count from `-n`/`-np` (or the backend's
-`numproc_flag`) and supports MPMD job specifications (segments separated by
-`:`).
+The launcher infers the process count from common `-n` / `-np` spellings and
+supports MPMD job specifications (segments separated by `:`).
 
 ### Sizing resources
 
@@ -242,7 +241,6 @@ hpc_connect:
       launch:
         type: srun            # e.g. "mpi" or "srun"
         exec: srun            # launch executable (backend may default this)
-        numproc_flag: -n      # flag preceding the process count
         default_options: []   # options placed before user arguments
         pre_options: []       # options placed immediately before the application
         variables: {}         # environment overrides (name -> value)
@@ -290,7 +288,6 @@ hpc_connect:
       launch:
         type: mpi
         exec: mpiexec
-        numproc_flag: -np
 ```
 
 Slurm with `srun`:

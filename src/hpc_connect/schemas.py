@@ -62,7 +62,6 @@ def launch_defaults() -> dict[str, Any]:
     return {
         "type": "mpi",
         "exec": "mpiexec",
-        "numproc_flag": "-n",
         "default_options": list(),
         "pre_options": list(),
         "mpmd": mpmd_defaults(),
@@ -74,7 +73,6 @@ launch_schema = Schema(
         "type": str,
         Optional("name"): str,
         Optional("exec"): str,
-        Optional("numproc_flag", default="-n"): str,
         Optional("default_options", default_factory=list): Use(flag_splitter),
         Optional("pre_options", default_factory=list): Use(flag_splitter),
         Optional("variables", default_factory=dict): dict_str_str,

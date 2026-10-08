@@ -42,13 +42,11 @@ hpc_connect:
     type: slurm
     launch:
       type: mpi
-      numproc_flag: -np
       exec: mpiexec
   - name: my.local
     type: local
     launch:
       type: mpi
-      numproc_flag: -np
       default_options: --map-by ppr:%(np)d:cores
 """
     return cfg
@@ -151,7 +149,7 @@ def test_count_procs(tmpdir):
     with working_dir(Path(tmpdir.strpath)):
         from hpc_connect.launch import ArgumentParser
 
-        parser = ArgumentParser(numproc_flag="-n")
+        parser = ArgumentParser()
         argv = ["-n", "4", "ls", ":", "-n=5", "ls"]
         args = parser.parse_args(argv)
         assert args[0].processes == 4

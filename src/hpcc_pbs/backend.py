@@ -56,7 +56,6 @@ class PBSBackend(hpc_connect.Backend):
             "launch": {
                 "type": "mpi",
                 "exec": "mpiexec",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

@@ -28,7 +28,6 @@ hpc_connect:
       launch:
         type: mpi
         exec: mpiexec
-        numproc_flag: -n
         default_options: [--named]
       config:
         nnode: 1

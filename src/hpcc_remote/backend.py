@@ -40,7 +40,6 @@ class RemoteBackend(hpc_connect.Backend):
             "launch": {
                 "type": "<none>",
                 "exec": "<none>",
-                "numproc_flag": "-n",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

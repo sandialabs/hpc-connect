@@ -53,7 +53,7 @@ class LaunchAdapter:
         raise NotImplementedError
 
     def parse(self, args: list[str]) -> list["LaunchSpec"]:
-        parser = ArgumentParser(numproc_flag=self.config["numproc_flag"])
+        parser = ArgumentParser()
         return parser.parse_args(args)
 
     @staticmethod
@@ -86,13 +86,9 @@ class LaunchSpec:
 
 
 class ArgumentParser:
-    def __init__(self, *, numproc_flag: str | None = None) -> None:
-        self.numproc_flag: str = numproc_flag or "-n"
-
     def parse_args(self, args: Sequence[str]) -> list[LaunchSpec]:
         """Inspect arguments to launch to infer number of processors requested"""
-        numproc_flags = {"-n", "-np"}
-        numproc_flags.add(self.numproc_flag)
+        numproc_flags = {"-n", "-np", "--n", "--np"}
         launchspecs: list[LaunchSpec] = []
         spec: list[str] = []
         processes: int | None = None

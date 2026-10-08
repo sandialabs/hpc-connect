@@ -76,7 +76,6 @@ def test_schema_validate_default_factory_independent_instances():
 def test_launch_schema_minimal():
     result = launch_schema.validate({"type": "mpi"})
     assert result["type"] == "mpi"
-    assert result["numproc_flag"] == "-n"
     assert result["default_options"] == []
     assert result["pre_options"] == []
 
@@ -91,13 +90,12 @@ def test_launch_schema_full():
         "type": "mpi",
         "name": "openmpi",
         "exec": "mpiexec",
-        "numproc_flag": "-np",
         "default_options": ["--map-by", "core"],
         "pre_options": [],
         "mpmd": {"local_options": [], "global_options": []},
     }
     result = launch_schema.validate(data)
-    assert result["numproc_flag"] == "-np"
+    assert result["exec"] == "mpiexec"
 
 
 # ---------------------------------------------------------------------------
