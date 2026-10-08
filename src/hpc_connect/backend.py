@@ -6,7 +6,6 @@ import math
 from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
-from typing import Generator
 
 from .schemas import backend_schema
 from .schemas import resource_schema
@@ -38,7 +37,6 @@ class Backend(abc.ABC):
         self.aliases: dict[str, str] = {
             alias: canonical for canonical, aliases in rtype_aliases.items() for alias in aliases
         }
-        self._resource_index: dict[str, list[tuple[dict, str | None]]] | None = None
         self._topology: Topology | None = None
 
     @classmethod
@@ -136,22 +134,6 @@ class Backend(abc.ABC):
 
     def uniform_per_node(self, rtype: str) -> int:
         return self.topology.uniform_per_node(self.canonical_type_name(rtype))
-
-    @property
-    def resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
-        if self._resource_index is None:
-            self._resource_index = self.make_resource_index()
-        assert self._resource_index is not None
-        return self._resource_index
-
-    def make_resource_index(self) -> dict[str, list[tuple[dict, str | None]]]:
-        """Map resource type -> list of (resource_spec, parent_type)"""
-        index: dict[str, list[tuple[dict, str | None]]] = {}
-        for rspec in self.resource_specs:
-            for spec, parent in walk_resources(rspec):
-                spec["type"] = self.canonical_type_name(spec["type"])
-                index.setdefault(spec["type"], []).append((spec, parent))
-        return index
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""
@@ -288,11 +270,3 @@ class Backend(abc.ABC):
         view["nodes"] = nodes
         view["sockets"] = sockets
         return view
-
-
-def walk_resources(
-    rspec: dict, *, parent_type: str | None = None
-) -> Generator[tuple[dict, str | None], None, None]:
-    yield rspec, parent_type
-    for child in rspec.get("resources", []) or []:
-        yield from walk_resources(child, parent_type=rspec["type"])
