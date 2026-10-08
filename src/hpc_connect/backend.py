@@ -154,11 +154,7 @@ class Backend(abc.ABC):
 
     def resource_types(self) -> list[str]:
         """Return the types of resources available"""
-        types: set[str] = set()
-        for rtype, specs in self.resource_index.items():
-            # leaf resources = those with no children
-            if all("resources" not in spec or not spec["resources"] for spec, _ in specs):
-                types.add(rtype)
+        types = {entry.type for entry in self.topology.entries if not entry.children}
         return sorted(types)
 
     def count_per_node(self, rtype: str, default: int | None = None) -> int:
