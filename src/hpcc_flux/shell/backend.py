@@ -9,6 +9,7 @@ from typing import Any
 
 import hpc_connect
 from hpc_connect.mpi import MPIExecAdapter
+from hpc_connect.topology import HeterogeneousTopologyError
 from hpc_connect.util import set_executable
 
 from ..discover import read_resource_info
@@ -134,6 +135,8 @@ class FluxAdapter:
             if gpus is None:
                 try:
                     gpus = nodes * self.backend.uniform_per_node("gpu")
+                except HeterogeneousTopologyError:
+                    raise
                 except ValueError:
                     gpus = 0
         else:
