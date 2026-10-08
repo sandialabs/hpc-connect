@@ -207,6 +207,11 @@ class Backend(abc.ABC):
         if n := rtypes.pop("max_gpus", None):
             rtypes["gpu"] = n
         rtypes = {self.canonical_type_name(k): v for k, v in rtypes.items()}
+        if not self.is_homogeneous():
+            raise HeterogeneousTopologyError(
+                "nodes_required() requires a homogeneous topology with uniform per-node resource counts; "
+                "for heterogeneous systems, inspect node_groups() and plan the allocation explicitly"
+            )
         nodes: int = 1
         for rtype, count in rtypes.items():
             per_node = self.count_per_node(rtype, default=0)
@@ -251,8 +256,13 @@ class Backend(abc.ABC):
             # Raise an error since there is no reliable way of finding the number of
             # available nodes
             raise ValueError("ranks_per_socket requires ranks also be defined")
-        if "socket" not in self.resource_index:
+        if not self.topology.by_type("socket"):
             raise ValueError("resource_view assumes socket-based topology")
+        if not self.is_homogeneous():
+            raise HeterogeneousTopologyError(
+                "resource_view() requires a homogeneous topology with uniform socket counts; "
+                "for heterogeneous systems, inspect node_groups() and compute the launch layout explicitly"
+            )
 
         view: dict[str, int] = {"np": 0, "ranks": 0, "ranks_per_socket": 0, "nodes": 0, "sockets": 0}
 

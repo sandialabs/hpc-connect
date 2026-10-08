@@ -118,8 +118,12 @@ def test_count_per_node_heterogeneous_topology_raises():
     assert backend.node_count == 3
     try:
         backend.count_per_node("cpu")
-    except HeterogeneousTopologyError:
-        pass
+    except HeterogeneousTopologyError as exc:
+        text = str(exc)
+        assert "max_per_node" in text
+        assert "min_per_node" in text
+        assert "total" in text
+        assert "node_groups" in text
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
 
@@ -133,6 +137,36 @@ def test_resource_view_requires_socket_topology():
         assert "socket-based topology" in str(exc)
     else:
         raise AssertionError("expected ValueError for non-socket topology")
+
+
+def test_resource_view_heterogeneous_topology_raises_actionable_error():
+    backend = FakeBackend(
+        [
+            {
+                "type": "node",
+                "count": 2,
+                "resources": [
+                    {"type": "socket", "count": 1, "resources": [{"type": "cpu", "count": 4}]}
+                ],
+            },
+            {
+                "type": "node",
+                "count": 1,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
+                ],
+            },
+        ]
+    )
+
+    try:
+        backend.resource_view(ranks=4)
+    except HeterogeneousTopologyError as exc:
+        text = str(exc)
+        assert "homogeneous topology" in text
+        assert "node_groups" in text
+    else:
+        raise AssertionError("expected HeterogeneousTopologyError")
 
 
 def test_resource_view_homogeneous_topology_defaults_from_cpu_socket_shape():
@@ -208,8 +242,9 @@ def test_count_per_socket_heterogeneous_topology_raises():
 
     try:
         backend.count_per_socket("cpu")
-    except HeterogeneousTopologyError:
-        pass
+    except HeterogeneousTopologyError as exc:
+        text = str(exc)
+        assert "per-node topology helpers" in text or "node_groups" in text
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
 
@@ -346,8 +381,10 @@ def test_nodes_required_heterogeneous_topology_raises():
 
     try:
         backend.nodes_required(cpu=5)
-    except HeterogeneousTopologyError:
-        pass
+    except HeterogeneousTopologyError as exc:
+        text = str(exc)
+        assert "homogeneous topology" in text
+        assert "node_groups" in text
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
 

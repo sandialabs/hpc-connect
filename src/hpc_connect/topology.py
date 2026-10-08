@@ -73,7 +73,11 @@ class Topology:
 
     def uniform_per_node(self, rtype: str) -> int:
         if not self.is_homogeneous():
-            raise HeterogeneousTopologyError(f"resource {rtype!r} is not uniform across node groups")
+            raise HeterogeneousTopologyError(
+                f"resource {rtype!r} is not uniform across node groups; "
+                f"use max_per_node({rtype!r}), min_per_node({rtype!r}), total({rtype!r}), "
+                "or inspect node_groups() for heterogeneous topologies"
+            )
         node_groups = self.node_groups()
         if not node_groups:
             raise ValueError("topology has no node groups")
@@ -84,10 +88,16 @@ class Topology:
         if not sockets:
             raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
         if not self.is_homogeneous():
-            raise HeterogeneousTopologyError(f"resource {rtype!r} is not uniform across sockets")
+            raise HeterogeneousTopologyError(
+                f"resource {rtype!r} is not uniform across sockets because the topology is heterogeneous; "
+                "use the per-node topology helpers or inspect node_groups() instead"
+            )
         values = {int(entry.count) for entry in sockets}
         if len(values) != 1:
-            raise HeterogeneousTopologyError(f"resource {rtype!r} is not uniform across sockets")
+            raise HeterogeneousTopologyError(
+                f"resource {rtype!r} is not uniform across sockets; "
+                "use the per-node topology helpers or inspect node_groups() instead"
+            )
         return next(iter(values))
 
 
