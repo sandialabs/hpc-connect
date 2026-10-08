@@ -130,9 +130,12 @@ class FluxAdapter:
         alloc: dict[str, Any] = {}
         if nodes is not None:
             if cpus is None:
-                cpus = nodes * self.backend.count_per_node("cpu")
+                cpus = nodes * self.backend.uniform_per_node("cpu")
             if gpus is None:
-                gpus = nodes * self.backend.count_per_node("gpu", default=0)
+                try:
+                    gpus = nodes * self.backend.uniform_per_node("gpu")
+                except ValueError:
+                    gpus = 0
         else:
             cpus = cpus or 1
             gpus = gpus or 0

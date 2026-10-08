@@ -108,7 +108,7 @@ class QsubAdapter(SubmissionAdapter):
         sh = shutil.which("sh")
         script = spec.workspace / f"{spec.name}.sh"
         script.parent.mkdir(exist_ok=True)
-        cpus_per_node = self.backend.count_per_node("cpu")
+        cpus_per_node = self.backend.uniform_per_node("cpu")
         gpus_per_node = self.gpus_per_node(spec)
         resource_line = f"nodes={spec.nodes}:ppn={cpus_per_node}"
         if gpus_per_node > 0:

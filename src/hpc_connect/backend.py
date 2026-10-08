@@ -206,7 +206,7 @@ class Backend(abc.ABC):
     @cached_property
     def sockets_per_node(self) -> int:
         try:
-            count = self.count_per_node("socket")
+            count = self.uniform_per_node("socket")
             return count or 1
         except ValueError:
             return 1
@@ -280,8 +280,9 @@ class Backend(abc.ABC):
             ranks = ranks_per_socket = 1
             nodes = 1
         elif ranks is not None and ranks_per_socket is None:
-            ranks_per_socket = min(ranks, self.count_per_socket("cpu"))
-            nodes = int(math.ceil(ranks / self.count_per_socket("cpu") / self.sockets_per_node))
+            cpus_per_socket = self.count_per_socket("cpu")
+            ranks_per_socket = min(ranks, cpus_per_socket)
+            nodes = int(math.ceil(ranks / cpus_per_socket / self.sockets_per_node))
         else:
             assert ranks is not None
             assert ranks_per_socket is not None

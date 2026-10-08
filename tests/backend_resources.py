@@ -236,6 +236,22 @@ def test_backend_explicit_topology_helpers_heterogeneous():
         raise AssertionError("expected HeterogeneousTopologyError")
 
 
+def test_backend_sockets_per_node_uses_uniform_semantics():
+    backend = FakeBackend(
+        [
+            {
+                "type": "node",
+                "count": 3,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
+                ],
+            }
+        ]
+    )
+
+    assert backend.sockets_per_node == 2
+
+
 def test_topology_node_groups_returns_node_entries():
     topology = Topology.from_resource_specs(
         [
