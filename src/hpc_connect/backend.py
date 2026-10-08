@@ -10,6 +10,7 @@ from typing import Generator
 
 from .schemas import backend_schema
 from .schemas import resource_schema
+from .topology import HeterogeneousTopologyError
 from .topology import Topology
 
 if TYPE_CHECKING:
@@ -158,38 +159,28 @@ class Backend(abc.ABC):
         return sorted(types)
 
     def count_per_node(self, rtype: str, default: int | None = None) -> int:
-        total = 0
-        found = False
         rtype = self.canonical_type_name(rtype)
-        for spec, parent in self.resource_index.get(rtype, []):
-            # Walk up until we hit node
-            multiplier = spec["count"]
-            p = parent
-            while p and p != "node":
-                parents = self.resource_index.get(p, [])
-                if not parents:
-                    break
-                multiplier *= parents[0][0]["count"]
-                p = parents[0][1]
-            if p == "node":
-                found = True
-                total += multiplier
-        if found:
-            return total
-        if default is not None:
-            return default
-        raise ValueError(
-            f"Unable to determine count_per_node for {rtype!r} from {self.resource_specs}"
-        ) from None
+        try:
+            return self.topology.uniform_per_node(rtype)
+        except HeterogeneousTopologyError:
+            raise
+        except ValueError:
+            if default is not None:
+                return default
+            raise ValueError(
+                f"Unable to determine count_per_node for {rtype!r} from {self.resource_specs}"
+            ) from None
 
     def count_per_socket(self, rtype: str, default: int | None = None) -> int:
         rtype = self.canonical_type_name(rtype)
-        for spec, parent in self.resource_index.get(rtype, []):
-            if parent == "socket":
-                return spec["count"]
-        if default is not None:
-            return default
-        raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
+        try:
+            return self.topology.uniform_per_socket(rtype)
+        except HeterogeneousTopologyError:
+            raise
+        except ValueError:
+            if default is not None:
+                return default
+            raise ValueError(f"Unable to determine count_per_socket for {rtype!r}")
 
     @cached_property
     def node_count(self) -> int:
@@ -218,10 +209,7 @@ class Backend(abc.ABC):
         rtypes = {self.canonical_type_name(k): v for k, v in rtypes.items()}
         nodes: int = 1
         for rtype, count in rtypes.items():
-            try:
-                per_node = self.count_per_node(rtype)
-            except ValueError:
-                continue
+            per_node = self.count_per_node(rtype, default=0)
             if per_node > 0:
                 nodes = max(nodes, int(math.ceil(count / per_node)))
         return nodes
