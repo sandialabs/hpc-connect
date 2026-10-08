@@ -196,6 +196,14 @@ hpcc -c backend:slurm launch -- ./my_app --flag
 
 Configuration can be overridden inline with `-c path:to:key:value`.
 
+You can also persist settings to a config scope:
+
+```console
+hpcc config add --scope local backend:local
+hpcc config add --scope local backends:[{"type":"local"}]
+hpcc config show
+```
+
 ### `hpc-launch`
 
 `hpc-launch` is a convenience shim equivalent to `hpcc launch`. It launches an

@@ -4,6 +4,9 @@ import sys
 import yaml
 
 from ..config import Config
+from ..config import apply_config_mods
+from ..config import get_config_scope_data
+from ..config import set_scope_data
 
 description = "Show, get, and set config values"
 
@@ -33,6 +36,6 @@ def execute(config: Config, args: argparse.Namespace) -> None:
     if args.subcommand == "show":
         yaml.dump(config.data, sys.stdout, default_flow_style=False)
     elif args.subcommand == "add":
-        raise NotImplementedError
-        for path in args.add_config_paths:
-            config.add(path, scope=args.scope)
+        current = get_config_scope_data(args.scope)
+        updated = config.validate(apply_config_mods(current, args.add_config_paths))
+        set_scope_data(args.scope, updated)

@@ -157,6 +157,21 @@ def read_config_file(file: str) -> dict[str, Any] | None:
         return fd
 
 
+def write_config_file(file: str, data: dict[str, Any]) -> None:
+    path = os.path.abspath(file)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
+        yaml.safe_dump({"hpc_connect": data}, fh, default_flow_style=False, sort_keys=False)
+
+
+def set_scope_data(scope: ConfigScopes, data: dict[str, Any]) -> str:
+    file = get_scope_filename(scope)
+    if file is None:
+        raise ValueError(f"Could not determine filename for scope {scope!r}")
+    write_config_file(file, data)
+    return file
+
+
 def process_config_path(path: str) -> list[str]:
     result: list[str] = []
     if path.startswith(":"):

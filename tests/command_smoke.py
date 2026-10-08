@@ -55,6 +55,18 @@ def test_command_main_config_show_outputs_yaml(tmpdir, monkeypatch, capsys):
     assert "backend: local" in out
 
 
+def test_command_main_config_add_writes_local_scope(tmpdir, monkeypatch):
+    root = Path(tmpdir.strpath)
+    monkeypatch.chdir(root)
+
+    rc = hpc_connect.command.main(["config", "add", "--scope", "local", "backend:local"])
+
+    assert rc == 0
+    text = (root / "hpc_connect.yaml").read_text(encoding="utf-8")
+    assert "hpc_connect:" in text
+    assert "backend: local" in text
+
+
 def test_command_main_launch_dryrun_uses_backend_owned_launch_path(tmpdir, monkeypatch, capsys):
     root = Path(tmpdir.strpath)
     cfg = root / "hpc_connect.yaml"
