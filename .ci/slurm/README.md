@@ -27,7 +27,9 @@ The `slurm` job in `.github/workflows/workflow.yml` does:
 docker pull ghcr.io/sandialabs/canary-slurm:latest
 docker run --rm \
   -v .../.ci/slurm/test.sh:/root/test.sh \
+  -v .../.ci/assert_example_results.py:/root/assert_example_results.py \
   -e BRANCH_NAME=$BRANCH_NAME \
+  -e ASSERT_EXAMPLES=/root/assert_example_results.py \
   ghcr.io/sandialabs/canary-slurm:latest \
   /bin/bash -c "./test.sh $BRANCH_NAME"
 ```
@@ -38,27 +40,25 @@ Slurm scheduler test.
 
 ## Rebuilding and publishing the image
 
-Because the base image is package-agnostic, hpc-connect reuses the
-`ghcr.io/sandialabs/canary-slurm` image and does not normally publish its
-own. If you need to build and push an equivalent image by hand:
+Build manually with:
 
 ```console
-# 1. Build the base image from this directory
-docker build --file Dockerfile --tag ghcr.io/sandialabs/canary-slurm:latest .
+# Build only
+./rebuild.sh
 
-# 2. Log in to GHCR with a personal access token that has `write:packages`
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
-
-# 3. Push
-docker push ghcr.io/sandialabs/canary-slurm:latest
+# Build and push
+echo "$GHCR_TOKEN" | podman login ghcr.io -u <your-github-username> --password-stdin
+PUSH=1 ./rebuild.sh
 ```
 
 ## Running the image locally
 
 ```console
-docker run -it --rm \
+podman run -it --rm \
   -v "$PWD/test.sh:/root/test.sh" \
+  -v "$PWD/../assert_example_results.py:/root/assert_example_results.py" \
   -e BRANCH_NAME=main \
+  -e ASSERT_EXAMPLES=/root/assert_example_results.py \
   ghcr.io/sandialabs/canary-slurm:latest \
   /bin/bash -c "./test.sh main"
 ```
