@@ -183,6 +183,23 @@ def test_resource_view_homogeneous_topology_defaults_from_cpu_socket_shape():
     assert view == {"np": 17, "ranks": 17, "ranks_per_socket": 8, "nodes": 2, "sockets": 3}
 
 
+def test_launch_view_homogeneous_topology_defaults_from_cpu_node_shape():
+    backend = FakeBackend(
+        [
+            {
+                "type": "node",
+                "count": 3,
+                "resources": [
+                    {"type": "socket", "count": 2, "resources": [{"type": "cpu", "count": 8}]}
+                ],
+            }
+        ]
+    )
+
+    view = backend.launch_view(ranks=17)
+    assert view == {"np": 17, "ranks": 17, "nodes": 2, "ranks_per_node": 16}
+
+
 def test_resource_view_explicit_ranks_per_socket():
     backend = FakeBackend(
         [
@@ -198,6 +215,24 @@ def test_resource_view_explicit_ranks_per_socket():
 
     view = backend.resource_view(ranks=17, ranks_per_socket=4)
     assert view == {"np": 17, "ranks": 17, "ranks_per_socket": 4, "nodes": 3, "sockets": 5}
+
+
+def test_launch_view_heterogeneous_topology_raises():
+    backend = FakeBackend(
+        [
+            {"type": "node", "count": 2, "resources": [{"type": "cpu", "count": 4}]},
+            {"type": "node", "count": 1, "resources": [{"type": "cpu", "count": 8}]},
+        ]
+    )
+
+    try:
+        backend.launch_view(ranks=4)
+    except HeterogeneousTopologyError as exc:
+        text = str(exc)
+        assert "homogeneous topology" in text
+        assert "node_groups" in text
+    else:
+        raise AssertionError("expected HeterogeneousTopologyError")
 
 
 def test_count_per_socket_homogeneous_topology():

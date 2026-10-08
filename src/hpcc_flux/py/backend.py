@@ -56,7 +56,7 @@ class FluxBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         if self._resource_specs is None:
             if info := read_resource_info():
-                self._resource_specs = [info]
+                self._resource_specs = info
             else:
                 raise ValueError("Unable to determine system configuration from flux")
         assert self._resource_specs is not None
@@ -207,7 +207,7 @@ class FluxRunAdapter(LaunchAdapter):
 
     def _join_spmd(self, spec: LaunchSpec) -> list[str]:
         argv = self.executable()
-        view = self.backend.resource_view(ranks=spec.processes)
+        view = self.backend.launch_view(ranks=spec.processes)
         for opt in self.config["default_options"]:
             argv.append(self.expand_one(opt, **view))
         launch_opts, program_opts = spec.partition()

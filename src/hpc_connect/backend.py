@@ -173,6 +173,27 @@ class Backend(abc.ABC):
         except ValueError:
             return 1
 
+    def launch_view(self, *, ranks: int | None = None) -> dict[str, int]:
+        """Return a node-level launch view for common resource planning."""
+        view: dict[str, int] = {"np": 0, "ranks": 0, "nodes": 0, "ranks_per_node": 0}
+        if not ranks:
+            return view
+
+        if not self.is_homogeneous():
+            raise HeterogeneousTopologyError(
+                "launch_view() requires a homogeneous topology with uniform per-node resource counts; "
+                "for heterogeneous systems, inspect node_groups() and compute the launch layout explicitly"
+            )
+
+        cpus_per_node = self.count_per_node("cpu")
+        ranks_per_node = max(1, min(ranks, cpus_per_node))
+        nodes = int(math.ceil(ranks / ranks_per_node))
+        view["np"] = ranks
+        view["ranks"] = ranks
+        view["nodes"] = nodes
+        view["ranks_per_node"] = ranks_per_node
+        return view
+
     def nodes_required(self, **rtypes: int) -> int:
         """Nodes required to run ``tasks`` tasks.  A task can be thought of as a single MPI
         rank"""

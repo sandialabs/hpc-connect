@@ -46,7 +46,7 @@ class SlurmBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         if self._resource_specs is None:
             if sinfo := read_sinfo():
-                self._resource_specs = [sinfo]
+                self._resource_specs = sinfo
             else:
                 raise ValueError("Unable to determine system configuration from sinfo")
         assert self._resource_specs is not None

@@ -5,10 +5,13 @@
 import pytest
 
 import hpc_connect
+import hpc_connect.launch
 from hpc_connect.topology import HeterogeneousTopologyError
 from hpcc_flux.shell.backend import FluxAdapter as FluxShellAdapter
+from hpcc_flux.shell.backend import FluxRunAdapter as FluxShellRunAdapter
 
 FluxPyAdapter = pytest.importorskip("hpcc_flux.py.backend").FluxAdapter
+FluxPyRunAdapter = pytest.importorskip("hpcc_flux.py.backend").FluxRunAdapter
 
 
 class FakeBackend(hpc_connect.Backend):
@@ -83,3 +86,29 @@ def test_flux_py_alloc_settings_raise_on_heterogeneous_nodes_for_uniform_cpu():
         pass
     else:
         raise AssertionError("expected HeterogeneousTopologyError")
+
+
+def test_flux_shell_run_uses_node_level_launch_view_without_sockets(monkeypatch):
+    backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 8}]}])
+    adapter = FluxShellRunAdapter(
+        backend=backend,
+        config={"default_options": ["--nodes=%(nodes)d"], "pre_options": [], "mpmd": {}},
+    )
+    monkeypatch.setattr(adapter, "executable", lambda: ["flux", "run"])
+
+    argv = adapter.join_specs([hpc_connect.launch.LaunchSpec(["-n", "17", "app"], processes=17)])
+
+    assert argv == ["flux", "run", "--nodes=2", "-n", "17", "app"]
+
+
+def test_flux_py_run_uses_node_level_launch_view_without_sockets(monkeypatch):
+    backend = FakeBackend([{"type": "node", "count": 3, "resources": [{"type": "cpu", "count": 8}]}])
+    adapter = FluxPyRunAdapter(
+        backend=backend,
+        config={"default_options": ["--nodes=%(nodes)d"], "pre_options": [], "mpmd": {}},
+    )
+    monkeypatch.setattr(adapter, "executable", lambda: ["flux", "run"])
+
+    argv = adapter.join_specs([hpc_connect.launch.LaunchSpec(["-n", "17", "app"], processes=17)])
+
+    assert argv == ["flux", "run", "--nodes=2", "-n", "17", "app"]
