@@ -9,7 +9,6 @@ import sys
 from typing import Any
 
 import hpc_connect
-from hpc_connect.mpi import MPIExecAdapter
 from hpc_connect.submit import SubmissionAdapter
 from hpc_connect.util import set_executable
 from hpc_connect.util.time import hhmmss
@@ -53,18 +52,12 @@ class SlurmBackend(hpc_connect.Backend):
         assert self._resource_specs is not None
         return self._resource_specs
 
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"srun", "mpi"}
-
     @classmethod
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "srun",
-                "exec": "srun",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},
@@ -81,10 +74,7 @@ class SlurmBackend(hpc_connect.Backend):
         )
 
     def launch_adapter(self):
-        type = self.config["launch"]["type"]
-        if type == "srun":
-            return SrunAdapter(backend=self, config=self.config["launch"])
-        return MPIExecAdapter(backend=self, config=self.config["launch"])
+        return SrunAdapter(backend=self, config=self.config["launch"])
 
     def launcher(self) -> hpc_connect.HPCLauncher:
         return hpc_connect.HPCLauncher(adapter=self.launch_adapter())

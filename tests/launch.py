@@ -41,12 +41,10 @@ hpc_connect:
   - name: my.slurm
     type: slurm
     launch:
-      type: mpi
-      exec: mpiexec
+      default_options: []
   - name: my.local
     type: local
     launch:
-      type: mpi
       default_options: --map-by ppr:%(np)d:cores
 """
     return cfg
@@ -94,7 +92,7 @@ def test_file_config_3(tmpdir, capfd):
             launcher(["-np", "4", "-xflag", "file", "executable", "--option"])
             captured = capfd.readouterr()
             out = captured.out.strip()
-            assert out == f"{mock_bin}/mpiexec -np 4 -xflag file executable --option"
+            assert out == f"{mock_bin}/srun -np 4 -xflag file executable --option"
 
 
 def test_default(capfd):

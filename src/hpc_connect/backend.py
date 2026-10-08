@@ -49,10 +49,6 @@ class Backend(abc.ABC):
     @abc.abstractmethod
     def resource_specs(self) -> list[dict]: ...
 
-    @property
-    @abc.abstractmethod
-    def valid_launchers(self) -> set[str]: ...
-
     @classmethod
     def matches(cls, arg: str) -> bool:
         return cls.type == arg
@@ -101,9 +97,6 @@ class Backend(abc.ABC):
         return False
 
     def validate(self) -> None:
-        if self.config["launch"]["type"] not in self.valid_launchers:
-            type = self.config["launch"]["type"]
-            raise ValueError(f"Launcher {type!r} is not supported by {self}")
         for rspec in self.resource_specs:
             self._canonicalize_rspec(rspec)
         resource_schema.validate({"resources": self.resource_specs})

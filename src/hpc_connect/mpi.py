@@ -15,17 +15,23 @@ logger = logging.getLogger("hpc_connect.mpi.launch")
 class MPIExecAdapter(LaunchAdapter):
     name: str = "mpiexec"
 
+    def executable(self) -> str:
+        exec = shutil.which("mpirun")
+        if exec is not None:
+            return os.fsdecode(exec)
+        exec = shutil.which("mpiexec")
+        if exec is not None:
+            return os.fsdecode(exec)
+        raise ValueError("mpirun: executable not found on PATH")
+
     def join_specs(self, specs: list["LaunchSpec"]) -> list[str]:
-        name = self.config.get("exec") or "mpiexec"
-        exec = shutil.which(name)
-        if exec is None:
-            raise ValueError(f"{name}: executable not found on PATH")
+        exec = self.executable()
         if len(specs) > 1:
             return self._join_mpmd(exec, specs)
         return self._join_spmd(exec, specs[0])
 
     def _join_spmd(self, exec: str, spec: LaunchSpec) -> list[str]:
-        argv = [os.fsdecode(exec)]
+        argv = [exec]
         view = self.backend.resource_view(ranks=spec.processes)
         for opt in self.config["default_options"]:
             argv.append(self.expand_one(opt, **view))
@@ -39,7 +45,7 @@ class MPIExecAdapter(LaunchAdapter):
         return argv
 
     def _join_mpmd(self, exec: str, specs: list["LaunchSpec"]) -> list[str]:
-        argv = [os.fsdecode(exec)]
+        argv = [exec]
         np = sum(spec.processes for spec in specs if spec.processes)
         argv.extend(self.config["mpmd"]["global_options"])
         argv.extend(self.config["default_options"])

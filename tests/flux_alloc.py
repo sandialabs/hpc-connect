@@ -16,7 +16,7 @@ class FakeBackend(hpc_connect.Backend):
 
     def __init__(self, specs):
         self._specs = specs
-        super().__init__({"type": self.type, "config": {}, "launch": {"type": "mpi"}})
+        super().__init__({"type": self.type, "config": {}, "launch": {}})
 
     @classmethod
     def default_config(cls) -> dict:
@@ -24,8 +24,6 @@ class FakeBackend(hpc_connect.Backend):
             "type": cls.type,
             "config": {},
             "launch": {
-                "type": "mpi",
-                "exec": "mpiexec",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

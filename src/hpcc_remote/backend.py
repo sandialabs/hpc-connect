@@ -28,18 +28,12 @@ class RemoteBackend(hpc_connect.Backend):
     def resource_specs(self) -> list[dict]:
         raise NotImplementedError
 
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"<none>"}
-
     @classmethod
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "<none>",
-                "exec": "<none>",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

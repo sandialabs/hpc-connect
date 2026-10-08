@@ -44,18 +44,12 @@ class PBSBackend(hpc_connect.Backend):
         assert self._resource_specs is not None
         return self._resource_specs
 
-    @property
-    def valid_launchers(self) -> set[str]:
-        return {"mpi"}
-
     @classmethod
     def default_config(cls) -> dict[str, Any]:
         return {
             "config": {},
             "type": cls.type,
             "launch": {
-                "type": "mpi",
-                "exec": "mpiexec",
                 "default_options": [],
                 "pre_options": [],
                 "mpmd": {"global_options": [], "local_options": []},

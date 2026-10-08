@@ -59,20 +59,12 @@ def submit_defaults() -> dict[str, Any]:
 
 
 def launch_defaults() -> dict[str, Any]:
-    return {
-        "type": "mpi",
-        "exec": "mpiexec",
-        "default_options": list(),
-        "pre_options": list(),
-        "mpmd": mpmd_defaults(),
-    }
+    return {"default_options": list(), "pre_options": list(), "mpmd": mpmd_defaults()}
 
 
 launch_schema = Schema(
     {
-        "type": str,
         Optional("name"): str,
-        Optional("exec"): str,
         Optional("default_options", default_factory=list): Use(flag_splitter),
         Optional("pre_options", default_factory=list): Use(flag_splitter),
         Optional("variables", default_factory=dict): dict_str_str,

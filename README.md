@@ -41,8 +41,8 @@ Requires Python 3.10 or newer.
 - **`Future`** — a handle to a submitted job. It exposes the job id, return
   code, completion metadata, and start/jobid/done callbacks, and can be waited
   on individually or with `as_completed`.
-- **launcher** — builds and runs the parallel-launch command line
-  (`mpiexec`, `srun`, …) for an application.
+- **launcher** — builds and runs the backend's opinionated parallel-launch
+  command line for an application (for example `mpirun`, `srun`, or `flux run`).
 
 ## Python usage
 
@@ -145,7 +145,13 @@ The command line is assembled roughly as:
 ```
 
 The launcher infers the process count from common `-n` / `-np` spellings and
-supports MPMD job specifications (segments separated by `:`).
+supports MPMD job specifications (segments separated by `:`). Launcher choice
+is backend-owned and not user-configurable:
+
+- local: `mpirun` (falls back to `mpiexec` if needed)
+- slurm: `srun`
+- flux: `flux run`
+- pbs: `mpirun` (falls back to `mpiexec` if needed)
 
 ### Sizing resources
 
@@ -239,8 +245,6 @@ hpc_connect:
 
       # How applications are launched under this backend.
       launch:
-        type: srun            # e.g. "mpi" or "srun"
-        exec: srun            # launch executable (backend may default this)
         default_options: []   # options placed before user arguments
         pre_options: []       # options placed immediately before the application
         variables: {}         # environment overrides (name -> value)
@@ -278,7 +282,7 @@ earlier ones):
 
 ### Example configurations
 
-Local machine with an MPICH-style launcher:
+Local machine with the default launcher settings:
 
 ```yaml
 hpc_connect:
@@ -286,8 +290,9 @@ hpc_connect:
   backends:
     - type: local
       launch:
-        type: mpi
-        exec: mpiexec
+        default_options:
+          - --map-by
+          - ppr:%(np)d:cores
 ```
 
 Slurm with `srun`:
@@ -298,8 +303,8 @@ hpc_connect:
   backends:
     - type: slurm
       launch:
-        type: srun
-        exec: srun
+        default_options:
+          - --cpu-bind=cores
 ```
 
 ## Extending: writing a backend plugin

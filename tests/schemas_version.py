@@ -74,28 +74,25 @@ def test_schema_validate_default_factory_independent_instances():
 
 
 def test_launch_schema_minimal():
-    result = launch_schema.validate({"type": "mpi"})
-    assert result["type"] == "mpi"
+    result = launch_schema.validate({})
     assert result["default_options"] == []
     assert result["pre_options"] == []
 
 
 def test_launch_schema_string_default_options_split():
-    result = launch_schema.validate({"type": "mpi", "default_options": "--map-by core"})
+    result = launch_schema.validate({"default_options": "--map-by core"})
     assert result["default_options"] == ["--map-by", "core"]
 
 
 def test_launch_schema_full():
     data = {
-        "type": "mpi",
         "name": "openmpi",
-        "exec": "mpiexec",
         "default_options": ["--map-by", "core"],
         "pre_options": [],
         "mpmd": {"local_options": [], "global_options": []},
     }
     result = launch_schema.validate(data)
-    assert result["exec"] == "mpiexec"
+    assert result["name"] == "openmpi"
 
 
 # ---------------------------------------------------------------------------
@@ -109,10 +106,10 @@ def test_backend_schema_minimal():
 
 
 def test_backend_schema_with_launch():
-    data = {"type": "slurm", "name": "my.slurm", "launch": {"type": "srun"}}
+    data = {"type": "slurm", "name": "my.slurm", "launch": {"default_options": ["-v"]}}
     result = backend_schema.validate(data)
     assert result["name"] == "my.slurm"
-    assert result["launch"]["type"] == "srun"
+    assert result["launch"]["default_options"] == ["-v"]
 
 
 # ---------------------------------------------------------------------------

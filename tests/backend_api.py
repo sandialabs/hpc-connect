@@ -26,8 +26,6 @@ hpc_connect:
     - name: named-local
       type: local
       launch:
-        type: mpi
-        exec: mpiexec
         default_options: [--named]
       config:
         nnode: 1

@@ -15,8 +15,7 @@ hpc_connect:
   backends:
     - type: local
       launch:
-        type: mpi
-        exec: mpiexec
+        default_options: []
 """,
         encoding="utf-8",
     )
