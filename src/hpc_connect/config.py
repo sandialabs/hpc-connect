@@ -50,6 +50,9 @@ class Config:
             if self.data.get("debug"):
                 logging.getLogger("hpc_connect").setLevel(logging.DEBUG)
             self.export()
+        if getattr(args, "backend", None):
+            self.data["backend"] = args.backend
+            self.export()
 
     def set(self, path: str, value: Any) -> None:
         """Set the configuration value using yaml-like syntax for path.

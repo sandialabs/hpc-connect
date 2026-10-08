@@ -53,6 +53,7 @@ from types import ModuleType
 
 from ..config import Config
 from . import config
+from . import info
 from . import launch
 
 _commands: dict[str, ModuleType] = {}
@@ -86,10 +87,16 @@ def make_parser() -> argparse.ArgumentParser:
         help="colon-separated path to config that should be set, e.g. 'config:default:true'",
     )
     parser.add_argument(
+        "--backend",
+        default=None,
+        help="Backend name or type to use for this command [default: configured backend]",
+    )
+    parser.add_argument(
         "--version", action="version", version=_v.version, help="Show hpc connect version and exit"
     )
     subparsers = parser.add_subparsers(dest="command")
     add_command(subparsers, config)
+    add_command(subparsers, info)
     add_command(subparsers, launch)
     _load_dev_command(subparsers)
     return parser

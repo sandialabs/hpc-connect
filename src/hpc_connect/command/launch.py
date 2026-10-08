@@ -33,7 +33,7 @@ def setup_parser(parser: "argparse.ArgumentParser") -> None:
 def execute(config: "Config", args: "argparse.Namespace") -> None:
     from .. import get_backend
 
-    backend = get_backend(config["backend"])
+    backend = get_backend(config.get("backend"))
     cmd = backend.build_launch_argv(list(args.extra_args))
     if args.dryrun:
         print(shlex.join(cmd))

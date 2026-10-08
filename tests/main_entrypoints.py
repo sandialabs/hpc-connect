@@ -38,3 +38,16 @@ def test_module_launch_prepends_launch_subcommand(tmpdir, monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out.strip()
     assert out.endswith("mpiexec -n 3 executable")
+
+
+def test_module_main_info_subcommand_dispatches(tmpdir, monkeypatch, capsys):
+    root = Path(tmpdir.strpath)
+    cfg = root / "hpc_connect.yaml"
+    _write_config(cfg)
+    monkeypatch.chdir(root)
+
+    rc = main_mod.main(["info"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Name: local" in out
+    assert "Group 1:" in out
