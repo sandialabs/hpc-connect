@@ -23,15 +23,9 @@ logger = logging.getLogger("hpc_connect.futures")
 CallbackEventT = Literal["start", "done", "jobid"]
 valid_callback_events = {"start", "done", "jobid"}
 
-# How many *consecutive* poll() failures to tolerate before giving up on a job.
-# A scheduler query (e.g. ``sacct``, ``flux jobs``, ``qstat``) can fail
-# transiently — the accounting DB may lag, be briefly unreachable, or the
-# record may not have landed yet.  Previously any such exception propagated out
-# of the monitor thread, killing it silently: the Future's ``_done`` event was
-# never set, so ``done()`` returned False forever and ``result()`` blocked /
-# timed out even though the job had actually finished.  We now log and keep
-# polling, only giving up (and resolving the Future) after this many
-# consecutive failures so callers are never stranded on a dead thread.
+# Consecutive poll() failures tolerated before a job is treated as lost. A
+# scheduler query (sacct/flux jobs/qstat) can fail transiently; without a budget
+# a single failure would strand the future forever.
 DEFAULT_MAX_CONSECUTIVE_POLL_ERRORS = 10
 
 
@@ -96,10 +90,7 @@ class Future:
                     self._exec_callbacks("jobid")
                 rc = self.proc.poll()
             except Exception:
-                # A scheduler-query error must not kill the monitor thread.
-                # Log it and keep polling; only give up (resolving the Future
-                # so callers are not stranded) after too many consecutive
-                # failures.
+                # Keep the monitor thread alive across transient query errors.
                 consecutive_errors += 1
                 logger.warning(
                     "Polling job %s failed (%d/%d consecutive attempts)",
@@ -136,11 +127,8 @@ class Future:
         return self._done.is_set()
 
     def poll_failed(self) -> bool:
-        """True if the future was resolved because polling gave up (lost job).
-
-        Distinguishes a Future resolved by exhausting the consecutive poll-error
-        budget from one resolved by a real scheduler-reported completion.
-        """
+        """True if the future resolved because polling gave up (job lost),
+        rather than from a scheduler-reported completion."""
         return self._poll_failed
 
     def cancelled(self) -> bool:
@@ -166,9 +154,7 @@ class Future:
         if not finished:
             raise TimeoutError(f"Job {self.proc.jobid} did not finish in time")
         if self._poll_failed:
-            # Polling was abandoned; the scheduler never reported a returncode.
-            # Treat a lost job as a failure so downstream reconciliation does not
-            # mistake it for a clean exit.
+            # Lost job: report failure rather than a false clean exit.
             rc = self.proc.returncode
             return rc if isinstance(rc, int) else 1
         rc = 1 if not isinstance(self.proc.returncode, int) else self.proc.returncode

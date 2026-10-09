@@ -101,10 +101,8 @@ def get_backend(arg: str | None = None, **options: object) -> Backend:
         collections.merge(backend_config, matched_entry)
         backend_config = backend_schema.validate(backend_config)
 
-    # Fold any runtime options into the backend's free-form ``config`` bucket so
-    # each backend can read the keys it understands (unknown keys are ignored).
-    # This keeps a single config object flowing through the backend instead of a
-    # separate options channel.
+    # Runtime options go into the backend's config bucket; each backend reads
+    # the keys it understands and ignores the rest.
     if options:
         backend_config.setdefault("config", {}).update(options)
         backend_config = backend_schema.validate(backend_config)

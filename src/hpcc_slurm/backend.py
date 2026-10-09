@@ -44,13 +44,8 @@ class SlurmBackend(hpc_connect.Backend):
 
     @property
     def allow_hyperthreading(self) -> bool:
-        """When True, expose each core's hardware threads as schedulable CPUs.
-
-        Enabled via ``hpc_connect.get_backend("slurm", allow_hyperthreading=True)``
-        (folded into the backend ``config`` bucket).  The per-node CPU count
-        becomes ``sockets_per_node * cores_per_socket * threads_per_core``
-        instead of the ``%c`` value reported by ``sinfo``.
-        """
+        """Count hardware threads as schedulable CPUs. Set via
+        ``get_backend("slurm", allow_hyperthreading=True)``."""
         return bool(self.config.get("config", {}).get("allow_hyperthreading", False))
 
     @property

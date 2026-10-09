@@ -27,11 +27,8 @@ def _parse_sinfo_line(line: str, cmd_line: str, allow_hyperthreading: bool = Fal
     node_count = data[4]
     gres = data[5:]
 
-    # By default we fill the schedulable CPU count from ``%c`` (the CPUs-per-node
-    # Slurm reports, which on most sites equals physical cores).  When
-    # hyperthreading is explicitly allowed, expose every hardware thread as a
-    # schedulable CPU: sockets * cores_per_socket * threads_per_core.  Fall back
-    # to ``%c`` if any factor is missing (e.g. ``(null)`` from sinfo).
+    # Default to %c; with hyperthreading, count every hardware thread. Fall
+    # back to %c if sinfo did not report integer socket/core/thread counts.
     cpu_count = cpus_per_node
     if allow_hyperthreading:
         factors = (sockets_per_node, cores_per_socket, threads_per_core)
