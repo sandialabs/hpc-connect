@@ -151,3 +151,30 @@ ls""")
         fh.seek(0)
         ns = hpcc_slurm.process.parse_script_args(fh.name)
         assert ns.clusters == "flight,eclipse"
+
+
+def _mock_hyperthreaded_sinfo(monkeypatch):
+    """Make discover.read_sinfo see a node with 2 sockets x 24 cores x 2 threads."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("hpcc_slurm.discover.shutil.which", lambda cmd: "/usr/bin/sinfo")
+    monkeypatch.setattr(
+        "hpcc_slurm.discover.subprocess.run",
+        lambda *a, **k: SimpleNamespace(
+            stdout="SOCKETS CORES THREADS CPUS NODES GRES\n2 24 2 48 10 NA\n"
+        ),
+    )
+
+
+def test_slurm_backend_default_ignores_hyperthreads(monkeypatch):
+    _mock_hyperthreaded_sinfo(monkeypatch)
+    backend = hpc_connect.get_backend("slurm")
+    assert backend.allow_hyperthreading is False
+    assert backend.count_per_node("cpu") == 48  # %c
+
+
+def test_slurm_backend_allow_hyperthreading_option(monkeypatch):
+    _mock_hyperthreaded_sinfo(monkeypatch)
+    backend = hpc_connect.get_backend("slurm", allow_hyperthreading=True)
+    assert backend.allow_hyperthreading is True
+    assert backend.count_per_node("cpu") == 96  # 2 * 24 * 2

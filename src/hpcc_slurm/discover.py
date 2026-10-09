@@ -14,7 +14,7 @@ from typing import Any
 logger = logging.getLogger("hpc_connect.slurm.discover")
 
 
-def _parse_sinfo_line(line: str, cmd_line: str) -> dict[str, Any]:
+def _parse_sinfo_line(line: str, cmd_line: str, allow_hyperthreading: bool = False) -> dict[str, Any]:
     parts = line.split()
     if len(parts) < 5:
         raise ValueError(f"Unable to parse sinfo output line: {line!r}")
@@ -26,10 +26,29 @@ def _parse_sinfo_line(line: str, cmd_line: str) -> dict[str, Any]:
     cpus_per_node = data[3]
     node_count = data[4]
     gres = data[5:]
+
+    # By default we fill the schedulable CPU count from ``%c`` (the CPUs-per-node
+    # Slurm reports, which on most sites equals physical cores).  When
+    # hyperthreading is explicitly allowed, expose every hardware thread as a
+    # schedulable CPU: sockets * cores_per_socket * threads_per_core.  Fall back
+    # to ``%c`` if any factor is missing (e.g. ``(null)`` from sinfo).
+    cpu_count = cpus_per_node
+    if allow_hyperthreading:
+        factors = (sockets_per_node, cores_per_socket, threads_per_core)
+        if all(isinstance(f, int) for f in factors):
+            cpu_count = sockets_per_node * cores_per_socket * threads_per_core
+        else:
+            logger.warning(
+                "allow_hyperthreading requested but sinfo did not report integer "
+                "sockets/cores/threads (%r); falling back to cpus_per_node=%r",
+                factors,
+                cpus_per_node,
+            )
+
     info: dict[str, Any] = {
         "type": "node",
         "count": node_count,
-        "resources": [{"type": "cpu", "count": cpus_per_node}],
+        "resources": [{"type": "cpu", "count": cpu_count}],
         "additional_properties": {
             cmd_line: line,
             "sockets_per_node": sockets_per_node,
@@ -50,7 +69,7 @@ def _parse_sinfo_line(line: str, cmd_line: str) -> dict[str, Any]:
     return info
 
 
-def read_sinfo() -> list[dict[str, Any]] | None:
+def read_sinfo(allow_hyperthreading: bool = False) -> list[dict[str, Any]] | None:
     if sinfo := shutil.which("sinfo"):
         opts = [
             "%X",  # Number of sockets per node
@@ -75,7 +94,9 @@ def read_sinfo() -> list[dict[str, Any]] | None:
                 elif parts and parts[0].startswith("SOCKETS"):
                     continue
                 cmd_line = shlex.join(args)
-                resources.append(_parse_sinfo_line(line, cmd_line))
+                resources.append(
+                    _parse_sinfo_line(line, cmd_line, allow_hyperthreading=allow_hyperthreading)
+                )
 
             if not resources:
                 raise ValueError(f"Unable to read sinfo output:\n{proc.stdout}")

@@ -193,10 +193,77 @@ def test_future_proc_info_no_completion_info():
 
 
 # ---------------------------------------------------------------------------
-# as_completed
+# _monitor resilience to poll() exceptions
 # ---------------------------------------------------------------------------
 
 
+class _FlakyProcess(_FakeProcess):
+    """poll() raises ``fail_times`` times, then completes normally."""
+
+    def __init__(self, fail_times: int, returncode: int = 0, jobid: str = "flaky-1"):
+        super().__init__(returncode=returncode, jobid=jobid)
+        self._fail_times = fail_times
+        self._target_rc = returncode
+
+    def poll(self) -> int | None:
+        if self._fail_times > 0:
+            self._fail_times -= 1
+            raise RuntimeError("transient scheduler query failure")
+        self._returncode = self._target_rc
+        self.started = time.time()
+        self.completion_info = {"state": "FINISHED"}
+        return self._returncode
+
+
+class _AlwaysFailingProcess(_FakeProcess):
+    """poll() always raises — emulates a permanently lost scheduler record."""
+
+    def poll(self) -> int | None:
+        raise RuntimeError("scheduler record gone")
+
+
+def test_future_survives_transient_poll_errors():
+    """A few consecutive poll() failures must not strand the future."""
+    proc = _FlakyProcess(fail_times=3, returncode=0)
+    f = Future(proc, polling_interval=0.01, max_consecutive_poll_errors=10)
+    assert f.result(timeout=2.0) == 0
+    assert f.done()
+    assert not f.poll_failed()
+
+
+def test_future_consecutive_error_counter_resets():
+    """Interleaved failures below the threshold still allow completion."""
+    # 5 failures then success, with a budget of 6 — must complete cleanly.
+    proc = _FlakyProcess(fail_times=5, returncode=0)
+    f = Future(proc, polling_interval=0.01, max_consecutive_poll_errors=6)
+    assert f.result(timeout=2.0) == 0
+    assert not f.poll_failed()
+
+
+def test_future_gives_up_after_max_consecutive_poll_errors():
+    """A permanently failing poll() resolves the future instead of hanging."""
+    proc = _AlwaysFailingProcess()
+    f = Future(proc, polling_interval=0.01, max_consecutive_poll_errors=3)
+    # Must not raise TimeoutError — the monitor gives up and marks it done.
+    rc = f.result(timeout=2.0)
+    assert f.done()
+    assert f.poll_failed()
+    # Lost job is treated as a failure (no returncode was ever reported).
+    assert rc == 1
+
+
+def test_future_giveup_fires_done_callback():
+    proc = _AlwaysFailingProcess()
+    f = Future(proc, polling_interval=0.01, max_consecutive_poll_errors=2)
+    called = threading.Event()
+    f.add_done_callback(lambda fut: called.set())
+    assert called.wait(timeout=2.0), "done callback not fired on poll give-up"
+    assert f.poll_failed()
+
+
+# ---------------------------------------------------------------------------
+# as_completed
+# ---------------------------------------------------------------------------
 def test_as_completed_yields_all():
     futures = [_make_future(jobid=f"j{i}") for i in range(3)]
     done = list(as_completed(futures, polling_interval=0.01))

@@ -1,6 +1,7 @@
 # Copyright NTESS. See COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: MIT
+import logging
 import threading
 import time
 from collections import defaultdict
@@ -17,8 +18,21 @@ if TYPE_CHECKING:
     from .process import HPCProcess
 
 
+logger = logging.getLogger("hpc_connect.futures")
+
 CallbackEventT = Literal["start", "done", "jobid"]
 valid_callback_events = {"start", "done", "jobid"}
+
+# How many *consecutive* poll() failures to tolerate before giving up on a job.
+# A scheduler query (e.g. ``sacct``, ``flux jobs``, ``qstat``) can fail
+# transiently — the accounting DB may lag, be briefly unreachable, or the
+# record may not have landed yet.  Previously any such exception propagated out
+# of the monitor thread, killing it silently: the Future's ``_done`` event was
+# never set, so ``done()`` returned False forever and ``result()`` blocked /
+# timed out even though the job had actually finished.  We now log and keep
+# polling, only giving up (and resolving the Future) after this many
+# consecutive failures so callers are never stranded on a dead thread.
+DEFAULT_MAX_CONSECUTIVE_POLL_ERRORS = 10
 
 
 class FutureProtocol(Protocol):
@@ -39,11 +53,18 @@ class FutureProtocol(Protocol):
 
 
 class Future:
-    def __init__(self, proc: "HPCProcess", polling_interval: float = 1.0):
+    def __init__(
+        self,
+        proc: "HPCProcess",
+        polling_interval: float = 1.0,
+        max_consecutive_poll_errors: int = DEFAULT_MAX_CONSECUTIVE_POLL_ERRORS,
+    ):
         self.proc = proc
         self._polling_interval = polling_interval or 1.0
+        self._max_consecutive_poll_errors = max(1, max_consecutive_poll_errors)
         self._callbacks: dict[CallbackEventT, List[Callable[["Future"], None]]] = defaultdict(list)
         self._done = threading.Event()
+        self._poll_failed = False
         self._cancelled = False
         self._lock = threading.Lock()
 
@@ -66,12 +87,44 @@ class Future:
             self._safeexec(cb)
 
     def _monitor(self):
+        consecutive_errors = 0
         while True:
-            if self.proc.started > 0.0:
-                self._exec_callbacks("start")
-            if self.proc.jobid != "unset":
-                self._exec_callbacks("jobid")
-            if self.proc.poll() is not None:
+            try:
+                if self.proc.started > 0.0:
+                    self._exec_callbacks("start")
+                if self.proc.jobid != "unset":
+                    self._exec_callbacks("jobid")
+                rc = self.proc.poll()
+            except Exception:
+                # A scheduler-query error must not kill the monitor thread.
+                # Log it and keep polling; only give up (resolving the Future
+                # so callers are not stranded) after too many consecutive
+                # failures.
+                consecutive_errors += 1
+                logger.warning(
+                    "Polling job %s failed (%d/%d consecutive attempts)",
+                    self.proc.jobid,
+                    consecutive_errors,
+                    self._max_consecutive_poll_errors,
+                    exc_info=True,
+                )
+                if consecutive_errors >= self._max_consecutive_poll_errors:
+                    logger.error(
+                        "Giving up polling job %s after %d consecutive failures; "
+                        "scheduler communication appears to be lost. Marking the "
+                        "future as complete so callers are not stranded.",
+                        self.proc.jobid,
+                        consecutive_errors,
+                    )
+                    self._poll_failed = True
+                    self._done.set()
+                    self._exec_callbacks("done")
+                    break
+                time.sleep(self._polling_interval)
+                continue
+            else:
+                consecutive_errors = 0
+            if rc is not None:
                 self._done.set()
                 self._exec_callbacks("done")
                 break
@@ -81,6 +134,14 @@ class Future:
 
     def done(self) -> bool:
         return self._done.is_set()
+
+    def poll_failed(self) -> bool:
+        """True if the future was resolved because polling gave up (lost job).
+
+        Distinguishes a Future resolved by exhausting the consecutive poll-error
+        budget from one resolved by a real scheduler-reported completion.
+        """
+        return self._poll_failed
 
     def cancelled(self) -> bool:
         return self._cancelled
@@ -104,6 +165,12 @@ class Future:
         finished = self._done.wait(timeout=timeout)
         if not finished:
             raise TimeoutError(f"Job {self.proc.jobid} did not finish in time")
+        if self._poll_failed:
+            # Polling was abandoned; the scheduler never reported a returncode.
+            # Treat a lost job as a failure so downstream reconciliation does not
+            # mistake it for a clean exit.
+            rc = self.proc.returncode
+            return rc if isinstance(rc, int) else 1
         rc = 1 if not isinstance(self.proc.returncode, int) else self.proc.returncode
         return rc
 

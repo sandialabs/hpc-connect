@@ -52,7 +52,7 @@ else:
     logging.getLogger("hpc_connect").setLevel(logging.NOTSET)
 
 
-def get_backend(arg: str | None = None) -> Backend:
+def get_backend(arg: str | None = None, **options: object) -> Backend:
     import copy
 
     from .config import get_config
@@ -99,6 +99,14 @@ def get_backend(arg: str | None = None) -> Backend:
 
     if matched_entry is not None:
         collections.merge(backend_config, matched_entry)
+        backend_config = backend_schema.validate(backend_config)
+
+    # Fold any runtime options into the backend's free-form ``config`` bucket so
+    # each backend can read the keys it understands (unknown keys are ignored).
+    # This keeps a single config object flowing through the backend instead of a
+    # separate options channel.
+    if options:
+        backend_config.setdefault("config", {}).update(options)
         backend_config = backend_schema.validate(backend_config)
 
     return backend_t(cfg=backend_config)

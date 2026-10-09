@@ -74,6 +74,49 @@ def test_read_sinfo_parses_first_data_line(monkeypatch):
     ]
 
 
+def _mock_sinfo(monkeypatch, stdout: str) -> None:
+    monkeypatch.setattr("hpcc_slurm.discover.shutil.which", lambda cmd: "/usr/bin/sinfo")
+    monkeypatch.setattr(
+        "hpcc_slurm.discover.subprocess.run", lambda *a, **k: SimpleNamespace(stdout=stdout)
+    )
+
+
+def test_read_sinfo_default_uses_cpus_per_node(monkeypatch):
+    """By default the CPU count is the %c value, ignoring threads_per_core."""
+    _mock_sinfo(monkeypatch, "SOCKETS CORES THREADS CPUS NODES GRES\n2 64 2 128 16 (null)\n")
+
+    result = read_sinfo()
+    assert result is not None
+    cpu = next(r for r in result[0]["resources"] if r["type"] == "cpu")
+    assert cpu["count"] == 128  # %c, not 2*64*2
+    assert result[0]["additional_properties"]["threads_per_core"] == 2
+    assert result[0]["additional_properties"]["cpus_per_node"] == 128
+
+
+def test_read_sinfo_allow_hyperthreading_multiplies_threads(monkeypatch):
+    """With allow_hyperthreading the CPU count is sockets*cores*threads."""
+    _mock_sinfo(monkeypatch, "SOCKETS CORES THREADS CPUS NODES GRES\n2 64 2 128 16 (null)\n")
+
+    result = read_sinfo(allow_hyperthreading=True)
+    assert result is not None
+    cpu = next(r for r in result[0]["resources"] if r["type"] == "cpu")
+    assert cpu["count"] == 256  # 2 * 64 * 2
+    # Raw sinfo values are preserved in metadata.
+    assert result[0]["additional_properties"]["cpus_per_node"] == 128
+    assert result[0]["additional_properties"]["threads_per_core"] == 2
+
+
+def test_read_sinfo_allow_hyperthreading_falls_back_when_factors_missing(monkeypatch):
+    """A (null) factor makes the thread product undefined; fall back to %c."""
+    # THREADS is (null) -> cannot compute sockets*cores*threads.
+    _mock_sinfo(monkeypatch, "SOCKETS CORES THREADS CPUS NODES GRES\n2 16+ (null) 32+ 1445 (null)\n")
+
+    result = read_sinfo(allow_hyperthreading=True)
+    assert result is not None
+    cpu = next(r for r in result[0]["resources"] if r["type"] == "cpu")
+    assert cpu["count"] == 32  # falls back to %c
+
+
 @pytest.mark.parametrize(
     "token,expected",
     [
